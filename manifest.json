@@ -1,0 +1,16 @@
+{
+  "name": "نظم دروسك",
+  "short_name": "نظم دروسك",
+  "description": "برنامج نظم دروسك لإدارة التلاميذ والحصص والحسابات",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1c2025",
+  "background_color": "#1c2025",
+  "icons": [
+    {"src":"icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
+    {"src":"icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ],
+  "prefer_related_applications": false
+}
