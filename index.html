@@ -1137,8 +1137,13 @@ html, body, button, input, select, textarea, option {
 <style id="pwa-background-only">
 html, body { background-color: #e2e5e8 !important; background-image: none !important; }
 </style>
+
+<!-- Login UI -->
+<style>#loginScreen{position:fixed;inset:0;z-index:99999;background:var(--bg,#f5f7fa);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;direction:rtl}#loginScreen[hidden]{display:none!important}.login-card{width:min(100%,390px);background:var(--card-bg-light,#fff);border:2px solid var(--card-blue,#0284c7);border-radius:18px;padding:22px 18px;box-sizing:border-box;box-shadow:0 8px 24px rgba(0,0,0,.10);text-align:center}.login-card h2{margin:0 0 8px;color:var(--card-blue,#0284c7);font-size:1.35rem}.login-card p{margin:0 0 18px;color:var(--text-muted,#667085);font-weight:700}.login-card input{width:100%;box-sizing:border-box;margin:6px 0;padding:12px;border:1px solid var(--border-color,#d0d5dd);border-radius:10px;background:#fff;color:inherit;font-size:1rem;outline:none}.login-card button{width:100%;border:0;border-radius:10px;padding:12px;margin-top:9px;font-weight:800;font-size:1rem;cursor:pointer}.login-primary{background:#0284c7;color:#fff}.login-google{background:#fff;color:#222;border:1px solid #ccc!important}.login-secondary{background:transparent;color:#0284c7}.login-divider{display:flex;align-items:center;gap:8px;margin:13px 0;color:#98a2b3;font-weight:700}.login-divider:before,.login-divider:after{content:'';height:1px;background:#d0d5dd;flex:1}#loginMessage{min-height:22px;margin-top:10px;color:#d92d20;font-weight:800;font-size:.9rem}body.login-locked{overflow:hidden}</style>
 </head>
 <body>
+<div id="loginScreen" hidden><div class="login-card"><h2 id="loginTitle">تسجيل الدخول</h2><p>سجّل الدخول إلى التطبيق</p><form id="loginForm" autocomplete="on"><input id="loginUsername" type="text" inputmode="text" autocomplete="username" placeholder="اسم المستخدم" required><input id="loginPassword" type="password" autocomplete="current-password" placeholder="رقم السر" required><button class="login-primary" type="submit" id="loginSubmit">تسجيل الدخول</button></form><button class="login-secondary" type="button" id="registerToggle">إنشاء حساب جديد</button><div class="login-divider">أو</div><button class="login-google" type="button" id="googleLoginButton">تسجيل الدخول بحساب Google</button><div id="loginMessage" role="alert"></div></div></div>
+
 
     <header>
         <h1 class="app-title">نظم دروسك</h1>
@@ -3581,40 +3586,18 @@ if ('serviceWorker' in navigator) {
 </script>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-  import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",
-    authDomain: "your-works-1aea7.firebaseapp.com",
-    projectId: "your-works-1aea7",
-    storageBucket: "your-works-1aea7.firebasestorage.app",
-    messagingSenderId: "1084540974820",
-    appId: "1:1084540974820:web:56d173a05716c3f87b1ef1",
-    measurementId: "G-RYZPVNLKZQ"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const provider = new GoogleAuthProvider();
-  provider.addScope("https://www.googleapis.com/auth/drive.file");
-
-  async function loginWithGoogle() {
-    try {
-      const result = await signInWithPopup(auth, provider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      const accessToken = credential?.accessToken || null;
-      if (accessToken) sessionStorage.setItem("drive_access_token", accessToken);
-      return { user: result.user, accessToken };
-    } catch (error) {
-      console.error("خطأ في تسجيل الدخول:", error);
-      throw error;
-    }
-  }
-
-  window.firebaseAuth = auth;
-  window.loginWithGoogle = loginWithGoogle;
-  window.logoutFromGoogle = () => signOut(auth);
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",storageBucket:"your-works-1aea7.firebasestorage.app",messagingSenderId:"1084540974820",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1",measurementId:"G-RYZPVNLKZQ"};
+const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider(); provider.addScope("https://www.googleapis.com/auth/drive.file");
+const loginScreen=document.getElementById('loginScreen'),loginForm=document.getElementById('loginForm'),loginUsername=document.getElementById('loginUsername'),loginPassword=document.getElementById('loginPassword'),loginSubmit=document.getElementById('loginSubmit'),registerToggle=document.getElementById('registerToggle'),googleLoginButton=document.getElementById('googleLoginButton'),loginTitle=document.getElementById('loginTitle'),loginMessage=document.getElementById('loginMessage'); let registerMode=false;
+function msg(x){loginMessage.textContent=x||''} function mode(x){registerMode=x;loginTitle.textContent=x?'إنشاء حساب':'تسجيل الدخول';loginSubmit.textContent=x?'إنشاء الحساب':'تسجيل الدخول';registerToggle.textContent=x?'لدي حساب بالفعل':'إنشاء حساب جديد';loginPassword.autocomplete=x?'new-password':'current-password';msg('')} function usernameEmail(u){return u.trim().toLowerCase()+'@username.your-works-1aea7.firebaseapp.com'} function validUser(u){return /^[A-Za-z0-9._-]{3,30}$/.test(u.trim())} function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')} function hide(){loginScreen.hidden=true;document.body.classList.remove('login-locked')}
+function friendly(e){const m={'auth/invalid-credential':'اسم المستخدم أو رقم السر غير صحيح.','auth/invalid-login-credentials':'اسم المستخدم أو رقم السر غير صحيح.','auth/user-not-found':'اسم المستخدم غير موجود.','auth/wrong-password':'رقم السر غير صحيح.','auth/email-already-in-use':'اسم المستخدم مستخدم بالفعل.','auth/weak-password':'رقم السر يجب أن يكون 6 أحرف أو أرقام على الأقل.','auth/invalid-email':'اسم المستخدم غير صالح.','auth/too-many-requests':'تمت محاولات كثيرة. حاول مرة أخرى لاحقًا.','auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google؛ سيتم فتح تسجيل الدخول بالطريقة البديلة.','auth/operation-not-allowed':'يجب تفعيل طريقة تسجيل الدخول المطلوبة من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول. تأكد من الإنترنت وإعدادات Firebase.'}
+async function loginWithGoogle(){try{const r=await signInWithPopup(auth,provider),c=GoogleAuthProvider.credentialFromResult(r),t=c?.accessToken||null;if(t)sessionStorage.setItem('drive_access_token',t);return{user:r.user,accessToken:t}}catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null}throw e}}
+loginForm.addEventListener('submit',async e=>{e.preventDefault();const u=loginUsername.value.trim(),p=loginPassword.value;msg('');if(!validUser(u)){msg('اسم المستخدم يجب أن يكون من 3 إلى 30 حرفًا أو رقمًا، ويمكن استخدام . _ -');return}if(p.length<6){msg('رقم السر يجب أن يكون 6 أحرف أو أرقام على الأقل.');return}loginSubmit.disabled=true;try{const email=usernameEmail(u);if(registerMode)await createUserWithEmailAndPassword(auth,email,p);else await signInWithEmailAndPassword(auth,email,p)}catch(err){console.error('خطأ في تسجيل الدخول:',err);msg(friendly(err))}finally{loginSubmit.disabled=false}});
+registerToggle.addEventListener('click',()=>mode(!registerMode)); googleLoginButton.addEventListener('click',async()=>{msg('جارٍ فتح تسجيل الدخول بحساب Google...');googleLoginButton.disabled=true;try{await loginWithGoogle()}catch(e){console.error('خطأ في Google:',e);msg(friendly(e))}finally{googleLoginButton.disabled=false}});
+getRedirectResult(auth).then(r=>{if(r){const c=GoogleAuthProvider.credentialFromResult(r),t=c?.accessToken||null;if(t)sessionStorage.setItem('drive_access_token',t)}}).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
+onAuthStateChanged(auth,user=>{if(user)hide();else show()}); window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>signOut(auth);
 </script>
 
 </body>
