@@ -1130,6 +1130,13 @@ html, body, button, input, select, textarea, option {
         /* ضبط المسافة أسفل الرأس الثابت فقط لمنع دخول أول بطاقة تحته دون ترك فراغ كبير */
         #page6 > .financial-list-full:first-of-type { margin-top: 0 !important; }
     </style>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icons/icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+<style id="pwa-background-only">
+html, body { background-color: #E0FFFF !important; }
+</style>
 </head>
 <body>
 
@@ -1690,7 +1697,7 @@ html, body, button, input, select, textarea, option {
         function renderSessionItem(item, pending = false) {
             const div = document.createElement('div');
             div.className = 'today-session-item';
-            div.onclick = () => item.isGroup ? openGroupDetailsPage(item.index, item.dayIndex, true) : openStudentDetailsPage(item.index, item.dayIndex, true);
+            div.onclick = () => item.isGroup ? openGroupDetailsPage(item.index) : openStudentDetailsPage(item.index);
             let statusText = '';
             if (item.status === 'present') statusText = ' — حاضر';
             else if (item.status === 'absent') statusText = ' — غائب';
@@ -2492,13 +2499,10 @@ html, body, button, input, select, textarea, option {
             });
         }
 
-        function openGroupDetailsPage(index, targetDayIndex = null, openSessions = false) {
+        function openGroupDetailsPage(index) {
             selectedGroupIndex = index;
             renderGroupDetail(index);
             navigateTo('page3');
-            if (openSessions) {
-                requestAnimationFrame(() => openSessionsSectionAndScroll('group', index, targetDayIndex));
-            }
         }
 
         function sendGroupWhatsappFinancials(groupIndex) {
@@ -2711,13 +2715,10 @@ html, body, button, input, select, textarea, option {
             });
         }
 
-        function openStudentDetailsPage(index, targetDayIndex = null, openSessions = false) {
+        function openStudentDetailsPage(index) {
             selectedStudentIndex = index;
             renderStudentDetail(index);
             navigateTo('page5');
-            if (openSessions) {
-                requestAnimationFrame(() => openSessionsSectionAndScroll('student', index, targetDayIndex));
-            }
         }
 
         function calculateStudentMetrics(student) {
@@ -2988,48 +2989,6 @@ html, body, button, input, select, textarea, option {
             const hidden = content.style.display === 'none';
             content.style.display = hidden ? '' : 'none';
             if (icon) icon.textContent = hidden ? '⌃' : '⌄';
-            if (hidden && section.classList.contains('sessions-section-card')) {
-                requestAnimationFrame(() => openSessionsSectionAndScroll());
-            }
-        }
-
-        function getLastSessionToRecord(daysData, dataForDueCheck = {}) {
-            if (!Array.isArray(daysData) || !daysData.length) return -1;
-            const now = new Date();
-            let target = -1;
-            // الأولوية لآخر حصة مستحقة ولم تُسجل بعد.
-            daysData.forEach((day, i) => {
-                if (isSessionDue(dataForDueCheck, day, now) && !(day.status || '')) target = i;
-            });
-            if (target !== -1) return target;
-            // إذا لم توجد حصة مستحقة غير مسجلة، افتح على آخر حصة مسجلة.
-            daysData.forEach((day, i) => {
-                if (day.status === 'present' || day.status === 'absent' || day.status === 'canceled') target = i;
-            });
-            return target === -1 ? 0 : target;
-        }
-
-        function openSessionsSectionAndScroll(type = null, index = null, targetDayIndex = null) {
-            const isGroup = type ? type === 'group' : selectedGroupIndex !== null && selectedGroupIndex !== undefined && document.getElementById('page3')?.classList.contains('active');
-            const dataIndex = index !== null && index !== undefined ? index : (isGroup ? selectedGroupIndex : selectedStudentIndex);
-            const data = isGroup ? groups[dataIndex] : students[dataIndex];
-            if (!data) return;
-            const containerId = isGroup ? 'singleGroupDetail' : 'singleStudentDetail';
-            const container = document.getElementById(containerId);
-            if (!container) return;
-            const section = container.querySelector('.sessions-section-card');
-            if (!section) return;
-            const content = section.querySelector('.detail-section-content');
-            const icon = section.querySelector('.section-collapse-icon');
-            if (!content) return;
-            if (content.style.display === 'none') content.style.display = '';
-            if (icon) icon.textContent = '⌃';
-            const days = data.daysData || [];
-            let target = (targetDayIndex !== null && targetDayIndex !== undefined) ? parseInt(targetDayIndex, 10) : getLastSessionToRecord(days, data);
-            if (!Number.isInteger(target) || target < 0 || target >= days.length) target = getLastSessionToRecord(days, data);
-            const rows = section.querySelectorAll('.day-row');
-            const row = rows[target];
-            if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
 
 
@@ -3611,6 +3570,14 @@ html, body, button, input, select, textarea, option {
             window.addEventListener('resize', syncFixedContentOffsets);
         window.addEventListener('load', syncFixedContentOffsets);
 
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('./service-worker.js').catch(function () {});
+  });
+}
 </script>
 </body>
 </html>
