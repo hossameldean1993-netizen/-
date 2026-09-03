@@ -2261,10 +2261,24 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 
         function normalizeImportedData(data) {
             if (!data || typeof data !== 'object') return null;
-            if (!Array.isArray(data.groups) || !Array.isArray(data.students)) return null;
+
+            // دعم صيغة النسخ الحالية الخاصة بـ Google Drive.
+            let importedGroups = Array.isArray(data.groups) ? data.groups : null;
+            let importedStudents = Array.isArray(data.students) ? data.students : null;
+
+            // دعم صيغة ملف النسخ المحلي القديمة/المضافة:
+            // teacher_groups_local و teacher_students_local
+            if (!importedGroups && Array.isArray(data.teacher_groups_local)) {
+                importedGroups = data.teacher_groups_local;
+            }
+            if (!importedStudents && Array.isArray(data.teacher_students_local)) {
+                importedStudents = data.teacher_students_local;
+            }
+
+            if (!Array.isArray(importedGroups) || !Array.isArray(importedStudents)) return null;
             return {
-                groups: data.groups.filter(item => item && typeof item === 'object'),
-                students: data.students.filter(item => item && typeof item === 'object')
+                groups: importedGroups.filter(item => item && typeof item === 'object'),
+                students: importedStudents.filter(item => item && typeof item === 'object')
             };
         }
 
@@ -3409,11 +3423,15 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         const DRIVE_FILE_ID_KEY = 'teacher_drive_backup_file_id';
 
         function buildBackupData() {
+            // صيغة موحدة: نحفظ الصيغة الحالية، ومعها مفاتيح localStorage
+            // حتى تكون النسخة متوافقة أيضًا مع ملفات النسخ المحلية القديمة.
             return {
-                version: 3,
+                version: 4,
                 app: 'نظم دروسك',
                 groups: groups,
                 students: students,
+                teacher_groups_local: groups,
+                teacher_students_local: students,
                 exportDate: new Date().toISOString()
             };
         }
