@@ -3404,7 +3404,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         let backupInProgress = false;
         let backupTimer = null;
         let backupSuspended = false;
-        const DRIVE_BACKUP_FILE_NAME = 'نظم دروسك - النسخة الاحتياطية.json';
+        const DRIVE_BACKUP_FILE_NAME = 'app_backup.json';
         const DRIVE_BACKUP_MIME = 'application/json';
         const DRIVE_FILE_ID_KEY = 'teacher_drive_backup_file_id';
 
@@ -3473,21 +3473,19 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             return file || null;
         }
 
-        function makeDriveMultipartBody(metadata, content) {
+        async function makeDriveMultipartBody(metadata, content) {
             const boundary = '-------NothamBackupBoundary' + Date.now().toString(36);
-            const delimiter = '--' + boundary;
-            const close = delimiter + '--';
-            const body = [
-                delimiter,
-                'Content-Type: application/json; charset=UTF-8',
-                '',
-                JSON.stringify(metadata),
-                delimiter,
-                'Content-Type: ' + DRIVE_BACKUP_MIME,
-                '',
-                content,
-                close
-            ].join('\r\n');
+            const metadataBlob = new Blob([JSON.stringify(metadata)], { type: 'application/json; charset=UTF-8' });
+            const contentBlob = new Blob([content], { type: DRIVE_BACKUP_MIME });
+            const encoder = new TextEncoder();
+            const first = encoder.encode('--' + boundary + '\r\n' +
+                'Content-Type: application/json; charset=UTF-8\r\n\r\n');
+            const middle = encoder.encode('\r\n--' + boundary + '\r\n' +
+                'Content-Type: ' + DRIVE_BACKUP_MIME + '\r\n\r\n');
+            const last = encoder.encode('\r\n--' + boundary + '--\r\n');
+            const body = new Blob([first, metadataBlob, middle, contentBlob, last], {
+                type: 'multipart/related; boundary=' + boundary
+            });
             return { body, contentType: 'multipart/related; boundary=' + boundary };
         }
 
@@ -3504,7 +3502,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const existing = await findDriveBackupFile();
 
                 if (existing?.id) {
-                    const multipart = makeDriveMultipartBody(
+                    const multipart = await makeDriveMultipartBody(
                         { name: DRIVE_BACKUP_FILE_NAME, mimeType: DRIVE_BACKUP_MIME },
                         backupText
                     );
@@ -3514,7 +3512,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     );
                     if (!response.ok) throw new Error('DRIVE_UPDATE_FAILED_' + response.status);
                 } else {
-                    const multipart = makeDriveMultipartBody(
+                    const multipart = await makeDriveMultipartBody(
                         { name: DRIVE_BACKUP_FILE_NAME, mimeType: DRIVE_BACKUP_MIME },
                         backupText
                     );
@@ -3581,12 +3579,12 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     return;
                 }
 
+                backupSuspended = true;
+                clearTimeout(backupTimer);
                 showAppConfirm(
                     'استعادة النسخة الاحتياطية',
                     'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية بالبيانات الموجودة في النسخة الاحتياطية.',
                     function () {
-                        backupSuspended = true;
-                        clearTimeout(backupTimer);
                         groups = importedData.groups;
                         students = importedData.students;
                         selectedGroupIndex = null;
