@@ -1170,9 +1170,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             <div class="control-buttons-wrapper">
                 <button class="btn-3d btn-red-3d settings-btn" onclick="openStartMonthModal()">بدء شهر جديد</button>
                 <button class="btn-3d btn-red-3d settings-btn" onclick="deleteAllData()">حذف جميع البيانات</button>
-                <button class="btn-3d settings-btn" onclick="exportDataToFile()">النسخ الاحتياطي</button>
-                <button class="btn-3d settings-btn" onclick="triggerRestoreFileInput()">استعادة البيانات</button>
-                <input type="file" id="backupFileInput" accept=".json,application/json,text/json" style="display: none;" onchange="handleRestoreFile(event)">
+                <button class="btn-3d settings-btn" onclick="exportDataToFile()">النسخ الاحتياطي إلى Google Drive</button>
+                <button class="btn-3d settings-btn" onclick="triggerRestoreFileInput()">استعادة النسخة الاحتياطية</button>
                 <button class="btn-3d btn-full" onclick="toggleTheme()" id="themeToggleText">
                     <span class="theme-icon" aria-hidden="true"></span>
                     <span class="theme-label">الوضع الليلي</span>
@@ -1883,6 +1882,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const studentsJson = JSON.stringify(students);
                 localStorage.setItem('teacher_groups_local', groupsJson);
                 localStorage.setItem('teacher_students_local', studentsJson);
+                scheduleAutomaticDriveBackup();
             } catch (err) {
                 console.error('Save data error:', err);
                 showAppAlert('تعذر حفظ البيانات', 'مساحة التخزين في الهاتف ممتلئة أو غير متاحة. بياناتك الحالية لم تُحذف من الذاكرة. يُفضّل عمل نسخة احتياطية ثم تحرير مساحة.');
@@ -3400,166 +3400,210 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             saveData(); closeGroupModal(); if (editId !== '') renderGroupDetail(parseInt(editId, 10)); else navigateTo('page2');
         }
 
+        // ==================== النسخ الاحتياطي إلى Google Drive ====================
         let backupInProgress = false;
-        async function exportDataToFile() {
-            if (backupInProgress) return;
+        let backupTimer = null;
+        let backupSuspended = false;
+        const DRIVE_BACKUP_FILE_NAME = 'نظم دروسك - النسخة الاحتياطية.json';
+        const DRIVE_BACKUP_MIME = 'application/json';
+        const DRIVE_FILE_ID_KEY = 'teacher_drive_backup_file_id';
+
+        function buildBackupData() {
+            return {
+                version: 3,
+                app: 'نظم دروسك',
+                groups: groups,
+                students: students,
+                exportDate: new Date().toISOString()
+            };
+        }
+
+        function getDriveAccessToken() {
+            return sessionStorage.getItem('drive_access_token') || '';
+        }
+
+        async function ensureDriveAccessToken() {
+            let token = getDriveAccessToken();
+            if (token) return token;
+
+            if (typeof window.loginWithGoogle !== 'function') {
+                throw new Error('GOOGLE_LOGIN_UNAVAILABLE');
+            }
+
+            const result = await window.loginWithGoogle();
+            token = result?.accessToken || getDriveAccessToken();
+            if (!token) throw new Error('GOOGLE_DRIVE_PERMISSION_REQUIRED');
+            return token;
+        }
+
+        async function driveRequest(url, options = {}, allowRetry = true) {
+            let token = getDriveAccessToken();
+            if (!token) token = await ensureDriveAccessToken();
+
+            const headers = new Headers(options.headers || {});
+            headers.set('Authorization', 'Bearer ' + token);
+
+            const response = await fetch(url, { ...options, headers });
+            if (response.status === 401 && allowRetry) {
+                sessionStorage.removeItem('drive_access_token');
+                await ensureDriveAccessToken();
+                return driveRequest(url, options, false);
+            }
+            return response;
+        }
+
+        async function findDriveBackupFile() {
+            const cachedId = localStorage.getItem(DRIVE_FILE_ID_KEY);
+            if (cachedId) {
+                const check = await driveRequest('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(cachedId) + '?fields=id,name,mimeType,trashed', { method: 'GET' });
+                if (check.ok) {
+                    const item = await check.json();
+                    if (!item.trashed && item.name === DRIVE_BACKUP_FILE_NAME) return item;
+                }
+                localStorage.removeItem(DRIVE_FILE_ID_KEY);
+            }
+
+            const q = "name = '" + DRIVE_BACKUP_FILE_NAME.replace(/'/g, "\\'") + "' and trashed = false";
+            const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&spaces=drive&fields=files(id,name,mimeType,modifiedTime)&pageSize=10';
+            const response = await driveRequest(url, { method: 'GET' });
+            if (!response.ok) throw new Error('DRIVE_LIST_FAILED_' + response.status);
+            const data = await response.json();
+            const file = (data.files || []).find(f => f.name === DRIVE_BACKUP_FILE_NAME && f.mimeType === DRIVE_BACKUP_MIME) || (data.files || [])[0];
+            if (file?.id) localStorage.setItem(DRIVE_FILE_ID_KEY, file.id);
+            return file || null;
+        }
+
+        function makeDriveMultipartBody(metadata, content) {
+            const boundary = '-------NothamBackupBoundary' + Date.now().toString(36);
+            const delimiter = '--' + boundary;
+            const close = delimiter + '--';
+            const body = [
+                delimiter,
+                'Content-Type: application/json; charset=UTF-8',
+                '',
+                JSON.stringify(metadata),
+                delimiter,
+                'Content-Type: ' + DRIVE_BACKUP_MIME,
+                '',
+                content,
+                close
+            ].join('\r\n');
+            return { body, contentType: 'multipart/related; boundary=' + boundary };
+        }
+
+        async function uploadBackupToDrive(showMessage = true) {
+            if (backupInProgress || backupSuspended) return false;
             backupInProgress = true;
 
             try {
-                const dataToExport = {
-                    version: 3,
-                    app: 'نظم دروسك',
-                    groups: groups,
-                    students: students,
-                    exportDate: new Date().toISOString()
-                };
+                const token = await ensureDriveAccessToken();
+                if (!token) throw new Error('GOOGLE_DRIVE_PERMISSION_REQUIRED');
 
-                const backupText = JSON.stringify(dataToExport);
+                const data = buildBackupData();
+                const backupText = JSON.stringify(data);
+                const existing = await findDriveBackupFile();
 
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    await navigator.clipboard.writeText(backupText);
+                if (existing?.id) {
+                    const multipart = makeDriveMultipartBody(
+                        { name: DRIVE_BACKUP_FILE_NAME, mimeType: DRIVE_BACKUP_MIME },
+                        backupText
+                    );
+                    const response = await driveRequest(
+                        'https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(existing.id) + '?uploadType=multipart&fields=id,name,modifiedTime',
+                        { method: 'PATCH', headers: { 'Content-Type': multipart.contentType }, body: multipart.body }
+                    );
+                    if (!response.ok) throw new Error('DRIVE_UPDATE_FAILED_' + response.status);
                 } else {
-                    const ta = document.createElement('textarea');
-                    ta.value = backupText;
-                    ta.setAttribute('readonly', '');
-                    ta.style.position = 'fixed';
-                    ta.style.left = '-9999px';
-                    document.body.appendChild(ta);
-                    ta.focus();
-                    ta.select();
-                    const ok = document.execCommand('copy');
-                    ta.remove();
-                    if (!ok) throw new Error('Clipboard copy failed');
+                    const multipart = makeDriveMultipartBody(
+                        { name: DRIVE_BACKUP_FILE_NAME, mimeType: DRIVE_BACKUP_MIME },
+                        backupText
+                    );
+                    const response = await driveRequest(
+                        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime',
+                        { method: 'POST', headers: { 'Content-Type': multipart.contentType }, body: multipart.body }
+                    );
+                    if (!response.ok) throw new Error('DRIVE_CREATE_FAILED_' + response.status);
+                    const created = await response.json();
+                    if (created.id) localStorage.setItem(DRIVE_FILE_ID_KEY, created.id);
                 }
 
-                showAppAlert(
-                    'تم النسخ الاحتياطي',
-                    'تم النسخ إلى الحافظة، برجاء لصق النص في مكان آمن لاستعادته عند الحاجة.'
-                );
+                localStorage.setItem('teacher_drive_backup_last_success', new Date().toISOString());
+                if (showMessage) showAppAlert('تم النسخ الاحتياطي', 'تم تحديث النسخة الاحتياطية تلقائيًا على Google Drive بنجاح.');
+                return true;
             } catch (err) {
-                console.error('Backup clipboard error:', err);
-                showAppAlert(
-                    'تعذر النسخ',
-                    'تعذر نسخ النسخة الاحتياطية إلى الحافظة. لم يتم تغيير أي من بياناتك.'
-                );
+                console.error('Google Drive backup error:', err);
+                if (showMessage) {
+                    if (err?.message === 'GOOGLE_DRIVE_PERMISSION_REQUIRED' || err?.message === 'GOOGLE_LOGIN_UNAVAILABLE') {
+                        showAppAlert('تسجيل الدخول إلى Google', 'يجب تسجيل الدخول بحساب Google والسماح للتطبيق بالوصول إلى Google Drive حتى يتم حفظ النسخة الاحتياطية.');
+                    } else {
+                        showAppAlert('تعذر النسخ الاحتياطي', 'تعذر تحديث النسخة الاحتياطية على Google Drive. تأكد من اتصال الإنترنت ثم حاول مرة أخرى.');
+                    }
+                }
+                return false;
             } finally {
                 backupInProgress = false;
             }
         }
 
-        function triggerRestoreFileInput() {
-            openClipboardRestoreDialog();
+        function scheduleAutomaticDriveBackup() {
+            if (backupSuspended) return;
+            clearTimeout(backupTimer);
+            backupTimer = setTimeout(function () {
+                // النسخ التلقائي يعمل في الخلفية ولا يوقف استخدام التطبيق.
+                if (getDriveAccessToken()) uploadBackupToDrive(false);
+            }, 900);
         }
 
-        function openClipboardRestoreDialog() {
-            let modal = document.getElementById('clipboardRestoreModal');
-
-            if (!modal) {
-                modal = document.createElement('div');
-                modal.id = 'clipboardRestoreModal';
-                modal.style.cssText =
-                    'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.65);' +
-                    'display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
-
-                modal.innerHTML = `
-                    <div style="background:#fff;border-radius:16px;width:min(620px,100%);padding:20px;box-sizing:border-box;direction:rtl;">
-                        <h3 style="margin:0 0 12px;">استعادة النسخة الاحتياطية</h3>
-                        <p style="margin:0 0 10px;">الصق نص النسخة الاحتياطية هنا ثم اضغط استعادة.</p>
-                        <textarea id="clipboardRestoreText"
-                            style="width:100%;height:220px;box-sizing:border-box;resize:vertical;padding:10px;border:1px solid #ccc;border-radius:10px;direction:ltr;text-align:left;"
-                            placeholder="الصق النسخة الاحتياطية هنا"></textarea>
-                        <div style="display:flex;gap:10px;justify-content:flex-start;margin-top:12px;">
-                            <button class="btn-3d" type="button" onclick="restoreFromClipboardText()">استعادة</button>
-                            <button class="btn-3d" type="button" onclick="closeClipboardRestoreDialog()">إلغاء</button>
-                        </div>
-                    </div>`;
-
-                document.body.appendChild(modal);
-            }
-
-            modal.style.display = 'flex';
-
-            if (navigator.clipboard && navigator.clipboard.readText) {
-                navigator.clipboard.readText().then(function(txt) {
-                    const box = document.getElementById('clipboardRestoreText');
-                    if (box && txt) box.value = txt;
-                }).catch(function() {});
-            }
+        async function exportDataToFile() {
+            await uploadBackupToDrive(true);
         }
 
-        function closeClipboardRestoreDialog() {
-            const modal = document.getElementById('clipboardRestoreModal');
-            if (modal) modal.style.display = 'none';
-        }
-
-        function restoreFromClipboardText() {
-            const box = document.getElementById('clipboardRestoreText');
-            const raw = box ? box.value.trim() : '';
-
-            if (!raw) {
-                showAppAlert('لا توجد نسخة', 'الصق نص النسخة الاحتياطية أولًا.');
-                return;
-            }
-
+        async function triggerRestoreFileInput() {
+            if (backupInProgress) return;
+            backupInProgress = true;
             try {
+                const existing = await findDriveBackupFile();
+                if (!existing?.id) {
+                    showAppAlert('لا توجد نسخة احتياطية', 'لم يتم العثور على نسخة احتياطية للتطبيق على Google Drive.');
+                    return;
+                }
+
+                const response = await driveRequest(
+                    'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(existing.id) + '?alt=media',
+                    { method: 'GET' }
+                );
+                if (!response.ok) throw new Error('DRIVE_DOWNLOAD_FAILED_' + response.status);
+                const raw = await response.text();
                 const importedData = normalizeImportedData(JSON.parse(raw));
 
                 if (!importedData) {
-                    showAppAlert(
-                        'خطأ',
-                        'النسخة غير صالحة. يجب أن تحتوي على بيانات المجموعات والتلاميذ.'
-                    );
+                    showAppAlert('خطأ', 'النسخة الاحتياطية الموجودة على Google Drive غير صالحة.');
                     return;
                 }
 
                 showAppConfirm(
-                    'استعادة البيانات',
-                    'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية بالبيانات المستوردة.',
-                    function() {
+                    'استعادة النسخة الاحتياطية',
+                    'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية بالبيانات الموجودة في النسخة الاحتياطية.',
+                    function () {
+                        backupSuspended = true;
+                        clearTimeout(backupTimer);
                         groups = importedData.groups;
                         students = importedData.students;
                         selectedGroupIndex = null;
                         selectedStudentIndex = null;
                         dataNormalizationDone = false;
                         saveData();
-                        closeClipboardRestoreDialog();
-                        showAppAlert('تم بنجاح', 'تمت استعادة البيانات بنجاح!');
+                        backupSuspended = false;
+                        showAppAlert('تم بنجاح', 'تمت استعادة النسخة الاحتياطية من Google Drive بنجاح!');
                         navigateTo('page1');
                     }
                 );
             } catch (err) {
-                console.error('Clipboard restore error:', err);
-                showAppAlert('خطأ', 'تعذر قراءة النسخة الاحتياطية. تأكد من لصق النص كاملًا.');
+                console.error('Google Drive restore error:', err);
+                showAppAlert('تعذر الاستعادة', 'تعذر قراءة النسخة الاحتياطية من Google Drive. تأكد من اتصال الإنترنت وتسجيل الدخول بحساب Google.');
+            } finally {
+                backupInProgress = false;
             }
-        }
-
-        function handleRestoreFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const importedData = normalizeImportedData(JSON.parse(e.target.result));
-                    if (!importedData) {
-                        showAppAlert('خطأ', 'ملف غير صالح. يجب أن يحتوي ملف النسخة الاحتياطية على قوائم المجموعات والتلاميذ.');
-                        return;
-                    }
-                    showAppConfirm('استعادة البيانات', 'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية بالبيانات المستوردة.', function() {
-                        groups = importedData.groups;
-                        students = importedData.students;
-                        selectedGroupIndex = null;
-                        selectedStudentIndex = null;
-                        dataNormalizationDone = false;
-                        saveData();
-                        showAppAlert('تم بنجاح', 'تمت استعادة البيانات بنجاح!');
-                        navigateTo('page1');
-                    });
-                } catch (err) {
-                    showAppAlert('خطأ', 'حدث خطأ أثناء قراءة الملف. يرجى التأكد من اختيار نسخة احتياطية صحيحة.');
-                }
-            };
-            reader.readAsText(file);
-            event.target.value = '';
         }
 
         // إعداد التشغيل الأولي والتنقل عند تحميل الصفحة
