@@ -3443,19 +3443,38 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             });
         }
 
-        function startGoogleDriveBackup() {
+        async function startGoogleDriveBackup() {
             if (backupInProgress) return;
             try {
                 initGoogleDriveAuth();
                 if (accessToken) {
-                    uploadBackupToDrive();
+                    await uploadBackupToDrive();
                     return;
                 }
-                // طلب الصلاحية مباشرة من Google. في PWA هذا هو المسار الصحيح.
-                tokenClient.requestAccessToken({ prompt: 'consent' });
+                // Google يرفض الطلب قبل ظهور نافذة الاختيار إذا كان Origin غير مسجل.
+                // في هذه الحالة نستخدم حساب Google المرتبط بـ Firebase كمسار احتياطي للـPWA.
+                try {
+                    tokenClient.requestAccessToken({ prompt: 'consent' });
+                } catch (err) {
+                    console.error('Google GIS request error:', err);
+                    if (window.firebaseDriveAuth) {
+                        const fallbackToken = await window.firebaseDriveAuth();
+                        if (fallbackToken) {
+                            accessToken = fallbackToken;
+                            await uploadBackupToDrive();
+                            return;
+                        }
+                    }
+                    throw err;
+                }
             } catch (err) {
                 console.error('Google Drive auth init error:', err);
-                showAppAlert('تعذر تشغيل Google Drive', 'خدمة تسجيل Google غير متاحة. افتح التطبيق من رابط HTTPS صالح وتأكد من اتصال الإنترنت.');
+                const origin = location.origin || (location.protocol + '//' + location.host);
+                if (String(err?.message || '').toLowerCase().includes('origin') || String(err?.error || '').toLowerCase().includes('origin')) {
+                    showAppAlert('Google رفض الاتصال', 'خطأ 400: origin_mismatch\n\nأصل التطبيق الحالي هو:\n' + origin + '\n\nأضف هذا العنوان في Google Cloud ضمن Authorized JavaScript origins لنفس Client ID.');
+                } else {
+                    showAppAlert('تعذر تشغيل Google Drive', 'تعذر الحصول على صلاحية Google Drive. تأكد من اتصال الإنترنت وإعداد OAuth ثم حاول مرة أخرى.');
+                }
             }
         }
 
@@ -3632,6 +3651,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebas
 import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",storageBucket:"your-works-1aea7.firebasestorage.app",messagingSenderId:"1084540974820",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1",measurementId:"G-RYZPVNLKZQ"};
 const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider();
+provider.addScope('https://www.googleapis.com/auth/drive.file');
+window.firebaseDriveAuth=async function(){
+  try{
+    const r=await signInWithPopup(auth,provider);
+    const c=GoogleAuthProvider.credentialFromResult(r);
+    return c?.accessToken||null;
+  }catch(e){
+    if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){
+      sessionStorage.setItem('drive_auth_pending','1');
+      await signInWithRedirect(auth,provider);
+      return null;
+    }
+    throw e;
+  }
+};
 
 const loginScreen=document.getElementById('loginScreen'),loginForm=document.getElementById('loginForm'),loginUsername=document.getElementById('loginUsername'),loginPassword=document.getElementById('loginPassword'),loginSubmit=document.getElementById('loginSubmit'),registerToggle=document.getElementById('registerToggle'),googleLoginButton=document.getElementById('googleLoginButton'),loginTitle=document.getElementById('loginTitle'),loginMessage=document.getElementById('loginMessage'); let registerMode=false;
 function msg(x){loginMessage.textContent=x||''} function mode(x){registerMode=x;loginTitle.textContent=x?'إنشاء حساب':'تسجيل الدخول';loginSubmit.textContent=x?'إنشاء الحساب':'تسجيل الدخول';registerToggle.textContent=x?'لدي حساب بالفعل':'إنشاء حساب جديد';loginPassword.autocomplete=x?'new-password':'current-password';msg('')} function usernameEmail(u){return u.trim().toLowerCase()+'@username.your-works-1aea7.firebaseapp.com'} function validUser(u){return /^[A-Za-z0-9._-]{3,30}$/.test(u.trim())} function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')} function hide(){loginScreen.hidden=true;document.body.classList.remove('login-locked')}
@@ -3639,7 +3673,7 @@ function friendly(e){const m={'auth/invalid-credential':'اسم المستخدم
 async function loginWithGoogle(){try{const r=await signInWithPopup(auth,provider);return{user:r.user}}catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null}throw e}}
 loginForm.addEventListener('submit',async e=>{e.preventDefault();const u=loginUsername.value.trim(),p=loginPassword.value;msg('');if(!validUser(u)){msg('اسم المستخدم يجب أن يكون من 3 إلى 30 حرفًا أو رقمًا، ويمكن استخدام . _ -');return}if(p.length<6){msg('رقم السر يجب أن يكون 6 أحرف أو أرقام على الأقل.');return}loginSubmit.disabled=true;try{const email=usernameEmail(u);if(registerMode)await createUserWithEmailAndPassword(auth,email,p);else await signInWithEmailAndPassword(auth,email,p)}catch(err){console.error('خطأ في تسجيل الدخول:',err);msg(friendly(err))}finally{loginSubmit.disabled=false}});
 registerToggle.addEventListener('click',()=>mode(!registerMode)); googleLoginButton.addEventListener('click',async()=>{msg('جارٍ فتح تسجيل الدخول بحساب Google...');googleLoginButton.disabled=true;try{await loginWithGoogle()}catch(e){console.error('خطأ في Google:',e);msg(friendly(e))}finally{googleLoginButton.disabled=false}});
-getRedirectResult(auth).then(r=>{if(r){const c=GoogleAuthProvider.credentialFromResult(r);if(c?.accessToken){window.pendingDriveAccessToken=c.accessToken;window.dispatchEvent(new CustomEvent('drive-auth-ready'));}return r}}).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
+getRedirectResult(auth).then(r=>{if(r){const c=GoogleAuthProvider.credentialFromResult(r);if(c?.accessToken){window.pendingDriveAccessToken=c.accessToken;window.dispatchEvent(new CustomEvent('drive-auth-ready'));}if(sessionStorage.getItem('drive_auth_pending')==='1'){sessionStorage.removeItem('drive_auth_pending');setTimeout(()=>{if(window.pendingDriveAccessToken){window.dispatchEvent(new CustomEvent('drive-auth-ready'));}},150);}}return r}).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
 onAuthStateChanged(auth,user=>{if(user)hide();else show()}); window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>signOut(auth);
 </script>
 
