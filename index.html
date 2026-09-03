@@ -3579,5 +3579,43 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+  import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",
+    authDomain: "your-works-1aea7.firebaseapp.com",
+    projectId: "your-works-1aea7",
+    storageBucket: "your-works-1aea7.firebasestorage.app",
+    messagingSenderId: "1084540974820",
+    appId: "1:1084540974820:web:56d173a05716c3f87b1ef1",
+    measurementId: "G-RYZPVNLKZQ"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const provider = new GoogleAuthProvider();
+  provider.addScope("https://www.googleapis.com/auth/drive.file");
+
+  async function loginWithGoogle() {
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const accessToken = credential?.accessToken || null;
+      if (accessToken) sessionStorage.setItem("drive_access_token", accessToken);
+      return { user: result.user, accessToken };
+    } catch (error) {
+      console.error("خطأ في تسجيل الدخول:", error);
+      throw error;
+    }
+  }
+
+  window.firebaseAuth = auth;
+  window.loginWithGoogle = loginWithGoogle;
+  window.logoutFromGoogle = () => signOut(auth);
+</script>
+
 </body>
 </html>
