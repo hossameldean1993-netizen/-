@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="format-detection" content="telephone=no">
@@ -3415,64 +3416,87 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         // ==================== النسخ الاحتياطي إلى Google Drive ====================
-        // تم إصلاح تسجيل Google Drive ليعمل مع WebView/APK أيضًا بالاعتماد على
-        // Firebase Google Sign-In الموجود أصلًا في التطبيق، بدل Google Identity Services
-        // التي تعتمد على نافذة OAuth من نوع popup وقد تفشل داخل بعض WebView.
+        // Google Identity Services - مناسب للـ PWA/المتصفح
+        const CLIENT_ID = '310650752416-dskh559v6u5vjbc2jih585o35ola5a2p.apps.googleusercontent.com';
         const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+        let tokenClient = null;
         let accessToken = null;
         let backupInProgress = false;
 
-        function setDriveToken(token) {
-            if (token) accessToken = token;
-            return accessToken;
+        function initGoogleDriveAuth() {
+            if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+                throw new Error('GOOGLE_IDENTITY_SERVICES_UNAVAILABLE');
+            }
+            if (tokenClient) return;
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: DRIVE_SCOPE,
+                callback: async (response) => {
+                    if (response.error || !response.access_token) {
+                        console.error('Google OAuth error:', response);
+                        showAppAlert('خطأ في صلاحية Google', 'لم يتم منح صلاحية Google Drive. تأكد من السماح للتطبيق بالوصول إلى Drive ثم حاول مرة أخرى.');
+                        return;
+                    }
+                    accessToken = response.access_token;
+                    await uploadBackupToDrive();
+                }
+            });
         }
 
-        async function ensureDriveAccess() {
-            if (accessToken) return accessToken;
-            if (window.pendingDriveAccessToken) {
-                accessToken = window.pendingDriveAccessToken;
-                window.pendingDriveAccessToken = null;
-                return accessToken;
-            }
-
-            // helper يتم تعريفه داخل Firebase module أسفل الصفحة.
-            if (typeof window.firebaseGoogleDriveSignIn !== 'function') {
-                throw new Error('GOOGLE_SIGNIN_UNAVAILABLE');
-            }
-
-            const token = await window.firebaseGoogleDriveSignIn();
-            if (token) {
-                accessToken = token;
-                return accessToken;
-            }
-
-            // في حالة redirect سيعود التطبيق لاحقًا وسيتم حفظ التوكن بواسطة الـ module.
-            if (window.pendingDriveAccessToken) {
-                accessToken = window.pendingDriveAccessToken;
-                window.pendingDriveAccessToken = null;
-                return accessToken;
-            }
-            return null;
-        }
-
-        // الدالة المربوطة بزر النسخ الاحتياطي في الواجهة
-        async function startGoogleDriveBackup() {
+        function startGoogleDriveBackup() {
             if (backupInProgress) return;
             try {
-                const token = await ensureDriveAccess();
-                if (!token) {
-                    showAppAlert('تسجيل الدخول إلى Google', 'سيتم فتح تسجيل الدخول إلى Google. بعد العودة إلى التطبيق اضغط النسخ الاحتياطي مرة أخرى إذا لزم الأمر.');
+                initGoogleDriveAuth();
+                if (accessToken) {
+                    uploadBackupToDrive();
                     return;
                 }
-                await uploadBackupToDrive();
+                // طلب الصلاحية مباشرة من Google. في PWA هذا هو المسار الصحيح.
+                tokenClient.requestAccessToken({ prompt: 'consent' });
             } catch (err) {
-                console.error('Google Drive authorization error:', err);
-                showAppAlert('تعذر الاتصال بـ Google Drive', 'تعذر الحصول على صلاحية Google Drive. تأكد من اتصال الإنترنت ثم حاول مرة أخرى.');
+                console.error('Google Drive auth init error:', err);
+                showAppAlert('تعذر تشغيل Google Drive', 'خدمة تسجيل Google غير متاحة. افتح التطبيق من رابط HTTPS صالح وتأكد من اتصال الإنترنت.');
             }
         }
 
-        // إنشاء ورفع ملف البيانات إلى Google Drive.
-        // إذا كانت نسخة اليوم موجودة يتم تحديثها بدل إنشاء ملفات مكررة.
+        async function driveFetch(url, options = {}) {
+            if (!accessToken) throw new Error('NO_DRIVE_TOKEN');
+            const response = await fetch(url, {
+                ...options,
+                headers: {
+                    ...(options.headers || {}),
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            });
+            if (response.status === 401) {
+                accessToken = null;
+                throw new Error('DRIVE_UNAUTHORIZED');
+            }
+            return response;
+        }
+
+        async function getDriveError(response) {
+            let body = '';
+            try { body = await response.text(); } catch (_) {}
+            let message = '';
+            try { message = JSON.parse(body)?.error?.message || ''; } catch (_) {}
+            return `HTTP ${response.status}${message ? `: ${message}` : ''}`;
+        }
+
+        async function findDriveBackupFile(fileName = null) {
+            const q = fileName
+                ? `name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`
+                : "name contains 'backup_drosak_' and trashed = false";
+            const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
+                '&spaces=drive&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime desc&pageSize=100';
+            const response = await driveFetch(url);
+            if (!response.ok) throw new Error('DRIVE_LIST_FAILED: ' + await getDriveError(response));
+            const data = await response.json();
+            const files = Array.isArray(data.files) ? data.files : [];
+            if (fileName) return files.find(f => f.name === fileName) || null;
+            return files.find(f => /^backup_drosak_\d{4}-\d{2}-\d{2}\.json$/i.test(f.name)) || null;
+        }
+
         async function uploadBackupToDrive() {
             if (!accessToken || backupInProgress) return false;
             backupInProgress = true;
@@ -3481,91 +3505,82 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     teacher_groups_local: JSON.parse(localStorage.getItem('teacher_groups_local') || '[]'),
                     teacher_students_local: JSON.parse(localStorage.getItem('teacher_students_local') || '[]')
                 };
-                const fileName = `backup_drosak_${new Date().toISOString().split('T')[0]}.json`;
+                const fileName = `backup_drosak_${new Date().toISOString().slice(0,10)}.json`;
                 const fileContent = JSON.stringify(backupData, null, 2);
-                const existing = await findLatestDriveBackupFile(fileName);
+                const existing = await findDriveBackupFile(fileName);
                 let response;
 
                 if (existing?.id) {
-                    const form = new FormData();
-                    form.append('metadata', new Blob([JSON.stringify({mimeType:'application/json'})], {type:'application/json'}));
-                    form.append('file', new Blob([fileContent], {type:'application/json'}));
-                    response = await fetch('https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(existing.id) + '?uploadType=multipart', {
-                        method: 'PATCH',
-                        headers: {'Authorization': `Bearer ${accessToken}`},
-                        body: form
-                    });
+                    // تحديث محتوى النسخة الموجودة اليوم فقط.
+                    response = await driveFetch(
+                        'https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(existing.id) + '?uploadType=media',
+                        {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: fileContent
+                        }
+                    );
                 } else {
+                    // إنشاء الملف كملف JSON في Drive.
                     const form = new FormData();
-                    form.append('metadata', new Blob([JSON.stringify({name:fileName, mimeType:'application/json'})], {type:'application/json'}));
-                    form.append('file', new Blob([fileContent], {type:'application/json'}));
-                    response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-                        method: 'POST',
-                        headers: {'Authorization': `Bearer ${accessToken}`},
-                        body: form
-                    });
+                    form.append('metadata', new Blob([
+                        JSON.stringify({name: fileName, mimeType: 'application/json'})
+                    ], {type: 'application/json'}));
+                    form.append('file', new Blob([fileContent], {type: 'application/json'}));
+                    response = await driveFetch(
+                        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
+                        {method: 'POST', body: form}
+                    );
                 }
 
-                if (response.ok) {
-                    showAppAlert('تم النسخ الاحتياطي', 'تم حفظ النسخة الاحتياطية بنجاح داخل Google Drive.');
-                    return true;
+                if (!response.ok) {
+                    const detail = await getDriveError(response);
+                    console.error('Google Drive upload error:', detail);
+                    showAppAlert('فشل النسخ الاحتياطي',
+                        response.status === 403
+                            ? 'Google رفض العملية (403). غالبًا Google Drive API غير مفعّل أو صلاحية Drive غير مضافة لهذا العميل.'
+                            : `تعذر رفع النسخة إلى Google Drive. ${detail}`
+                    );
+                    return false;
                 }
 
-                let errData = {};
-                try { errData = await response.json(); } catch (_) {}
-                console.error('Drive API Error:', response.status, errData);
-                if (response.status === 401) accessToken = null;
-                showAppAlert('فشل النسخ الاحتياطي', response.status === 403 ? 'Google رفض صلاحية Drive. سجّل الدخول بحساب Google ومنح التطبيق صلاحية Drive ثم حاول مرة أخرى.' : 'فشل رفع ملف النسخة الاحتياطية إلى Google Drive.');
-                return false;
+                showAppAlert('تم النسخ الاحتياطي', 'تم حفظ النسخة الاحتياطية بنجاح داخل Google Drive.');
+                return true;
             } catch (err) {
                 console.error('Google Drive backup error:', err);
-                showAppAlert('خطأ في الاتصال', 'حدث خطأ في الاتصال أثناء رفع النسخة الاحتياطية إلى Google Drive.');
+                const msg = String(err?.message || err);
+                if (msg.includes('DRIVE_UNAUTHORIZED')) {
+                    showAppAlert('انتهت صلاحية Google Drive', 'اضغط النسخ الاحتياطي مرة أخرى لمنح الصلاحية من جديد.');
+                } else if (msg.includes('DRIVE_LIST_FAILED')) {
+                    showAppAlert('تعذر الوصول إلى Google Drive', 'تعذر قراءة ملفات Drive. تأكد من تفعيل Google Drive API ومنح التطبيق صلاحية Drive.');
+                } else {
+                    showAppAlert('خطأ أثناء الرفع', 'حدث خطأ أثناء رفع النسخة الاحتياطية إلى Google Drive. افتح التطبيق من HTTPS وتأكد من اتصال الإنترنت.');
+                }
                 return false;
             } finally {
                 backupInProgress = false;
             }
         }
 
-        // البحث عن نسخة احتياطية محددة أو أحدث نسخة.
-        async function findLatestDriveBackupFile(exactName) {
-            if (!accessToken) return null;
-            const q = exactName
-                ? `name = '${exactName.replace(/'/g, "\\'")}' and mimeType = 'application/json' and trashed = false`
-                : "name contains 'backup_drosak_' and mimeType = 'application/json' and trashed = false";
-            const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
-                '&spaces=drive&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime desc&pageSize=50';
-            const response = await fetch(url, {method:'GET', headers:{'Authorization':`Bearer ${accessToken}`}});
-            if (!response.ok) {
-                if (response.status === 401) accessToken = null;
-                throw new Error('DRIVE_LIST_FAILED_' + response.status);
-            }
-            const data = await response.json();
-            const files = Array.isArray(data.files) ? data.files : [];
-            return files.find(file => /^backup_drosak_\d{4}-\d{2}-\d{2}\.json$/i.test(file.name)) || null;
-        }
-
-        // استعادة أحدث نسخة احتياطية من Google Drive
         async function triggerRestoreFileInput() {
             if (backupInProgress) return;
             try {
-                const token = await ensureDriveAccess();
-                if (!token) {
-                    showAppAlert('تسجيل الدخول إلى Google', 'سيتم فتح تسجيل الدخول إلى Google. بعد العودة إلى التطبيق اضغط استعادة النسخة الاحتياطية مرة أخرى.');
+                initGoogleDriveAuth();
+                if (!accessToken) {
+                    tokenClient.requestAccessToken({ prompt: 'consent' });
+                    showAppAlert('السماح بالوصول', 'اسمح للتطبيق بالوصول إلى Google Drive، ثم اضغط استعادة النسخة الاحتياطية مرة أخرى.');
                     return;
                 }
                 backupInProgress = true;
-                const existing = await findLatestDriveBackupFile();
+                const existing = await findDriveBackupFile();
                 if (!existing?.id) {
                     showAppAlert('لا توجد نسخة احتياطية', 'لم يتم العثور على نسخة احتياطية للتطبيق على Google Drive.');
                     return;
                 }
-                const response = await fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(existing.id) + '?alt=media', {
-                    method:'GET', headers:{'Authorization':`Bearer ${accessToken}`}
-                });
-                if (!response.ok) {
-                    if (response.status === 401) accessToken = null;
-                    throw new Error('DRIVE_DOWNLOAD_FAILED_' + response.status);
-                }
+                const response = await driveFetch(
+                    'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(existing.id) + '?alt=media'
+                );
+                if (!response.ok) throw new Error('DRIVE_DOWNLOAD_FAILED: ' + await getDriveError(response));
                 const importedData = normalizeImportedData(JSON.parse(await response.text()));
                 if (!importedData) {
                     showAppAlert('خطأ', 'النسخة الاحتياطية الموجودة على Google Drive غير صالحة.');
@@ -3583,7 +3598,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 });
             } catch (err) {
                 console.error('Google Drive restore error:', err);
-                showAppAlert('تعذر الاستعادة', 'تعذر قراءة النسخة الاحتياطية من Google Drive. تأكد من اتصال الإنترنت ومنح الصلاحية ثم حاول مرة أخرى.');
+                showAppAlert('تعذر الاستعادة', 'تعذر قراءة النسخة الاحتياطية من Google Drive. تأكد من الصلاحيات واتصال الإنترنت ثم حاول مرة أخرى.');
             } finally {
                 backupInProgress = false;
             }
@@ -3617,12 +3632,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebas
 import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",storageBucket:"your-works-1aea7.firebasestorage.app",messagingSenderId:"1084540974820",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1",measurementId:"G-RYZPVNLKZQ"};
 const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider();
-provider.addScope('https://www.googleapis.com/auth/drive.file');
+
 const loginScreen=document.getElementById('loginScreen'),loginForm=document.getElementById('loginForm'),loginUsername=document.getElementById('loginUsername'),loginPassword=document.getElementById('loginPassword'),loginSubmit=document.getElementById('loginSubmit'),registerToggle=document.getElementById('registerToggle'),googleLoginButton=document.getElementById('googleLoginButton'),loginTitle=document.getElementById('loginTitle'),loginMessage=document.getElementById('loginMessage'); let registerMode=false;
 function msg(x){loginMessage.textContent=x||''} function mode(x){registerMode=x;loginTitle.textContent=x?'إنشاء حساب':'تسجيل الدخول';loginSubmit.textContent=x?'إنشاء الحساب':'تسجيل الدخول';registerToggle.textContent=x?'لدي حساب بالفعل':'إنشاء حساب جديد';loginPassword.autocomplete=x?'new-password':'current-password';msg('')} function usernameEmail(u){return u.trim().toLowerCase()+'@username.your-works-1aea7.firebaseapp.com'} function validUser(u){return /^[A-Za-z0-9._-]{3,30}$/.test(u.trim())} function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')} function hide(){loginScreen.hidden=true;document.body.classList.remove('login-locked')}
 function friendly(e){const m={'auth/invalid-credential':'اسم المستخدم أو رقم السر غير صحيح.','auth/invalid-login-credentials':'اسم المستخدم أو رقم السر غير صحيح.','auth/user-not-found':'اسم المستخدم غير موجود.','auth/wrong-password':'رقم السر غير صحيح.','auth/email-already-in-use':'اسم المستخدم مستخدم بالفعل.','auth/weak-password':'رقم السر يجب أن يكون 6 أحرف أو أرقام على الأقل.','auth/invalid-email':'اسم المستخدم غير صالح.','auth/too-many-requests':'تمت محاولات كثيرة. حاول مرة أخرى لاحقًا.','auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google؛ سيتم فتح تسجيل الدخول بالطريقة البديلة.','auth/operation-not-allowed':'يجب تفعيل طريقة تسجيل الدخول المطلوبة من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول. تأكد من الإنترنت وإعدادات Firebase.'}
 async function loginWithGoogle(){try{const r=await signInWithPopup(auth,provider);return{user:r.user}}catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null}throw e}}
-window.firebaseGoogleDriveSignIn=async function(){try{const r=await signInWithPopup(auth,provider);const c=GoogleAuthProvider.credentialFromResult(r);return c?.accessToken||null}catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null}throw e}};
 loginForm.addEventListener('submit',async e=>{e.preventDefault();const u=loginUsername.value.trim(),p=loginPassword.value;msg('');if(!validUser(u)){msg('اسم المستخدم يجب أن يكون من 3 إلى 30 حرفًا أو رقمًا، ويمكن استخدام . _ -');return}if(p.length<6){msg('رقم السر يجب أن يكون 6 أحرف أو أرقام على الأقل.');return}loginSubmit.disabled=true;try{const email=usernameEmail(u);if(registerMode)await createUserWithEmailAndPassword(auth,email,p);else await signInWithEmailAndPassword(auth,email,p)}catch(err){console.error('خطأ في تسجيل الدخول:',err);msg(friendly(err))}finally{loginSubmit.disabled=false}});
 registerToggle.addEventListener('click',()=>mode(!registerMode)); googleLoginButton.addEventListener('click',async()=>{msg('جارٍ فتح تسجيل الدخول بحساب Google...');googleLoginButton.disabled=true;try{await loginWithGoogle()}catch(e){console.error('خطأ في Google:',e);msg(friendly(e))}finally{googleLoginButton.disabled=false}});
 getRedirectResult(auth).then(r=>{if(r){const c=GoogleAuthProvider.credentialFromResult(r);if(c?.accessToken){window.pendingDriveAccessToken=c.accessToken;window.dispatchEvent(new CustomEvent('drive-auth-ready'));}return r}}).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
