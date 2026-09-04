@@ -76,65 +76,6 @@
             --nav-active: #0284c7;
         }
 
-        body.dark-mode {
-            /* وضع ليلي هادئ: تباين مريح بدون أسود قاسٍ أو أزرق فاقع */
-            --bg: #1c2025;
-            --bg-pattern: none;
-            --card-blue: #86aeca;
-            --card-bg-light: #252a30;
-            --text-dark: #d9dde2;
-            --text-muted: #9ca5ae;
-            --border-color: #39414a;
-
-            --btn-cyan-top: #3a4652;
-            --btn-cyan-bottom: #313b45;
-            --btn-cyan-shadow: #242b32;
-
-            --btn-red-top: #68464a;
-            --btn-red-bottom: #583b3f;
-            --btn-red-shadow: #35272a;
-
-            --summary-bg: #30404e;
-            --summary-shadow: #222a31;
-            --summary-border: #5b7183;
-            --summary-stats-bg: rgba(255,255,255,0.055);
-            --summary-stats-border: rgba(255,255,255,0.09);
-            --summary-stats-text: #d5dbe0;
-
-            --group-card-bg: #30414f;
-            --group-card-shadow: #222a31;
-            --group-card-border: #587083;
-            --group-card-text: #e4e8eb;
-            --group-subtext: #c0c9d0;
-            --math-expr-bg: rgba(255,255,255,0.07);
-
-            --debt-tag-bg: #654149;
-            --debt-tag-border: #80545d;
-            --debt-tag-color: #f3dfe2;
-
-            --group-details-bg: #252a30;
-            --day-row-bg: #2b3036;
-            --day-row-border: #3b434c;
-            --day-header-text: #d9dde2;
-            --session-opt-bg: #30363d;
-            --session-opt-border: #46505a;
-            --session-opt-text: #d9dde2;
-
-            --paid-btn-bg: #3c654f;
-            --paid-btn-shadow: #263f33;
-            --unpaid-btn-bg: #68474d;
-            --unpaid-btn-shadow: #3a292d;
-
-            --phone-bg: #2c3c48;
-            --phone-text: #a7c7da;
-            --phone-border: #465c6b;
-
-            --nav-bg: #252a30;
-            --nav-border: #39414a;
-            --nav-text: #9ca5ae;
-            --nav-active: #a7c2d4;
-        }
-
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif; }
 
 /* حماية الإيموجي عند التشغيل داخل Android WebView / APK */
@@ -152,18 +93,6 @@ html, body, button, input, select, textarea, option {
         html { background-color: #f1f5f9; }
         html.dark-mode { background-color: #1c2025; }
         body.dark-mode { color-scheme: dark; }
-        body { 
-            width: 100%;
-            min-height: 100vh;
-            background-color: var(--bg); 
-            background-image: var(--bg-pattern);
-            background-size: 24px 24px; 
-            color: var(--text-dark); 
-            padding: 12px 10px calc(86px + env(safe-area-inset-bottom)) 10px;
-            max-width: 500px; 
-            margin: 0 auto; 
-            line-height: 1.4; 
-        }
         
         /* هيدر فاخر: اسم البرنامج بارز، وبيانات المصمم والهاتف داخل شريط أنيق */
         header { text-align: center; padding: 7px 10px 9px; }
@@ -173,7 +102,6 @@ html, body, button, input, select, textarea, option {
         .app-author { font-size:.80rem; font-weight:800; color:#0f4c67; margin-top:5px; padding:3px 12px; line-height:1.35; background:linear-gradient(90deg,rgba(224,242,254,.55),rgba(240,249,255,.95),rgba(224,242,254,.55)); border:1px solid #bae6fd; box-shadow:0 2px 7px rgba(2,132,199,.10); }
         .app-phone { font-size:.75rem; font-weight:900; color:#7c2d12; direction:ltr; margin-top:4px; padding:3px 12px; line-height:1.25; letter-spacing:.7px; background:linear-gradient(90deg,#fff7ed,#ffedd5,#fff7ed); border:1px solid #fdba74; box-shadow:0 2px 7px rgba(234,88,12,.10); display:flex; align-items:center; justify-content:center; gap:5px; }
         .app-phone .whatsapp-icon { width:15px; height:15px; flex:0 0 15px; display:block; }
-        .today-card-header { display:flex; align-items:center; justify-content:space-between; gap:4px; }
         .today-card-header .today-title { flex:1 1 auto; text-align:center; white-space:nowrap; }
         .today-card-header .today-date { font-size:.64rem; font-weight:800; white-space:nowrap; line-height:1.1; }
         .today-card-header .today-date-hijri { text-align:right; }
@@ -374,29 +302,10 @@ html, body, button, input, select, textarea, option {
         .add-btn { padding: 11px; font-size: 0.95rem; }
 
         .groups-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-        .mini-card { 
-            background: var(--group-card-bg); 
-            color: #ffffff; 
-            border-radius: 14px; 
-            padding: 12px 10px; 
-            text-align: center; 
-            cursor: pointer; 
-            border: 2px solid var(--group-card-border); 
-            box-shadow: 0 2px 5px rgba(0,0,0,.06); 
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            min-height: 100px;
-        }
         .mini-card:active { transform: translateY(2px); box-shadow: 0 1px 0px var(--group-card-shadow); }
         .mini-card.paid { border-right: 5px solid #22c55e; }
         .mini-card.has-debt { border-left: 5px solid #ef4444; }
-
-        .mini-card-id { font-size: 11px; color: #ffffff; margin-top: 2px; direction: ltr; unicode-bidi: plaintext; font-weight: 700; }
         .detail-id { color: #ffffff; margin: 2px 0 4px; }
-        .mini-card-title { font-size: 1rem; font-weight: 800; margin-bottom: 4px; }
-        .mini-card-sub { font-size: 0.75rem; color: var(--group-subtext); margin-bottom: 6px; font-weight: 600; }
-        .mini-card-badge { font-size: 0.75rem; font-weight: 800; background: var(--math-expr-bg); padding: 3px 6px; border-radius: 6px; }
 
         .group-card { border-radius: 16px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,.06); border: 2px solid var(--group-card-border); overflow: hidden; text-align: center; }
         .group-card.paid { border-right: 6px solid #22c55e; }
@@ -442,8 +351,6 @@ html, body, button, input, select, textarea, option {
         .student-notes-container { margin-top: 8px; width: 100%; }
         .student-notes-container label { font-size: 0.72rem; color: var(--text-muted); font-weight: 700; display: block; margin-bottom: 2px; }
         .student-notes-container input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--card-bg-light); color: var(--text-dark); font-weight: 600; font-size: 0.82rem; outline: none; }
-
-        .debt-input-container { background: var(--day-row-bg); border: 1px solid var(--day-row-border); padding: 10px; border-radius: 10px; margin: 10px 0; display: grid; grid-template-columns: 1.2fr 1fr; gap: 6px; align-items: center; }
         .debt-input-container label { display: block; font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-bottom: 2px; font-weight: 700; }
         .debt-input-container input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--card-bg-light); color: var(--text-dark); font-weight: 700; font-size: 0.82rem; outline: none; text-align: center; }
 
@@ -544,40 +451,9 @@ html, body, button, input, select, textarea, option {
             width: 100%;
             align-items: center;
         }
-        .schedule-time-row .time-range-label {
-            width: 100%;
-            height: 38px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 8px;
-            background: var(--bg);
-            color: var(--text-dark);
-            border: 2px solid var(--border-color);
-            font-size: .78rem;
-            font-weight: 900;
-        }
-        .schedule-time-grid input, .schedule-time-grid button, .schedule-time-row input, .schedule-time-row button {
-            width: 100%;
-            height: 38px;
-            padding: 6px 3px;
-            border: 2px solid var(--border-color);
-            border-radius: 8px;
-            background: var(--bg);
-            color: var(--text-dark);
-            font-size: 0.80rem;
-            font-weight: 800;
-            outline: none;
-            text-align: center;
-            box-sizing: border-box;
-        }
         .schedule-time-row input::placeholder { opacity: .45; }
-
-        .schedule-time-row input { direction: ltr; }
-        .schedule-time-row .schedule-period-btn { font-size: .70rem; }
         .schedule-time-grid input:focus, .schedule-time-row input:focus { border-color: var(--card-blue); }
         .schedule-period-btn.active { background: var(--card-blue); color: #fff; border-color: var(--card-blue); }
-        .schedule-time-hint { display: none !important; }
         .schedule-time-rows { display:flex; flex-direction:column; gap:7px; width:100%; }
 
         @media (max-width: 360px) {
@@ -593,12 +469,6 @@ html, body, button, input, select, textarea, option {
         .day-selector-btn { border: 2px solid var(--border-color); border-radius: 8px; padding: 7px 4px; background: var(--bg); color: var(--text-dark); font-size: 0.78rem; font-weight: 800; cursor: pointer; }
         .day-selector-btn.selected { background: var(--card-blue); color: #fff; border-color: var(--card-blue); }
         .day-selector-hint { font-size: 0.7rem; color: var(--text-muted); margin-top: 4px; text-align: center; }
-        .schedule-time-row {
-            display:grid;
-            grid-template-columns: 1fr 1fr 1fr 1fr;
-            gap:6px;
-            width:100%;
-        }
         .schedule-time-grid {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr 1fr;
@@ -625,11 +495,6 @@ html, body, button, input, select, textarea, option {
         .form-group label { display: block; margin-bottom: 3px; font-size: 0.78rem; color: var(--text-muted); font-weight: 700; }
         .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px 10px; border: 2px solid var(--border-color); border-radius: 8px; background: var(--bg); color: var(--text-dark); font-size: 0.85rem; outline: none; font-weight: 600; }
         .modal-actions { display: flex; gap: 6px; margin-top: 10px; }
-        .financial-mini-card { width: 100%; box-sizing: border-box; background: var(--card-bg-light); border: 2px solid var(--border-color); border-radius: 10px; padding: 8px 10px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
-        .financial-mini-card.paid { border-color: #16a34a; }
-        .financial-mini-name { font-size: 0.85rem; font-weight: 800; color: var(--text-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .financial-mini-amount { font-size: 0.82rem; font-weight: 900; color: var(--card-blue); white-space: nowrap; }
-        .financial-list-full { width: 100%; display: flex; flex-direction: column; gap: 8px; }
         .financial-list-full .financial-mini-card { width: 100%; }
         .empty-state .empty-add-link { display: flex; width: 100%; box-sizing: border-box; flex-direction: row; align-items: center; justify-content: center; gap: 8px; background: transparent; border: 0; box-shadow: none; padding: 10px 14px; color: var(--text-muted); opacity: .72; font-size: .95rem; font-weight: 800; white-space: nowrap; }
         .empty-state .empty-add-plus { display: inline-block; font-size: 1.1rem; font-weight: 900; line-height: 1; flex: 0 0 auto; }
@@ -694,12 +559,6 @@ html, body, button, input, select, textarea, option {
         #page6 {
             padding-top: 0;
         }
-        .financial-sticky-head .summary-card {
-            margin-bottom: 8px;
-        }
-        .financial-sticky-head .financial-filter-container {
-            margin-bottom: 8px;
-        }
 
         .financial-filter-container {
             background: var(--card-bg-light);
@@ -712,13 +571,6 @@ html, body, button, input, select, textarea, option {
             gap: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.04);
         }
-        .financial-filter-container label {
-            font-size: 0.78rem;
-            font-weight: 800;
-            color: var(--text-muted);
-            white-space: nowrap;
-            margin: 0;
-        }
         body.dark-mode .financial-filter-container {
             background: #1f2937;
             border-color: #374151;
@@ -727,21 +579,6 @@ html, body, button, input, select, textarea, option {
         body.dark-mode .financial-filter-container label {
             color: #aeb8c5;
         }
-        .financial-filter-select {
-            flex: 1;
-            min-width: 0;
-            height: 34px;
-            padding: 5px 30px 5px 10px;
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-            background: var(--bg);
-            color: var(--text-dark);
-            font-weight: 700;
-            font-size: 0.8rem;
-            outline: none;
-            cursor: pointer;
-            box-shadow: none;
-        }
         .financial-filter-select:focus {
             border-color: var(--card-blue);
         }
@@ -749,15 +586,6 @@ html, body, button, input, select, textarea, option {
             background: #111827;
             border-color: #4b5563;
             color: #e5e7eb;
-        }
-        .section-separator {
-            margin: 18px 0 12px 0;
-            display: flex;
-            align-items: center;
-            text-align: center;
-            color: var(--text-muted);
-            font-weight: 800;
-            font-size: 0.9rem;
         }
         .section-separator::before,
         .section-separator::after {
@@ -3737,8 +3565,7 @@ if(user){
 };
 </script>
 
-</body>
-</html>
+
 <script>
 function exportPDFReport(){ window.print(); }
 
@@ -3837,3 +3664,5 @@ function recycleDelete(i){
     resetInactivityTimer();
 })();
 </script>
+</body>
+</html>
