@@ -3761,7 +3761,7 @@ function openRecycleBin(){
     let list=recycleGet();
     box.innerHTML='<div class="modal-content"><h3 style="text-align:center">سلة المحذوفات</h3>' +
       (list.length?list.map((x,i)=>`<div style="padding:8px;border:1px solid #ccc;border-radius:8px;margin:6px 0;text-align:center">${x.type==='student'?'تلميذ':'مجموعة'}<br>${x.item.name||''}<br><button class="btn-3d" onclick="recycleRestore(${i})">استرجاع</button><button class="btn-3d btn-red-3d" onclick="recycleDelete(${i})">حذف نهائي</button></div>`).join(''):'<p style="text-align:center">السلة فارغة</p>') +
-      '<button class="btn-3d" onclick="this.closest('.modal').remove()">إغلاق</button></div>';
+      '<button class="btn-3d" onclick="this.closest(\".modal\").remove()">إغلاق</button></div>';
     document.body.appendChild(box);
 }
 function recycleRestore(i){
