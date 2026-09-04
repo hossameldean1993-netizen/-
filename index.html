@@ -3817,4 +3817,23 @@ function recycleDelete(i){
 
     openRecycleBin();
 }
+
+// تسجيل خروج تلقائي بعد 50 ثانية بدون استخدام
+(function(){
+    let inactivityTimer;
+    const inactivityLimit = 50000;
+    function resetInactivityTimer(){
+        clearTimeout(inactivityTimer);
+        inactivityTimer=setTimeout(()=>{
+            const login=document.getElementById('loginScreen');
+            if(login && login.hidden && window.firebaseAuth){
+                signOut(window.firebaseAuth);
+            }
+        }, inactivityLimit);
+    }
+    ['click','touchstart','mousemove','keydown','scroll'].forEach(function(evt){
+        document.addEventListener(evt, resetInactivityTimer, {passive:true});
+    });
+    resetInactivityTimer();
+})();
 </script>
