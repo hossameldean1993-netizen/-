@@ -1967,7 +1967,25 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 restoreSectionState('singleStudentDetail', studentSectionState);
             }
             if (document.getElementById('page6').classList.contains('active')) renderFinancialLists();
+
+            // نسخ احتياطي تلقائي بعد أي عملية حفظ ناجحة
+            scheduleAutoDriveBackup();
             return true;
+        }
+
+        let autoDriveBackupTimer = null;
+
+        function scheduleAutoDriveBackup() {
+            if (autoDriveBackupTimer) clearTimeout(autoDriveBackupTimer);
+            autoDriveBackupTimer = setTimeout(async () => {
+                try {
+                    if (typeof accessToken !== 'undefined' && accessToken && typeof uploadBackupToDrive === 'function') {
+                        await uploadBackupToDrive();
+                    }
+                } catch (err) {
+                    console.warn('Auto backup skipped:', err);
+                }
+            }, 3000);
         }
 
         function generateDatesForGroup(day1Name, day2Name, startDateStr, defaultStatus = 'present', day3Name = '', day4Name = '', ...extraDayNames) {
