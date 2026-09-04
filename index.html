@@ -3703,7 +3703,10 @@ if(user){
   switchAppUser('guest');
   show();
 }
-}); window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>signOut(auth);
+}); window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>{
+ if(!confirm("هل تريد تسجيل الخروج من البرنامج؟")) return;
+ signOut(auth);
+};
 </script>
 
 </body>
