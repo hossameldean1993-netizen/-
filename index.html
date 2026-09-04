@@ -3704,8 +3704,7 @@ if(user){
   show();
 }
 }); window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>{
- if(!confirm("هل تريد تسجيل الخروج من البرنامج؟")) return;
- signOut(auth);
+ showAppConfirm("هل تريد تسجيل الخروج ؟", "", function(){ signOut(auth); });
 };
 </script>
 
