@@ -3461,6 +3461,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         let tokenClient = null;
         let accessToken = null;
         let backupInProgress = false;
+        let drivePermissionGranted = localStorage.getItem('drive_permission_granted') === 'true';
 
         function initGoogleDriveAuth() {
             if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
@@ -3477,6 +3478,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                         return;
                     }
                     accessToken = response.access_token;
+                    drivePermissionGranted = true;
+                    localStorage.setItem('drive_permission_granted', 'true');
                     await uploadBackupToDrive();
                 }
             });
@@ -3493,7 +3496,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 // Google يرفض الطلب قبل ظهور نافذة الاختيار إذا كان Origin غير مسجل.
                 // في هذه الحالة نستخدم حساب Google المرتبط بـ Firebase كمسار احتياطي للـPWA.
                 try {
-                    tokenClient.requestAccessToken({ prompt: 'consent' });
+                    // طلب الإذن مرة واحدة فقط طوال استخدام البرنامج
+                tokenClient.requestAccessToken({ prompt: drivePermissionGranted ? '' : 'consent' });
                 } catch (err) {
                     console.error('Google GIS request error:', err);
                     if (window.firebaseDriveAuth) {
@@ -3625,7 +3629,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             try {
                 initGoogleDriveAuth();
                 if (!accessToken) {
-                    tokenClient.requestAccessToken({ prompt: 'consent' });
+                    // طلب الإذن مرة واحدة فقط طوال استخدام البرنامج
+                tokenClient.requestAccessToken({ prompt: drivePermissionGranted ? '' : 'consent' });
                     showAppAlert('السماح بالوصول', 'اسمح للتطبيق بالوصول إلى Google Drive، ثم اضغط استعادة النسخة الاحتياطية مرة أخرى.');
                     return;
                 }
