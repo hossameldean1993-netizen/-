@@ -1425,7 +1425,27 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         const dayMap = { "الأحد": 0, "الإثنين": 1, "الثلاثاء": 2, "الأربعاء": 3, "الخميس": 4, "الجمعة": 5, "السبت": 6 };
         const arabicDaysNames = ["السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"];
         
+        let appUserKey = localStorage.getItem('app_user_key') || 'guest';
+
+        function userStorageKey(key) {
+            return key + '_' + appUserKey;
+        }
+
+        function switchAppUser(uid) {
+            appUserKey = uid || 'guest';
+            localStorage.setItem('app_user_key', appUserKey);
+            groups = loadStoredArray('teacher_groups_local');
+            students = loadStoredArray('teacher_students_local');
+            selectedGroupIndex = null;
+            selectedStudentIndex = null;
+            renderTodaySessions();
+            renderMiniCards();
+            renderStudentMiniCards();
+            calculateSummaryTotals();
+        }
+
         function loadStoredArray(key) {
+            key = userStorageKey(key);
             try {
                 const raw = localStorage.getItem(key);
                 if (!raw) return [];
@@ -1883,8 +1903,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             try {
                 const groupsJson = JSON.stringify(groups);
                 const studentsJson = JSON.stringify(students);
-                localStorage.setItem('teacher_groups_local', groupsJson);
-                localStorage.setItem('teacher_students_local', studentsJson);
+                localStorage.setItem(userStorageKey('teacher_groups_local'), groupsJson);
+                localStorage.setItem(userStorageKey('teacher_students_local'), studentsJson);
             } catch (err) {
                 console.error('Save data error:', err);
                 showAppAlert('تعذر حفظ البيانات', 'مساحة التخزين في الهاتف ممتلئة أو غير متاحة. بياناتك الحالية لم تُحذف من الذاكرة. يُفضّل عمل نسخة احتياطية ثم تحرير مساحة.');
@@ -2288,8 +2308,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             showAppConfirm('تحذير', 'سيتم حذف جميع البيانات بالكامل (المجموعات والتلاميذ)!', function() {
                 groups = [];
                 students = [];
-                localStorage.removeItem('teacher_groups_local');
-                localStorage.removeItem('teacher_students_local');
+                localStorage.removeItem(userStorageKey('teacher_groups_local'));
+                localStorage.removeItem(userStorageKey('teacher_students_local'));
                 calculateSummaryTotals();
                 renderTodaySessions();
                 renderMiniCards();
@@ -3522,8 +3542,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             backupInProgress = true;
             try {
                 const backupData = {
-                    teacher_groups_local: JSON.parse(localStorage.getItem('teacher_groups_local') || '[]'),
-                    teacher_students_local: JSON.parse(localStorage.getItem('teacher_students_local') || '[]')
+                    teacher_groups_local: JSON.parse(localStorage.getItem(userStorageKey('teacher_groups_local')) || '[]'),
+                    teacher_students_local: JSON.parse(localStorage.getItem(userStorageKey('teacher_students_local')) || '[]')
                 };
                 const fileName = `backup_drosak_${new Date().toISOString().slice(0,10)}.json`;
                 const fileContent = JSON.stringify(backupData, null, 2);
@@ -3675,7 +3695,15 @@ async function loginWithGoogle(){try{const r=await signInWithPopup(auth,provider
 loginForm.addEventListener('submit',async e=>{e.preventDefault();const u=loginUsername.value.trim(),p=loginPassword.value;msg('');if(!validUser(u)){msg('اسم المستخدم يجب أن يكون من 3 إلى 30 حرفًا أو رقمًا، ويمكن استخدام . _ -');return}if(p.length<6){msg('رقم السر يجب أن يكون 6 أحرف أو أرقام على الأقل.');return}loginSubmit.disabled=true;try{const email=usernameEmail(u);if(registerMode)await createUserWithEmailAndPassword(auth,email,p);else await signInWithEmailAndPassword(auth,email,p)}catch(err){console.error('خطأ في تسجيل الدخول:',err);msg(friendly(err))}finally{loginSubmit.disabled=false}});
 registerToggle.addEventListener('click',()=>mode(!registerMode)); googleLoginButton.addEventListener('click',async()=>{msg('جارٍ فتح تسجيل الدخول بحساب Google...');googleLoginButton.disabled=true;try{await loginWithGoogle()}catch(e){console.error('خطأ في Google:',e);msg(friendly(e))}finally{googleLoginButton.disabled=false}});
 getRedirectResult(auth).then(r=>{if(r){const c=GoogleAuthProvider.credentialFromResult(r);if(c?.accessToken){window.pendingDriveAccessToken=c.accessToken;window.dispatchEvent(new CustomEvent('drive-auth-ready'));}if(sessionStorage.getItem('drive_auth_pending')==='1'){sessionStorage.removeItem('drive_auth_pending');setTimeout(()=>{if(window.pendingDriveAccessToken){window.dispatchEvent(new CustomEvent('drive-auth-ready'));}},150);}}return r}).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
-onAuthStateChanged(auth,user=>{if(user)hide();else show()}); window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>signOut(auth);
+onAuthStateChanged(auth,user=>{
+if(user){ 
+  switchAppUser(user.uid);
+  hide();
+}else{
+  switchAppUser('guest');
+  show();
+}
+}); window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>signOut(auth);
 </script>
 
 </body>
