@@ -1174,6 +1174,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <button class="btn-3d btn-red-3d settings-btn" onclick="deleteAllData()">حذف جميع البيانات</button>
                 <button class="btn-3d settings-btn" onclick="startGoogleDriveBackup()">النسخ الاحتياطي إلى Google Drive</button>
                 <button class="btn-3d settings-btn" onclick="triggerRestoreFileInput()">استعادة النسخة الاحتياطية</button>
+                <button class="btn-3d settings-btn" onclick="exportPDFReport()">تصدير PDF</button>
+                <button class="btn-3d settings-btn" onclick="openRecycleBin()">سلة المحذوفات</button>
                 <button class="btn-3d btn-full" onclick="toggleTheme()" id="themeToggleText">
                     <span class="theme-icon" aria-hidden="true"></span>
                     <span class="theme-label">الوضع الليلي</span>
@@ -3735,3 +3737,14 @@ if(user){
 
 </body>
 </html>
+
+
+<script>
+function exportPDFReport(){
+    window.print();
+}
+
+function openRecycleBin(){
+    alert("سلة المحذوفات");
+}
+</script>
