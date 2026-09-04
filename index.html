@@ -3739,35 +3739,82 @@ if(user){
 
 </body>
 </html>
-
-
 <script>
-function exportPDFReport(){
-    window.print();
-}
+function exportPDFReport(){ window.print(); }
 
 function recycleGet(){
     return JSON.parse(localStorage.getItem(userStorageKey('recycle_bin')) || '[]');
 }
-function recycleSave(data){ localStorage.setItem(userStorageKey('recycle_bin'), JSON.stringify(data)); }
+function recycleSave(data){
+    localStorage.setItem(userStorageKey('recycle_bin'), JSON.stringify(data));
+}
 function recycleAdd(type,item){
     let a=recycleGet();
     a.push({type:type,item:item,date:new Date().toLocaleString('ar-EG')});
     recycleSave(a);
 }
+
 function openRecycleBin(){
+    const old=document.getElementById('recycleBinModal');
+    if(old) old.remove();
+
     let box=document.createElement('div');
-    box.className='modal'; box.style.display='flex';
+    box.id='recycleBinModal';
+    box.className='modal';
+    box.style.display='flex';
+
     let list=recycleGet();
-    box.innerHTML='<div class="modal-content"><h3 style="text-align:center">سلة المحذوفات</h3>' +
-      (list.length?list.map((x,i)=>`<div style="padding:8px;border:1px solid #ccc;border-radius:8px;margin:6px 0;text-align:center">${x.type==='student'?'تلميذ':'مجموعة'}<br>${x.item.name||''}<br><button class="btn-3d" onclick="recycleRestore(${i})">استرجاع</button><button class="btn-3d btn-red-3d" onclick="recycleDelete(${i})">حذف نهائي</button></div>`).join(''):'<p style="text-align:center">السلة فارغة</p>') +
-      '<button class="btn-3d" onclick="this.closest(\".modal\").remove()">إغلاق</button></div>';
+    box.innerHTML =
+    '<div class="modal-content">'+
+    '<h3 style="text-align:center">سلة المحذوفات</h3>'+
+    (list.length ? list.map((x,i)=>
+        '<div style="padding:8px;border:1px solid #ccc;border-radius:8px;margin:6px 0">'+
+        (x.type==='student'?'تلميذ':'مجموعة')+'<br>'+
+        (x.item.name||'')+'<br>'+
+        '<button class="btn-3d" data-restore="'+i+'">استرجاع</button>'+
+        '<button class="btn-3d btn-red-3d" data-delete="'+i+'">حذف نهائي</button>'+
+        '</div>'
+    ).join('') : '<p style="text-align:center">السلة فارغة</p>')+
+    '<button class="btn-3d" data-close>إغلاق</button>'+
+    '</div>';
+
     document.body.appendChild(box);
+
+    box.querySelectorAll('[data-restore]').forEach(btn=>{
+        btn.onclick=function(){ recycleRestore(Number(this.dataset.restore)); };
+    });
+    box.querySelectorAll('[data-delete]').forEach(btn=>{
+        btn.onclick=function(){ recycleDelete(Number(this.dataset.delete)); };
+    });
+    box.querySelector('[data-close]').onclick=function(){ box.remove(); };
 }
+
 function recycleRestore(i){
- let a=recycleGet(),x=a[i]; if(!x)return;
- if(x.type==='student') students.push(x.item); else groups.push(x.item);
- a.splice(i,1); recycleSave(a); saveData(); document.querySelector('.modal')?.remove();
+    let a=recycleGet();
+    let x=a[i];
+    if(!x) return;
+
+    if(x.type==='student') students.push(x.item);
+    else groups.push(x.item);
+
+    a.splice(i,1);
+    recycleSave(a);
+    saveData();
+
+    let box=document.getElementById('recycleBinModal');
+    if(box) box.remove();
+
+    if(typeof renderAll==='function') renderAll();
 }
-function recycleDelete(i){ let a=recycleGet(); a.splice(i,1); recycleSave(a); document.querySelector('.modal')?.remove(); openRecycleBin(); }
+
+function recycleDelete(i){
+    let a=recycleGet();
+    a.splice(i,1);
+    recycleSave(a);
+
+    let box=document.getElementById('recycleBinModal');
+    if(box) box.remove();
+
+    openRecycleBin();
+}
 </script>
