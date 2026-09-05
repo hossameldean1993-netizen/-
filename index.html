@@ -1163,6 +1163,61 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 <!-- Login UI -->
 <style>#loginScreen{position:fixed;inset:0;z-index:99999;background:var(--bg,#f5f7fa);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;direction:rtl}#loginScreen[hidden]{display:none!important}.login-card{width:min(100%,390px);background:var(--card-bg-light,#fff);border:2px solid var(--card-blue,#0284c7);border-radius:18px;padding:22px 18px;box-sizing:border-box;box-shadow:0 8px 24px rgba(0,0,0,.10);text-align:center}.login-card h2{margin:0 0 8px;color:var(--card-blue,#0284c7);font-size:1.35rem}.login-card p{margin:0 0 18px;color:var(--text-muted,#667085);font-weight:700}.login-card input{width:100%;box-sizing:border-box;margin:6px 0;padding:12px;border:1px solid var(--border-color,#d0d5dd);border-radius:10px;background:#fff;color:inherit;font-size:1rem;outline:none}.login-card button{width:100%;border:0;border-radius:10px;padding:12px;margin-top:9px;font-weight:800;font-size:1rem;cursor:pointer}.login-primary{background:#0284c7;color:#fff}.login-google{background:#fff;color:#222;border:1px solid #ccc!important}.login-secondary{background:transparent;color:#0284c7}.login-divider{display:flex;align-items:center;gap:8px;margin:13px 0;color:#98a2b3;font-weight:700}.login-divider:before,.login-divider:after{content:'';height:1px;background:#d0d5dd;flex:1}#loginMessage{min-height:22px;margin-top:10px;color:#d92d20;font-weight:800;font-size:.9rem}body.login-locked{overflow:hidden}</style>
     
+<style id="pdf-export-content-only">
+@media print {
+    @page { size: A4; margin: 12mm; }
+    html, body { background: #fff !important; }
+    body > *:not(#pdfPrintRoot) { display: none !important; }
+    #pdfPrintRoot {
+        display: block !important;
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+        color: #111 !important;
+        direction: rtl !important;
+        font-family: system-ui, -apple-system, "Noto Sans Arabic", Arial, sans-serif !important;
+        font-size: 12pt !important;
+        line-height: 1.55 !important;
+    }
+    #pdfPrintRoot .group-header,
+    #pdfPrintRoot .detail-section-card,
+    #pdfPrintRoot .student-report-card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    #pdfPrintRoot .detail-section-content,
+    #pdfPrintRoot .report-section-content {
+        display: block !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+    #pdfPrintRoot .detail-section-card,
+    #pdfPrintRoot .student-report-card {
+        box-shadow: none !important;
+    }
+    #pdfPrintRoot .pdf-field-value {
+        display: inline-block;
+        min-width: 20px;
+        font-weight: 700;
+        white-space: pre-wrap;
+    }
+    #pdfPrintRoot .day-row {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    #pdfPrintRoot .group-card,
+    #pdfPrintRoot .group-details {
+        background: #fff !important;
+    }
+    #pdfPrintRoot .group-header,
+    #pdfPrintRoot .detail-section-card,
+    #pdfPrintRoot .student-report-card {
+        color: #111 !important;
+    }
+}
+</style>
 </head>
 <body>
 <div id="loginScreen" hidden><div class="login-card"><h2 id="loginTitle">تسجيل الدخول إلى نظم دروسك</h2><p id="loginSubtitle">أدخل بياناتك للدخول إلى حسابك</p><form id="loginForm" autocomplete="on"><input id="loginUsername" type="text" inputmode="text" autocomplete="username" placeholder="اسم المستخدم" required><input id="loginPassword" type="password" autocomplete="current-password" placeholder="رقم السر" required><button class="login-primary" type="submit" id="loginSubmit">تسجيل الدخول</button></form><button class="login-secondary" type="button" id="registerToggle">إنشاء حساب جديد</button><button class="login-secondary" type="button" id="forgotPasswordButton">نسيت كلمة المرور؟</button><div class="login-divider">أو</div><button class="login-google" type="button" id="googleLoginButton">تسجيل الدخول بحساب Google</button><div id="loginMessage" role="alert"></div></div><div class="login-card" id="registerInfoPage" hidden><h2>إنشاء حساب جديد</h2><p>أنشئ حسابك للبدء باستخدام نظم دروسك</p><ul style="text-align:right;line-height:1.9;padding-right:20px"><li>اكتب اسم مستخدم جديد.</li><li>اختر رقم سر لا يقل عن 6 أحرف أو أرقام.</li><li>بعد إنشاء الحساب سيتم حفظ بياناتك بشكل مستقل.</li></ul><button class="login-primary" type="button" id="startRegister">متابعة إنشاء الحساب</button><button class="login-secondary" type="button" id="backLogin">العودة لتسجيل الدخول</button></div></div>
@@ -3859,7 +3914,44 @@ if(user){
 
 
 <script>
-function exportPDFReport(){ window.print(); }
+function exportPDFReport(){
+    const source = selectedGroupIndex !== null
+        ? document.getElementById('singleGroupDetail')
+        : (selectedStudentIndex !== null ? document.getElementById('singleStudentDetail') : null);
+
+    if (!source || !source.innerHTML.trim()) {
+        showAppAlert('تصدير PDF', 'افتح بيانات المجموعة أو التلميذ المطلوب تصديره أولاً.');
+        return;
+    }
+
+    const printRoot = document.createElement('div');
+    printRoot.id = 'pdfPrintRoot';
+    printRoot.innerHTML = source.innerHTML;
+    document.body.appendChild(printRoot);
+
+    printRoot.querySelectorAll('.detail-actions-card, .btn-3d, .status-btns, .sessions-buttons-grid, .financial-payment-actions, .section-collapse-icon, .report-collapse-icon').forEach(el => el.remove());
+
+    printRoot.querySelectorAll('input, select, textarea').forEach(field => {
+        const value = field.tagName === 'SELECT'
+            ? (field.options[field.selectedIndex]?.textContent || '')
+            : (field.value || '');
+        const text = document.createElement('span');
+        text.className = 'pdf-field-value';
+        text.textContent = value || '—';
+        field.replaceWith(text);
+    });
+
+    printRoot.querySelectorAll('.detail-section-content, .report-section-content').forEach(el => {
+        el.style.display = 'block';
+    });
+
+    const cleanup = () => {
+        printRoot.remove();
+        window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+}
 
 function recycleGet(){
     return JSON.parse(localStorage.getItem(userStorageKey('recycle_bin')) || '[]');
