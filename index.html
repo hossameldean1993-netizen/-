@@ -1602,17 +1602,18 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const hourKey = `time${suffix}Hour`;
             const minuteKey = `time${suffix}Minute`;
             const periodKey = `time${suffix}Period`;
-            const textKey = end ? 'timeEnd' : 'time';
 
-            const hasExplicitParts =
-                obj[hourKey] !== undefined && obj[hourKey] !== null && String(obj[hourKey]).trim() !== '' &&
-                obj[minuteKey] !== undefined && obj[minuteKey] !== null && String(obj[minuteKey]).trim() !== '' &&
-                obj[periodKey] !== undefined && obj[periodKey] !== null && String(obj[periodKey]).trim() !== '';
+            const hour = obj[hourKey];
+            const minute = obj[minuteKey];
+            const period = obj[periodKey];
 
-            const parsed = hasExplicitParts
-                ? normalizeTimeParts(obj[hourKey], obj[minuteKey], obj[periodKey])
-                : parseStoredTime(obj[textKey]);
+            if (hour === undefined || hour === null || String(hour).trim() === '' ||
+                minute === undefined || minute === null || String(minute).trim() === '' ||
+                period === undefined || period === null || String(period).trim() === '') {
+                return null;
+            }
 
+            const parsed = normalizeTimeParts(hour, minute, period);
             if (parsed.hour === '') return null;
 
             let hour24 = parsed.hour % 12;
@@ -3400,8 +3401,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 // ===== المجموعات فقط =====
                 groups.forEach(group => {
                     const scheduleDays = getStableScheduleDays(group);
-                    const scheduleTime = group.time || formatScheduleTime(group.timeHour || '', group.timeMinute || '', group.timePeriod || '');
-                    const scheduleTimeEnd = group.timeEnd || formatScheduleTime(group.timeEndHour || '', group.timeEndMinute || '', group.timeEndPeriod || '');
+                    const scheduleTime = formatScheduleTime(group.timeHour || '', group.timeMinute || '', group.timePeriod || '');
+                    const scheduleTimeEnd = formatScheduleTime(group.timeEndHour || '', group.timeEndMinute || '', group.timeEndPeriod || '');
 
                     ensureDebtHistory(group);
                     if (!group.isMonthPaid) {
@@ -3422,8 +3423,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 // ===== التلاميذ فقط =====
                 students.forEach(student => {
                     const scheduleDays = getStableScheduleDays(student);
-                    const scheduleTime = student.time || formatScheduleTime(student.timeHour || '', student.timeMinute || '', student.timePeriod || '');
-                    const scheduleTimeEnd = student.timeEnd || formatScheduleTime(student.timeEndHour || '', student.timeEndMinute || '', student.timeEndPeriod || '');
+                    const scheduleTime = formatScheduleTime(student.timeHour || '', student.timeMinute || '', student.timePeriod || '');
+                    const scheduleTimeEnd = formatScheduleTime(student.timeEndHour || '', student.timeEndMinute || '', student.timeEndPeriod || '');
 
                     ensureDebtHistory(student);
                     if (!student.isPaid) {
