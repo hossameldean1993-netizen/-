@@ -3915,42 +3915,110 @@ if(user){
 
 <script>
 function exportPDFReport(){
-    const source = selectedGroupIndex !== null
-        ? document.getElementById('singleGroupDetail')
-        : (selectedStudentIndex !== null ? document.getElementById('singleStudentDetail') : null);
-
-    if (!source || !source.innerHTML.trim()) {
-        showAppAlert('تصدير PDF', 'افتح بيانات المجموعة أو التلميذ المطلوب تصديره أولاً.');
-        return;
-    }
-
     const printRoot = document.createElement('div');
     printRoot.id = 'pdfPrintRoot';
-    printRoot.innerHTML = source.innerHTML;
-    document.body.appendChild(printRoot);
 
-    printRoot.querySelectorAll('.detail-actions-card, .btn-3d, .status-btns, .sessions-buttons-grid, .financial-payment-actions, .section-collapse-icon, .report-collapse-icon').forEach(el => el.remove());
+    const report = document.createElement('div');
+    report.style.cssText = 'width:100%;direction:rtl;background:#fff;color:#111;font-family:system-ui,-apple-system,"Noto Sans Arabic",Arial,sans-serif;';
+    report.innerHTML = `
+        <div style="text-align:center;border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:16px;">
+            <h1 style="margin:0 0 5px;font-size:22pt;">نظم دروسك</h1>
+            <div style="font-size:13pt;font-weight:700;">تقرير شامل للبيانات</div>
+        </div>
+    `;
 
-    printRoot.querySelectorAll('input, select, textarea').forEach(field => {
-        const value = field.tagName === 'SELECT'
-            ? (field.options[field.selectedIndex]?.textContent || '')
-            : (field.value || '');
-        const text = document.createElement('span');
-        text.className = 'pdf-field-value';
-        text.textContent = value || '—';
-        field.replaceWith(text);
-    });
+    const tempHost = document.createElement('div');
+    tempHost.style.display = 'none';
+    const tempGroupDetail = document.createElement('div');
+    tempGroupDetail.id = 'singleGroupDetail';
+    const tempStudentDetail = document.createElement('div');
+    tempStudentDetail.id = 'singleStudentDetail';
+    tempHost.appendChild(tempGroupDetail);
+    tempHost.appendChild(tempStudentDetail);
+    document.body.appendChild(tempHost);
 
-    printRoot.querySelectorAll('.detail-section-content, .report-section-content').forEach(el => {
-        el.style.display = 'block';
-    });
+    const originalGroups = groups;
+    const originalStudents = students;
+    const originalSelectedGroupIndex = selectedGroupIndex;
+    const originalSelectedStudentIndex = selectedStudentIndex;
 
-    const cleanup = () => {
-        printRoot.remove();
-        window.removeEventListener('afterprint', cleanup);
-    };
-    window.addEventListener('afterprint', cleanup);
-    window.print();
+    try {
+        groups = JSON.parse(JSON.stringify(originalGroups || []));
+        students = JSON.parse(JSON.stringify(originalStudents || []));
+
+        if (groups.length) {
+            const groupsTitle = document.createElement('h2');
+            groupsTitle.textContent = 'المجموعات';
+            groupsTitle.style.cssText = 'font-size:18pt;margin:18px 0 10px;padding-bottom:5px;border-bottom:1px solid #555;';
+            report.appendChild(groupsTitle);
+
+            groups.forEach((group, index) => {
+                tempGroupDetail.innerHTML = '';
+                renderGroupDetail(index);
+                const section = document.createElement('section');
+                section.style.cssText = 'margin-bottom:20px;';
+                section.innerHTML = tempGroupDetail.innerHTML;
+                report.appendChild(section);
+            });
+        }
+
+        if (students.length) {
+            const studentsTitle = document.createElement('h2');
+            studentsTitle.textContent = 'التلاميذ';
+            studentsTitle.style.cssText = 'font-size:18pt;margin:22px 0 10px;padding-bottom:5px;border-bottom:1px solid #555;';
+            report.appendChild(studentsTitle);
+
+            students.forEach((student, index) => {
+                tempStudentDetail.innerHTML = '';
+                renderStudentDetail(index);
+                const section = document.createElement('section');
+                section.style.cssText = 'margin-bottom:20px;';
+                section.innerHTML = tempStudentDetail.innerHTML;
+                report.appendChild(section);
+            });
+        }
+
+        if (!groups.length && !students.length) {
+            const empty = document.createElement('div');
+            empty.textContent = 'لا توجد بيانات لتصديرها.';
+            empty.style.cssText = 'text-align:center;font-size:14pt;font-weight:700;padding:30px 10px;';
+            report.appendChild(empty);
+        }
+
+        printRoot.appendChild(report);
+        document.body.appendChild(printRoot);
+
+        printRoot.querySelectorAll('.detail-actions-card, .btn-3d, .status-btns, .sessions-buttons-grid, .financial-payment-actions, .section-collapse-icon, .report-collapse-icon').forEach(el => el.remove());
+
+        printRoot.querySelectorAll('input, select, textarea').forEach(field => {
+            const value = field.tagName === 'SELECT'
+                ? (field.options[field.selectedIndex]?.textContent || '')
+                : (field.value || '');
+            const text = document.createElement('span');
+            text.className = 'pdf-field-value';
+            text.textContent = value || '—';
+            field.replaceWith(text);
+        });
+
+        printRoot.querySelectorAll('.detail-section-content, .report-section-content').forEach(el => {
+            el.style.display = 'block';
+            el.style.height = 'auto';
+            el.style.overflow = 'visible';
+        });
+
+        const cleanup = () => {
+            printRoot.remove();
+            tempHost.remove();
+            window.removeEventListener('afterprint', cleanup);
+        };
+        window.addEventListener('afterprint', cleanup);
+        window.print();
+    } finally {
+        groups = originalGroups;
+        students = originalStudents;
+        selectedGroupIndex = originalSelectedGroupIndex;
+        selectedStudentIndex = originalSelectedStudentIndex;
+    }
 }
 
 function recycleGet(){
