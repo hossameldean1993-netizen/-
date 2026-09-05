@@ -366,6 +366,27 @@ html, body, button, input, select, textarea, option {
         .btn-red-3d { background: var(--btn-red-top) !important; box-shadow: 0 2px 5px rgba(0,0,0,.08) !important; }
         .btn-red-3d:active { box-shadow: 0 1px 0px var(--btn-red-shadow) !important; }
 
+        .drive-backup-status {
+            grid-column: 1 / -1;
+            width: 100%;
+            min-height: 42px;
+            padding: 7px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--day-row-bg);
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            text-align: center;
+            font-size: .76rem;
+            font-weight: 700;
+        }
+        .drive-backup-status b { color: var(--text-dark); }
+        .drive-backup-status-icon { font-size: .95rem; }
+        body.dark-mode .drive-backup-status { background: #252a30; }
+
         .control-buttons-wrapper { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
         .settings-page-card .control-buttons-wrapper > .settings-btn,
         .settings-page-card .control-buttons-wrapper > .btn-full {
@@ -1172,6 +1193,10 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <button class="btn-3d btn-red-3d settings-btn" onclick="openStartMonthModal()">بدء شهر جديد</button>
                 <button class="btn-3d btn-red-3d settings-btn" onclick="deleteAllData()">حذف جميع البيانات</button>
                 <button class="btn-3d settings-btn" onclick="startGoogleDriveBackup()">النسخ الاحتياطي إلى Google Drive</button>
+                <div id="driveBackupStatus" class="drive-backup-status" aria-live="polite">
+                    <span class="drive-backup-status-icon">☁️</span>
+                    <span><b>آخر نسخ احتياطي:</b> <span id="lastDriveBackupTime">لم يتم التحقق بعد</span></span>
+                </div>
                 <button class="btn-3d settings-btn" onclick="triggerRestoreFileInput()">استعادة النسخة الاحتياطية</button>
                 <button class="btn-3d settings-btn" onclick="exportPDFReport()">تصدير PDF</button>
                 <button class="btn-3d settings-btn" onclick="openRecycleBin()">سلة المحذوفات</button>
@@ -1509,6 +1534,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             } else if (pageId === 'page6') {
                 document.getElementById('navAccounts').classList.add('active');
             } else if (pageId === 'page7') {
+                loadSavedDriveBackupTime();
+                refreshDriveBackupStatus();
                 document.getElementById('navSettings').classList.add('active');
             }
         }
@@ -3613,6 +3640,50 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             return files.find(f => /^backup_drosak_\d{4}-\d{2}-\d{2}\.json$/i.test(f.name)) || null;
         }
 
+        function formatDriveBackupTime(dateValue) {
+            if (!dateValue) return 'لم يتم العثور على نسخة احتياطية';
+            const d = new Date(dateValue);
+            if (Number.isNaN(d.getTime())) return 'غير معروف';
+            return d.toLocaleString('ar-EG', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+
+        function setLastDriveBackupTime(dateValue) {
+            const el = document.getElementById('lastDriveBackupTime');
+            if (el) el.textContent = formatDriveBackupTime(dateValue);
+            if (dateValue) localStorage.setItem('last_drive_backup_time', dateValue);
+        }
+
+        function loadSavedDriveBackupTime() {
+            const saved = localStorage.getItem('last_drive_backup_time');
+            const el = document.getElementById('lastDriveBackupTime');
+            if (el && saved) el.textContent = formatDriveBackupTime(saved);
+        }
+
+        async function refreshDriveBackupStatus() {
+            loadSavedDriveBackupTime();
+            if (!accessToken || typeof findDriveBackupFile !== 'function') return;
+            try {
+                const existing = await findDriveBackupFile();
+                if (existing?.modifiedTime) {
+                    setLastDriveBackupTime(existing.modifiedTime);
+                } else {
+                    const el = document.getElementById('lastDriveBackupTime');
+                    if (el && !localStorage.getItem('last_drive_backup_time')) {
+                        el.textContent = 'لا توجد نسخة احتياطية';
+                    }
+                }
+            } catch (err) {
+                console.warn('Could not refresh Drive backup status:', err);
+            }
+        }
+
         async function uploadBackupToDrive() {
             if (!accessToken || backupInProgress) return false;
             backupInProgress = true;
@@ -3660,6 +3731,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     return false;
                 }
 
+                const backupCompletedAt = new Date().toISOString();
+                setLastDriveBackupTime(backupCompletedAt);
                 showAppAlert('تم النسخ الاحتياطي', 'تم حفظ النسخة الاحتياطية بنجاح داخل Google Drive.');
                 return true;
             } catch (err) {
@@ -3730,6 +3803,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             renderTodaySessions();
             calculateSummaryTotals();
             setThemeButton(document.body.classList.contains('dark-mode'));
+            loadSavedDriveBackupTime();
         });
             window.addEventListener('resize', syncFixedContentOffsets);
         window.addEventListener('load', syncFixedContentOffsets);
