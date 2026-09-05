@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="format-detection" content="telephone=no">
@@ -1137,8 +1138,14 @@ html, body, button, input, select, textarea, option {
 <style id="pwa-background-only">
 html, body { background-color: #e2e5e8 !important; background-image: none !important; }
 </style>
+
+<!-- Login UI -->
+<style>#loginScreen{position:fixed;inset:0;z-index:99999;background:var(--bg,#f5f7fa);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;direction:rtl}#loginScreen[hidden]{display:none!important}.login-card{width:min(100%,390px);background:var(--card-bg-light,#fff);border:2px solid var(--card-blue,#0284c7);border-radius:18px;padding:22px 18px;box-sizing:border-box;box-shadow:0 8px 24px rgba(0,0,0,.10);text-align:center}.login-card h2{margin:0 0 8px;color:var(--card-blue,#0284c7);font-size:1.35rem}.login-card p{margin:0 0 18px;color:var(--text-muted,#667085);font-weight:700}.login-card input{width:100%;box-sizing:border-box;margin:6px 0;padding:12px;border:1px solid var(--border-color,#d0d5dd);border-radius:10px;background:#fff;color:inherit;font-size:1rem;outline:none}.login-card button{width:100%;border:0;border-radius:10px;padding:12px;margin-top:9px;font-weight:800;font-size:1rem;cursor:pointer}.login-primary{background:#0284c7;color:#fff}.login-google{background:#fff;color:#222;border:1px solid #ccc!important}.login-secondary{background:transparent;color:#0284c7}.login-divider{display:flex;align-items:center;gap:8px;margin:13px 0;color:#98a2b3;font-weight:700}.login-divider:before,.login-divider:after{content:'';height:1px;background:#d0d5dd;flex:1}#loginMessage{min-height:22px;margin-top:10px;color:#d92d20;font-weight:800;font-size:.9rem}body.login-locked{overflow:hidden}</style>
+    
 </head>
 <body>
+<div id="loginScreen" hidden><div class="login-card"><h2 id="loginTitle">تسجيل الدخول إلى نظم دروسك</h2><p id="loginSubtitle">أدخل بياناتك للدخول إلى حسابك</p><form id="loginForm" autocomplete="on"><input id="loginUsername" type="text" inputmode="text" autocomplete="username" placeholder="اسم المستخدم" required><input id="loginPassword" type="password" autocomplete="current-password" placeholder="رقم السر" required><button class="login-primary" type="submit" id="loginSubmit">تسجيل الدخول</button></form><button class="login-secondary" type="button" id="registerToggle">إنشاء حساب جديد</button><button class="login-secondary" type="button" id="forgotPasswordButton">نسيت كلمة المرور؟</button><div class="login-divider">أو</div><button class="login-google" type="button" id="googleLoginButton">تسجيل الدخول بحساب Google</button><div id="loginMessage" role="alert"></div></div><div class="login-card" id="registerInfoPage" hidden><h2>إنشاء حساب جديد</h2><p>أنشئ حسابك للبدء باستخدام نظم دروسك</p><ul style="text-align:right;line-height:1.9;padding-right:20px"><li>اكتب اسم مستخدم جديد.</li><li>اختر رقم سر لا يقل عن 6 أحرف أو أرقام.</li><li>بعد إنشاء الحساب سيتم حفظ بياناتك بشكل مستقل.</li></ul><button class="login-primary" type="button" id="startRegister">متابعة إنشاء الحساب</button><button class="login-secondary" type="button" id="backLogin">العودة لتسجيل الدخول</button></div></div>
+
 
     <header>
         <h1 class="app-title">نظم دروسك</h1>
@@ -1165,13 +1172,15 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             <div class="control-buttons-wrapper">
                 <button class="btn-3d btn-red-3d settings-btn" onclick="openStartMonthModal()">بدء شهر جديد</button>
                 <button class="btn-3d btn-red-3d settings-btn" onclick="deleteAllData()">حذف جميع البيانات</button>
-                <button class="btn-3d settings-btn" onclick="exportDataToFile()">النسخ الاحتياطي</button>
-                <button class="btn-3d settings-btn" onclick="triggerRestoreFileInput()">استعادة البيانات</button>
-                <input type="file" id="backupFileInput" accept=".json,application/json,text/json" style="display: none;" onchange="handleRestoreFile(event)">
+                <button class="btn-3d settings-btn" onclick="startGoogleDriveBackup()">النسخ الاحتياطي إلى Google Drive</button>
+                <button class="btn-3d settings-btn" onclick="triggerRestoreFileInput()">استعادة النسخة الاحتياطية</button>
+                <button class="btn-3d settings-btn" onclick="exportPDFReport()">تصدير PDF</button>
+                <button class="btn-3d settings-btn" onclick="openRecycleBin()">سلة المحذوفات</button>
                 <button class="btn-3d btn-full" onclick="toggleTheme()" id="themeToggleText">
                     <span class="theme-icon" aria-hidden="true"></span>
                     <span class="theme-label">الوضع الليلي</span>
                 </button>
+                <button class="btn-3d btn-red-3d settings-btn" onclick="logoutFromGoogle()">خروج من البرنامج</button>
                             </div>
         </div>
     </div>
@@ -1418,7 +1427,27 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         const dayMap = { "الأحد": 0, "الإثنين": 1, "الثلاثاء": 2, "الأربعاء": 3, "الخميس": 4, "الجمعة": 5, "السبت": 6 };
         const arabicDaysNames = ["السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"];
         
+        let appUserKey = localStorage.getItem('app_user_key') || 'guest';
+
+        function userStorageKey(key) {
+            return key + '_' + appUserKey;
+        }
+
+        function switchAppUser(uid) {
+            appUserKey = uid || 'guest';
+            localStorage.setItem('app_user_key', appUserKey);
+            groups = loadStoredArray('teacher_groups_local');
+            students = loadStoredArray('teacher_students_local');
+            selectedGroupIndex = null;
+            selectedStudentIndex = null;
+            renderTodaySessions();
+            renderMiniCards();
+            renderStudentMiniCards();
+            calculateSummaryTotals();
+        }
+
         function loadStoredArray(key) {
+            key = userStorageKey(key);
             try {
                 const raw = localStorage.getItem(key);
                 if (!raw) return [];
@@ -1625,29 +1654,11 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             };
         }
 
-        function getStoredTimeMinutes(obj, end = false) {
-            if (!obj) return null;
-            const prefix = end ? 'timeEnd' : 'time';
-            // مصدر الوقت الموحد: القيمة النصية الكاملة (الساعة + الدقيقة + ص/م).
-            // الحقول المنفصلة تُستخدم فقط كحل احتياطي للبيانات القديمة.
-            const stored = String(obj[prefix] || '').trim();
-            if (stored) {
-                const parsed = parseStoredTime(stored);
-                return parsed.hour === '' ? null : scheduleTimeToMinutes(parsed.hour, parsed.minute, parsed.period);
-            }
-            const hour = obj[`${prefix}Hour`];
-            const minute = obj[`${prefix}Minute`];
-            const period = obj[`${prefix}Period`];
-            if (hour !== undefined && hour !== null && String(hour).trim() !== '' &&
-                minute !== undefined && minute !== null && String(minute).trim() !== '' &&
-                period) {
-                return scheduleTimeToMinutes(hour, minute, period);
-            }
-            return null;
-        }
-
-        function getCurrentTimeMinutes(now = new Date()) {
-            return now.getHours() * 60 + now.getMinutes();
+        function parseScheduleTime(timeValue) {
+            if (!timeValue) return null;
+            const parsed = parseStoredTime(timeValue);
+            if (!parsed.hour) return null;
+            return scheduleTimeToMinutes(parsed.hour, parsed.minute, parsed.period);
         }
 
         function getDayDateKey(obj, dayObj) {
@@ -1672,9 +1683,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
             if (dueStart < todayStart) return true;
             if (dueStart > todayStart) return false;
-            const scheduledMinutes = getStoredTimeMinutes(obj);
+            const scheduledMinutes = parseScheduleTime(obj.time);
             if (scheduledMinutes === null) return true;
-            return getCurrentTimeMinutes(now) >= scheduledMinutes;
+            return (now.getHours() * 60 + now.getMinutes()) >= scheduledMinutes;
         }
 
         function isTodaySession(obj, dayObj, now = new Date()) {
@@ -1684,9 +1695,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const todayKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
             if (dateKey !== todayKey) return false;
             // تظل الحصة في "حصص اليوم" حتى وقت انتهاء الحصة، ثم تنتقل إلى "المعلقة" إذا لم تُسجل.
-            const endMinutes = getStoredTimeMinutes(obj, true);
+            const endMinutes = parseScheduleTime(obj.timeEnd);
             if (endMinutes === null) return true;
-            const nowMinutes = getCurrentTimeMinutes(now);
+            const nowMinutes = now.getHours() * 60 + now.getMinutes();
             return nowMinutes < endMinutes;
         }
 
@@ -1702,7 +1713,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     dayIndex,
                     isGroup,
                     dateKey: getDayDateKey(obj, dayObj),
-                    timeMinutes: getStoredTimeMinutes(obj),
                     status: dayObj.status || ''
                 };
                 if (isTodaySession(obj, dayObj, now)) todayItems.push(item);
@@ -1768,8 +1778,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             pendingContainer.innerHTML = '';
 
             const { todayItems, pendingItems } = collectSessionItems(now);
-            todayItems.sort((a,b) => a.timeMinutes - b.timeMinutes);
-            pendingItems.sort((a,b) => String(a.dateKey).localeCompare(String(b.dateKey)) || a.timeMinutes - b.timeMinutes);
+            todayItems.sort((a,b) => String(a.time).localeCompare(String(b.time)));
+            pendingItems.sort((a,b) => String(a.dateKey).localeCompare(String(b.dateKey)) || String(a.time).localeCompare(String(b.time)));
 
             if (!todayItems.length) {
                 todayContainer.innerHTML = `<div class="no-sessions">لا توجد حصص اليوم</div>`;
@@ -1852,29 +1862,14 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         function migrateScheduleTimes() {
             const migrate = obj => {
                 if (!obj) return;
-                const migrateOne = (valueKey, hourKey, minuteKey, periodKey) => {
-                    let t = { hour: '', minute: '', period: 'AM' };
-                    if (obj[hourKey] !== undefined && obj[hourKey] !== null && String(obj[hourKey]).trim() !== '' &&
-                        obj[minuteKey] !== undefined && obj[minuteKey] !== null && String(obj[minuteKey]).trim() !== '' &&
-                        obj[periodKey]) {
-                        t = normalizeTimeParts(obj[hourKey], obj[minuteKey], obj[periodKey]);
-                    } else {
-                        t = parseStoredTime(obj[valueKey] || '');
-                    }
-                    if (t.hour !== '') {
-                        obj[hourKey] = t.hour;
-                        obj[minuteKey] = t.minute;
-                        obj[periodKey] = t.period;
-                        obj[valueKey] = formatScheduleTime(t.hour, t.minute, t.period);
-                    } else {
-                        obj[hourKey] = '';
-                        obj[minuteKey] = '';
-                        obj[periodKey] = 'AM';
-                        obj[valueKey] = '';
-                    }
-                };
-                migrateOne('time', 'timeHour', 'timeMinute', 'timePeriod');
-                migrateOne('timeEnd', 'timeEndHour', 'timeEndMinute', 'timeEndPeriod');
+                if (obj.timeHour && obj.timeMinute !== undefined && obj.timePeriod) return;
+                const t = parseStoredTime(obj.time || '');
+                if (t.hour !== '') {
+                    obj.timeHour = t.hour;
+                    obj.timeMinute = t.minute;
+                    obj.timePeriod = t.period;
+                    obj.time = formatScheduleTime(t.hour, t.minute, t.period);
+                }
             };
             groups.forEach(migrate);
             students.forEach(migrate);
@@ -1910,8 +1905,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             try {
                 const groupsJson = JSON.stringify(groups);
                 const studentsJson = JSON.stringify(students);
-                localStorage.setItem('teacher_groups_local', groupsJson);
-                localStorage.setItem('teacher_students_local', studentsJson);
+                localStorage.setItem(userStorageKey('teacher_groups_local'), groupsJson);
+                localStorage.setItem(userStorageKey('teacher_students_local'), studentsJson);
             } catch (err) {
                 console.error('Save data error:', err);
                 showAppAlert('تعذر حفظ البيانات', 'مساحة التخزين في الهاتف ممتلئة أو غير متاحة. بياناتك الحالية لم تُحذف من الذاكرة. يُفضّل عمل نسخة احتياطية ثم تحرير مساحة.');
@@ -1974,7 +1969,25 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 restoreSectionState('singleStudentDetail', studentSectionState);
             }
             if (document.getElementById('page6').classList.contains('active')) renderFinancialLists();
+
+            // نسخ احتياطي تلقائي بعد أي عملية حفظ ناجحة
+            scheduleAutoDriveBackup();
             return true;
+        }
+
+        let autoDriveBackupTimer = null;
+
+        function scheduleAutoDriveBackup() {
+            if (autoDriveBackupTimer) clearTimeout(autoDriveBackupTimer);
+            autoDriveBackupTimer = setTimeout(async () => {
+                try {
+                    if (typeof accessToken !== 'undefined' && accessToken && typeof uploadBackupToDrive === 'function') {
+                        await uploadBackupToDrive();
+                    }
+                } catch (err) {
+                    console.warn('Auto backup skipped:', err);
+                }
+            }, 3000);
         }
 
         function generateDatesForGroup(day1Name, day2Name, startDateStr, defaultStatus = 'present', day3Name = '', day4Name = '', ...extraDayNames) {
@@ -2290,10 +2303,24 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 
         function normalizeImportedData(data) {
             if (!data || typeof data !== 'object') return null;
-            if (!Array.isArray(data.groups) || !Array.isArray(data.students)) return null;
+
+            // دعم صيغة النسخ الحالية الخاصة بـ Google Drive.
+            let importedGroups = Array.isArray(data.groups) ? data.groups : null;
+            let importedStudents = Array.isArray(data.students) ? data.students : null;
+
+            // دعم صيغة ملف النسخ المحلي القديمة/المضافة:
+            // teacher_groups_local و teacher_students_local
+            if (!importedGroups && Array.isArray(data.teacher_groups_local)) {
+                importedGroups = data.teacher_groups_local;
+            }
+            if (!importedStudents && Array.isArray(data.teacher_students_local)) {
+                importedStudents = data.teacher_students_local;
+            }
+
+            if (!Array.isArray(importedGroups) || !Array.isArray(importedStudents)) return null;
             return {
-                groups: data.groups.filter(item => item && typeof item === 'object'),
-                students: data.students.filter(item => item && typeof item === 'object')
+                groups: importedGroups.filter(item => item && typeof item === 'object'),
+                students: importedStudents.filter(item => item && typeof item === 'object')
             };
         }
 
@@ -2301,8 +2328,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             showAppConfirm('تحذير', 'سيتم حذف جميع البيانات بالكامل (المجموعات والتلاميذ)!', function() {
                 groups = [];
                 students = [];
-                localStorage.removeItem('teacher_groups_local');
-                localStorage.removeItem('teacher_students_local');
+                localStorage.removeItem(userStorageKey('teacher_groups_local'));
+                localStorage.removeItem(userStorageKey('teacher_students_local'));
                 calculateSummaryTotals();
                 renderTodaySessions();
                 renderMiniCards();
@@ -2312,7 +2339,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function deleteGroup(index) {
-            showAppConfirm('حذف', `حذف مجموعة ${groups[index].name}؟`, function() {
+            showAppConfirm('حذف', `نقل مجموعة ${groups[index].name} إلى سلة المحذوفات؟`, function() {
+                recycleAdd('group', groups[index]);
                 groups.splice(index, 1);
                 if (selectedGroupIndex === index) selectedGroupIndex = null;
                 saveData();
@@ -3259,7 +3287,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function deleteStudent(idx) {
-            showAppConfirm('حذف تلميذ', `هل تريد حذف الطالب ${students[idx].name}؟`, function() {
+            showAppConfirm('حذف تلميذ', `نقل الطالب ${students[idx].name} إلى سلة المحذوفات؟`, function() {
+                recycleAdd('student', students[idx]);
                 students.splice(idx, 1);
                 if (selectedStudentIndex === idx) selectedStudentIndex = null;
                 saveData();
@@ -3429,166 +3458,217 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             saveData(); closeGroupModal(); if (editId !== '') renderGroupDetail(parseInt(editId, 10)); else navigateTo('page2');
         }
 
+        // ==================== النسخ الاحتياطي إلى Google Drive ====================
+        // Google Identity Services - مناسب للـ PWA/المتصفح
+        const CLIENT_ID = '310650752416-dskh559v6u5vjbc2jih585o35ola5a2p.apps.googleusercontent.com';
+        const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+        let tokenClient = null;
+        let accessToken = null;
         let backupInProgress = false;
-        async function exportDataToFile() {
+        let drivePermissionGranted = localStorage.getItem('drive_permission_granted') === 'true';
+
+        function initGoogleDriveAuth() {
+            if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+                throw new Error('GOOGLE_IDENTITY_SERVICES_UNAVAILABLE');
+            }
+            if (tokenClient) return;
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: DRIVE_SCOPE,
+                callback: async (response) => {
+                    if (response.error || !response.access_token) {
+                        console.error('Google OAuth error:', response);
+                        showAppAlert('خطأ في صلاحية Google', 'لم يتم منح صلاحية Google Drive. تأكد من السماح للتطبيق بالوصول إلى Drive ثم حاول مرة أخرى.');
+                        return;
+                    }
+                    accessToken = response.access_token;
+                    drivePermissionGranted = true;
+                    localStorage.setItem('drive_permission_granted', 'true');
+                    await uploadBackupToDrive();
+                }
+            });
+        }
+
+        async function startGoogleDriveBackup() {
             if (backupInProgress) return;
-            backupInProgress = true;
-
             try {
-                const dataToExport = {
-                    version: 3,
-                    app: 'نظم دروسك',
-                    groups: groups,
-                    students: students,
-                    exportDate: new Date().toISOString()
-                };
-
-                const backupText = JSON.stringify(dataToExport);
-
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    await navigator.clipboard.writeText(backupText);
+                initGoogleDriveAuth();
+                if (accessToken) {
+                    await uploadBackupToDrive();
+                    return;
+                }
+                // Google يرفض الطلب قبل ظهور نافذة الاختيار إذا كان Origin غير مسجل.
+                // في هذه الحالة نستخدم حساب Google المرتبط بـ Firebase كمسار احتياطي للـPWA.
+                try {
+                    // طلب الإذن مرة واحدة فقط طوال استخدام البرنامج
+                tokenClient.requestAccessToken({ prompt: drivePermissionGranted ? '' : 'consent' });
+                } catch (err) {
+                    console.error('Google GIS request error:', err);
+                    if (window.firebaseDriveAuth) {
+                        const fallbackToken = await window.firebaseDriveAuth();
+                        if (fallbackToken) {
+                            accessToken = fallbackToken;
+                            await uploadBackupToDrive();
+                            return;
+                        }
+                    }
+                    throw err;
+                }
+            } catch (err) {
+                console.error('Google Drive auth init error:', err);
+                const origin = location.origin || (location.protocol + '//' + location.host);
+                if (String(err?.message || '').toLowerCase().includes('origin') || String(err?.error || '').toLowerCase().includes('origin')) {
+                    showAppAlert('Google رفض الاتصال', 'خطأ 400: origin_mismatch\n\nأصل التطبيق الحالي هو:\n' + origin + '\n\nأضف هذا العنوان في Google Cloud ضمن Authorized JavaScript origins لنفس Client ID.');
                 } else {
-                    const ta = document.createElement('textarea');
-                    ta.value = backupText;
-                    ta.setAttribute('readonly', '');
-                    ta.style.position = 'fixed';
-                    ta.style.left = '-9999px';
-                    document.body.appendChild(ta);
-                    ta.focus();
-                    ta.select();
-                    const ok = document.execCommand('copy');
-                    ta.remove();
-                    if (!ok) throw new Error('Clipboard copy failed');
+                    showAppAlert('تعذر تشغيل Google Drive', 'تعذر الحصول على صلاحية Google Drive. تأكد من اتصال الإنترنت وإعداد OAuth ثم حاول مرة أخرى.');
+                }
+            }
+        }
+
+        async function driveFetch(url, options = {}) {
+            if (!accessToken) throw new Error('NO_DRIVE_TOKEN');
+            const response = await fetch(url, {
+                ...options,
+                headers: {
+                    ...(options.headers || {}),
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            });
+            if (response.status === 401) {
+                accessToken = null;
+                throw new Error('DRIVE_UNAUTHORIZED');
+            }
+            return response;
+        }
+
+        async function getDriveError(response) {
+            let body = '';
+            try { body = await response.text(); } catch (_) {}
+            let message = '';
+            try { message = JSON.parse(body)?.error?.message || ''; } catch (_) {}
+            return `HTTP ${response.status}${message ? `: ${message}` : ''}`;
+        }
+
+        async function findDriveBackupFile(fileName = null) {
+            const q = fileName
+                ? `name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`
+                : "name contains 'backup_drosak_' and trashed = false";
+            const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
+                '&spaces=drive&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime desc&pageSize=100';
+            const response = await driveFetch(url);
+            if (!response.ok) throw new Error('DRIVE_LIST_FAILED: ' + await getDriveError(response));
+            const data = await response.json();
+            const files = Array.isArray(data.files) ? data.files : [];
+            if (fileName) return files.find(f => f.name === fileName) || null;
+            return files.find(f => /^backup_drosak_\d{4}-\d{2}-\d{2}\.json$/i.test(f.name)) || null;
+        }
+
+        async function uploadBackupToDrive() {
+            if (!accessToken || backupInProgress) return false;
+            backupInProgress = true;
+            try {
+                const backupData = {
+                    teacher_groups_local: JSON.parse(localStorage.getItem(userStorageKey('teacher_groups_local')) || '[]'),
+                    teacher_students_local: JSON.parse(localStorage.getItem(userStorageKey('teacher_students_local')) || '[]')
+                };
+                const fileName = `backup_drosak_${new Date().toISOString().slice(0,10)}.json`;
+                const fileContent = JSON.stringify(backupData, null, 2);
+                const existing = await findDriveBackupFile(fileName);
+                let response;
+
+                if (existing?.id) {
+                    // تحديث محتوى النسخة الموجودة اليوم فقط.
+                    response = await driveFetch(
+                        'https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(existing.id) + '?uploadType=media',
+                        {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: fileContent
+                        }
+                    );
+                } else {
+                    // إنشاء الملف كملف JSON في Drive.
+                    const form = new FormData();
+                    form.append('metadata', new Blob([
+                        JSON.stringify({name: fileName, mimeType: 'application/json'})
+                    ], {type: 'application/json'}));
+                    form.append('file', new Blob([fileContent], {type: 'application/json'}));
+                    response = await driveFetch(
+                        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
+                        {method: 'POST', body: form}
+                    );
                 }
 
-                showAppAlert(
-                    'تم النسخ الاحتياطي',
-                    'تم النسخ إلى الحافظة، برجاء لصق النص في مكان آمن لاستعادته عند الحاجة.'
-                );
+                if (!response.ok) {
+                    const detail = await getDriveError(response);
+                    console.error('Google Drive upload error:', detail);
+                    showAppAlert('فشل النسخ الاحتياطي',
+                        response.status === 403
+                            ? 'Google رفض العملية (403). غالبًا Google Drive API غير مفعّل أو صلاحية Drive غير مضافة لهذا العميل.'
+                            : `تعذر رفع النسخة إلى Google Drive. ${detail}`
+                    );
+                    return false;
+                }
+
+                showAppAlert('تم النسخ الاحتياطي', 'تم حفظ النسخة الاحتياطية بنجاح داخل Google Drive.');
+                return true;
             } catch (err) {
-                console.error('Backup clipboard error:', err);
-                showAppAlert(
-                    'تعذر النسخ',
-                    'تعذر نسخ النسخة الاحتياطية إلى الحافظة. لم يتم تغيير أي من بياناتك.'
-                );
+                console.error('Google Drive backup error:', err);
+                const msg = String(err?.message || err);
+                if (msg.includes('DRIVE_UNAUTHORIZED')) {
+                    showAppAlert('انتهت صلاحية Google Drive', 'اضغط النسخ الاحتياطي مرة أخرى لمنح الصلاحية من جديد.');
+                } else if (msg.includes('DRIVE_LIST_FAILED')) {
+                    showAppAlert('تعذر الوصول إلى Google Drive', 'تعذر قراءة ملفات Drive. تأكد من تفعيل Google Drive API ومنح التطبيق صلاحية Drive.');
+                } else {
+                    showAppAlert('خطأ أثناء الرفع', 'حدث خطأ أثناء رفع النسخة الاحتياطية إلى Google Drive. افتح التطبيق من HTTPS وتأكد من اتصال الإنترنت.');
+                }
+                return false;
             } finally {
                 backupInProgress = false;
             }
         }
 
-        function triggerRestoreFileInput() {
-            openClipboardRestoreDialog();
-        }
-
-        function openClipboardRestoreDialog() {
-            let modal = document.getElementById('clipboardRestoreModal');
-
-            if (!modal) {
-                modal = document.createElement('div');
-                modal.id = 'clipboardRestoreModal';
-                modal.style.cssText =
-                    'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.65);' +
-                    'display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
-
-                modal.innerHTML = `
-                    <div style="background:#fff;border-radius:16px;width:min(620px,100%);padding:20px;box-sizing:border-box;direction:rtl;">
-                        <h3 style="margin:0 0 12px;">استعادة النسخة الاحتياطية</h3>
-                        <p style="margin:0 0 10px;">الصق نص النسخة الاحتياطية هنا ثم اضغط استعادة.</p>
-                        <textarea id="clipboardRestoreText"
-                            style="width:100%;height:220px;box-sizing:border-box;resize:vertical;padding:10px;border:1px solid #ccc;border-radius:10px;direction:ltr;text-align:left;"
-                            placeholder="الصق النسخة الاحتياطية هنا"></textarea>
-                        <div style="display:flex;gap:10px;justify-content:flex-start;margin-top:12px;">
-                            <button class="btn-3d" type="button" onclick="restoreFromClipboardText()">استعادة</button>
-                            <button class="btn-3d" type="button" onclick="closeClipboardRestoreDialog()">إلغاء</button>
-                        </div>
-                    </div>`;
-
-                document.body.appendChild(modal);
-            }
-
-            modal.style.display = 'flex';
-
-            if (navigator.clipboard && navigator.clipboard.readText) {
-                navigator.clipboard.readText().then(function(txt) {
-                    const box = document.getElementById('clipboardRestoreText');
-                    if (box && txt) box.value = txt;
-                }).catch(function() {});
-            }
-        }
-
-        function closeClipboardRestoreDialog() {
-            const modal = document.getElementById('clipboardRestoreModal');
-            if (modal) modal.style.display = 'none';
-        }
-
-        function restoreFromClipboardText() {
-            const box = document.getElementById('clipboardRestoreText');
-            const raw = box ? box.value.trim() : '';
-
-            if (!raw) {
-                showAppAlert('لا توجد نسخة', 'الصق نص النسخة الاحتياطية أولًا.');
-                return;
-            }
-
+        async function triggerRestoreFileInput() {
+            if (backupInProgress) return;
             try {
-                const importedData = normalizeImportedData(JSON.parse(raw));
-
-                if (!importedData) {
-                    showAppAlert(
-                        'خطأ',
-                        'النسخة غير صالحة. يجب أن تحتوي على بيانات المجموعات والتلاميذ.'
-                    );
+                initGoogleDriveAuth();
+                if (!accessToken) {
+                    // طلب الإذن مرة واحدة فقط طوال استخدام البرنامج
+                tokenClient.requestAccessToken({ prompt: drivePermissionGranted ? '' : 'consent' });
+                    showAppAlert('السماح بالوصول', 'اسمح للتطبيق بالوصول إلى Google Drive، ثم اضغط استعادة النسخة الاحتياطية مرة أخرى.');
                     return;
                 }
-
-                showAppConfirm(
-                    'استعادة البيانات',
-                    'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية بالبيانات المستوردة.',
-                    function() {
-                        groups = importedData.groups;
-                        students = importedData.students;
-                        selectedGroupIndex = null;
-                        selectedStudentIndex = null;
-                        dataNormalizationDone = false;
-                        saveData();
-                        closeClipboardRestoreDialog();
-                        showAppAlert('تم بنجاح', 'تمت استعادة البيانات بنجاح!');
-                        navigateTo('page1');
-                    }
-                );
-            } catch (err) {
-                console.error('Clipboard restore error:', err);
-                showAppAlert('خطأ', 'تعذر قراءة النسخة الاحتياطية. تأكد من لصق النص كاملًا.');
-            }
-        }
-
-        function handleRestoreFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const importedData = normalizeImportedData(JSON.parse(e.target.result));
-                    if (!importedData) {
-                        showAppAlert('خطأ', 'ملف غير صالح. يجب أن يحتوي ملف النسخة الاحتياطية على قوائم المجموعات والتلاميذ.');
-                        return;
-                    }
-                    showAppConfirm('استعادة البيانات', 'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية بالبيانات المستوردة.', function() {
-                        groups = importedData.groups;
-                        students = importedData.students;
-                        selectedGroupIndex = null;
-                        selectedStudentIndex = null;
-                        dataNormalizationDone = false;
-                        saveData();
-                        showAppAlert('تم بنجاح', 'تمت استعادة البيانات بنجاح!');
-                        navigateTo('page1');
-                    });
-                } catch (err) {
-                    showAppAlert('خطأ', 'حدث خطأ أثناء قراءة الملف. يرجى التأكد من اختيار نسخة احتياطية صحيحة.');
+                backupInProgress = true;
+                const existing = await findDriveBackupFile();
+                if (!existing?.id) {
+                    showAppAlert('لا توجد نسخة احتياطية', 'لم يتم العثور على نسخة احتياطية للتطبيق على Google Drive.');
+                    return;
                 }
-            };
-            reader.readAsText(file);
-            event.target.value = '';
+                const response = await driveFetch(
+                    'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(existing.id) + '?alt=media'
+                );
+                if (!response.ok) throw new Error('DRIVE_DOWNLOAD_FAILED: ' + await getDriveError(response));
+                const importedData = normalizeImportedData(JSON.parse(await response.text()));
+                if (!importedData) {
+                    showAppAlert('خطأ', 'النسخة الاحتياطية الموجودة على Google Drive غير صالحة.');
+                    return;
+                }
+                showAppConfirm('استعادة النسخة الاحتياطية', 'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية بالبيانات الموجودة في النسخة الاحتياطية.', function () {
+                    groups = importedData.groups;
+                    students = importedData.students;
+                    selectedGroupIndex = null;
+                    selectedStudentIndex = null;
+                    dataNormalizationDone = false;
+                    saveData();
+                    showAppAlert('تم بنجاح', 'تمت استعادة النسخة الاحتياطية من Google Drive بنجاح!');
+                    navigateTo('page1');
+                });
+            } catch (err) {
+                console.error('Google Drive restore error:', err);
+                showAppAlert('تعذر الاستعادة', 'تعذر قراءة النسخة الاحتياطية من Google Drive. تأكد من الصلاحيات واتصال الإنترنت ثم حاول مرة أخرى.');
+            } finally {
+                backupInProgress = false;
+            }
         }
 
         // إعداد التشغيل الأولي والتنقل عند تحميل الصفحة
@@ -3615,41 +3695,146 @@ if ('serviceWorker' in navigator) {
 </script>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-  import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",
-    authDomain: "your-works-1aea7.firebaseapp.com",
-    projectId: "your-works-1aea7",
-    storageBucket: "your-works-1aea7.firebasestorage.app",
-    messagingSenderId: "1084540974820",
-    appId: "1:1084540974820:web:56d173a05716c3f87b1ef1",
-    measurementId: "G-RYZPVNLKZQ"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const provider = new GoogleAuthProvider();
-  provider.addScope("https://www.googleapis.com/auth/drive.file");
-
-  async function loginWithGoogle() {
-    try {
-      const result = await signInWithPopup(auth, provider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      const accessToken = credential?.accessToken || null;
-      if (accessToken) sessionStorage.setItem("drive_access_token", accessToken);
-      return { user: result.user, accessToken };
-    } catch (error) {
-      console.error("خطأ في تسجيل الدخول:", error);
-      throw error;
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",storageBucket:"your-works-1aea7.firebasestorage.app",messagingSenderId:"1084540974820",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1",measurementId:"G-RYZPVNLKZQ"};
+const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider();
+provider.addScope('https://www.googleapis.com/auth/drive.file');
+window.firebaseDriveAuth=async function(){
+  try{
+    const r=await signInWithPopup(auth,provider);
+    const c=GoogleAuthProvider.credentialFromResult(r);
+    return c?.accessToken||null;
+  }catch(e){
+    if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){
+      sessionStorage.setItem('drive_auth_pending','1');
+      await signInWithRedirect(auth,provider);
+      return null;
     }
+    throw e;
   }
+};
 
-  window.firebaseAuth = auth;
-  window.loginWithGoogle = loginWithGoogle;
-  window.logoutFromGoogle = () => signOut(auth);
+const loginScreen=document.getElementById('loginScreen'),loginForm=document.getElementById('loginForm'),loginUsername=document.getElementById('loginUsername'),loginPassword=document.getElementById('loginPassword'),loginSubmit=document.getElementById('loginSubmit'),registerToggle=document.getElementById('registerToggle'),googleLoginButton=document.getElementById('googleLoginButton'),loginTitle=document.getElementById('loginTitle'),loginMessage=document.getElementById('loginMessage'),registerInfoPage=document.getElementById('registerInfoPage'),startRegister=document.getElementById('startRegister'),backLogin=document.getElementById('backLogin'),loginSubtitle=document.getElementById('loginSubtitle'); let registerMode=false;
+function msg(x){loginMessage.textContent=x||''} function mode(x){registerMode=x;loginTitle.textContent=x?'إنشاء حساب جديد':'تسجيل الدخول إلى نظم دروسك';loginSubtitle.textContent=x?'أدخل بيانات الحساب الجديد':'أدخل بياناتك للدخول إلى حسابك';loginSubmit.textContent=x?'إنشاء الحساب':'تسجيل الدخول';registerToggle.textContent=x?'إلغاء إنشاء الحساب':'إنشاء حساب جديد';loginPassword.autocomplete=x?'new-password':'current-password';msg('')} function usernameEmail(u){return u.trim().toLowerCase()+'@username.your-works-1aea7.firebaseapp.com'}
+async function resetPassword(){const u=loginUsername.value.trim(); if(!validUser(u)){msg('اكتب اسم المستخدم أولاً لاستعادة كلمة المرور.');return;} try{await sendPasswordResetEmail(auth, usernameEmail(u)); msg('تم إرسال رابط استعادة كلمة المرور إلى البريد المرتبط بالحساب.');}catch(e){msg(friendly(e));}} function validUser(u){return /^[A-Za-z0-9._-]{3,30}$/.test(u.trim())} function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')} function hide(){loginScreen.hidden=true;document.body.classList.remove('login-locked')}
+function friendly(e){const m={'auth/invalid-credential':'اسم المستخدم أو رقم السر غير صحيح.','auth/invalid-login-credentials':'اسم المستخدم أو رقم السر غير صحيح.','auth/user-not-found':'اسم المستخدم غير موجود.','auth/wrong-password':'رقم السر غير صحيح.','auth/email-already-in-use':'اسم المستخدم مستخدم بالفعل.','auth/weak-password':'رقم السر يجب أن يكون 6 أحرف أو أرقام على الأقل.','auth/invalid-email':'اسم المستخدم غير صالح.','auth/too-many-requests':'تمت محاولات كثيرة. حاول مرة أخرى لاحقًا.','auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google؛ سيتم فتح تسجيل الدخول بالطريقة البديلة.','auth/operation-not-allowed':'يجب تفعيل طريقة تسجيل الدخول المطلوبة من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول. تأكد من الإنترنت وإعدادات Firebase.'}
+async function loginWithGoogle(){try{const r=await signInWithPopup(auth,provider);return{user:r.user}}catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null}throw e}}
+loginForm.addEventListener('submit',async e=>{e.preventDefault();const u=loginUsername.value.trim(),p=loginPassword.value;msg('');if(!validUser(u)){msg('اسم المستخدم يجب أن يكون من 3 إلى 30 حرفًا أو رقمًا، ويمكن استخدام . _ -');return}if(p.length<6){msg('رقم السر يجب أن يكون 6 أحرف أو أرقام على الأقل.');return}loginSubmit.disabled=true;try{const email=usernameEmail(u);if(registerMode)await createUserWithEmailAndPassword(auth,email,p);else await signInWithEmailAndPassword(auth,email,p)}catch(err){console.error('خطأ في تسجيل الدخول:',err);msg(friendly(err))}finally{loginSubmit.disabled=false}});
+registerToggle.addEventListener('click',()=>{if(!registerMode){document.querySelector('.login-card').hidden=true;registerInfoPage.hidden=false;}else mode(false);}); startRegister.addEventListener('click',()=>{registerInfoPage.hidden=true;document.querySelector('.login-card').hidden=false;mode(true);}); backLogin.addEventListener('click',()=>{registerInfoPage.hidden=true;document.querySelector('.login-card').hidden=false;mode(false);}); forgotPasswordButton.addEventListener('click',resetPassword);
+googleLoginButton.addEventListener('click',async()=>{msg('جارٍ فتح تسجيل الدخول بحساب Google...');googleLoginButton.disabled=true;try{await loginWithGoogle()}catch(e){console.error('خطأ في Google:',e);msg(friendly(e))}finally{googleLoginButton.disabled=false}});
+getRedirectResult(auth).then(r=>{if(r){const c=GoogleAuthProvider.credentialFromResult(r);if(c?.accessToken){window.pendingDriveAccessToken=c.accessToken;window.dispatchEvent(new CustomEvent('drive-auth-ready'));}if(sessionStorage.getItem('drive_auth_pending')==='1'){sessionStorage.removeItem('drive_auth_pending');setTimeout(()=>{if(window.pendingDriveAccessToken){window.dispatchEvent(new CustomEvent('drive-auth-ready'));}},150);}}return r}).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
+onAuthStateChanged(auth,user=>{
+if(user){ 
+  switchAppUser(user.uid);
+  hide();
+}else{
+  switchAppUser('guest');
+  show();
+}
+}); window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>{
+ showAppConfirm("هل تريد تسجيل الخروج ؟", "", function(){ signOut(auth); });
+};
 </script>
 
+
+<script>
+function exportPDFReport(){ window.print(); }
+
+function recycleGet(){
+    return JSON.parse(localStorage.getItem(userStorageKey('recycle_bin')) || '[]');
+}
+function recycleSave(data){
+    localStorage.setItem(userStorageKey('recycle_bin'), JSON.stringify(data));
+}
+function recycleAdd(type,item){
+    let a=recycleGet();
+    a.push({type:type,item:item,date:new Date().toLocaleString('ar-EG')});
+    recycleSave(a);
+}
+
+function openRecycleBin(){
+    const old=document.getElementById('recycleBinModal');
+    if(old) old.remove();
+
+    let box=document.createElement('div');
+    box.id='recycleBinModal';
+    box.className='modal';
+    box.style.display='flex';
+
+    let list=recycleGet();
+    box.innerHTML =
+    '<div class="modal-content">'+
+    '<h3 style="text-align:center">سلة المحذوفات</h3>'+
+    (list.length ? list.map((x,i)=>
+        '<div style="padding:8px;border:1px solid #ccc;border-radius:8px;margin:6px 0">'+
+        (x.type==='student'?'تلميذ':'مجموعة')+'<br>'+
+        (x.item.name||'')+'<br>'+
+        '<button class="btn-3d" data-restore="'+i+'">استرجاع</button>'+
+        '<button class="btn-3d btn-red-3d" data-delete="'+i+'">حذف نهائي</button>'+
+        '</div>'
+    ).join('') : '<p style="text-align:center">السلة فارغة</p>')+
+    '<button class="btn-3d" data-close>إغلاق</button>'+
+    '</div>';
+
+    document.body.appendChild(box);
+
+    box.querySelectorAll('[data-restore]').forEach(btn=>{
+        btn.onclick=function(){ recycleRestore(Number(this.dataset.restore)); };
+    });
+    box.querySelectorAll('[data-delete]').forEach(btn=>{
+        btn.onclick=function(){ recycleDelete(Number(this.dataset.delete)); };
+    });
+    box.querySelector('[data-close]').onclick=function(){ box.remove(); };
+}
+
+function recycleRestore(i){
+    let a=recycleGet();
+    let x=a[i];
+    if(!x) return;
+
+    if(x.type==='student') students.push(x.item);
+    else groups.push(x.item);
+
+    a.splice(i,1);
+    recycleSave(a);
+    saveData();
+
+    let box=document.getElementById('recycleBinModal');
+    if(box) box.remove();
+
+    if(typeof renderAll==='function') renderAll();
+}
+
+function recycleDelete(i){
+    let a=recycleGet();
+    a.splice(i,1);
+    recycleSave(a);
+
+    let box=document.getElementById('recycleBinModal');
+    if(box) box.remove();
+
+    openRecycleBin();
+}
+
+// تسجيل خروج تلقائي بعد 50 ثانية بدون استخدام
+(function(){
+    let inactivityTimer;
+    const inactivityLimit = 50000;
+    function resetInactivityTimer(){
+        clearTimeout(inactivityTimer);
+        inactivityTimer=setTimeout(()=>{
+            const login=document.getElementById('loginScreen');
+            if(login && login.hidden && window.firebaseAuth){
+                signOut(window.firebaseAuth);
+            }
+        }, inactivityLimit);
+    }
+    ['click','touchstart','mousemove','keydown','scroll'].forEach(function(evt){
+        document.addEventListener(evt, resetInactivityTimer, {passive:true});
+    });
+    resetInactivityTimer();
+})();
+</script>
 </body>
 </html>
