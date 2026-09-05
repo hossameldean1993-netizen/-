@@ -1705,16 +1705,31 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const todayItems = [];
             const pendingItems = [];
             const addItem = (obj, idx, dayObj, dayIndex, isGroup) => {
-                const startMinutes = (obj.timeHour !== undefined && obj.timeMinute !== undefined && obj.timePeriod)
-                    ? scheduleTimeToMinutes(obj.timeHour, obj.timeMinute, obj.timePeriod)
-                    : parseScheduleTime(obj.time);
-                const startTime = startMinutes !== null
-                    ? formatScheduleTime(
-                        obj.timeHour !== undefined && obj.timeMinute !== undefined && obj.timePeriod ? obj.timeHour : parseStoredTime(obj.time).hour,
-                        obj.timeMinute !== undefined && obj.timeHour !== undefined && obj.timePeriod ? obj.timeMinute : parseStoredTime(obj.time).minute,
-                        obj.timePeriod || parseStoredTime(obj.time).period
-                    )
-                    : '';
+                const readFullStartTime = obj => {
+                    let hour = obj.timeHour;
+                    let minute = obj.timeMinute;
+                    let period = obj.timePeriod;
+                    if (hour === undefined || minute === undefined || !period) {
+                        const raw = String(obj.time || '').trim();
+                        const match = raw.match(/(\d{1,2})\s*[:٫.]\s*(\d{1,2})/);
+                        if (!match) return { minutes: null, text: '' };
+                        hour = parseInt(match[1], 10);
+                        minute = parseInt(match[2], 10);
+                        period = /(?:م|مساء|مساءً|عصر|عصراً|عصرًا|pm)/i.test(raw) ? 'PM' : 'AM';
+                    }
+                    hour = parseInt(hour, 10);
+                    minute = parseInt(minute, 10);
+                    if (!Number.isFinite(hour) || hour < 1 || hour > 12 || !Number.isFinite(minute) || minute < 0 || minute > 59) {
+                        return { minutes: null, text: '' };
+                    }
+                    period = String(period).toUpperCase() === 'PM' ? 'PM' : 'AM';
+                    const minutes = scheduleTimeToMinutes(hour, minute, period);
+                    const text = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${period === 'PM' ? 'م' : 'ص'}`;
+                    return { minutes, text };
+                };
+                const fullStartTime = readFullStartTime(obj);
+                const startMinutes = fullStartTime.minutes;
+                const startTime = fullStartTime.text;
                 const endTime = obj.timeEnd || '';
                 const item = {
                     name: obj.name,
