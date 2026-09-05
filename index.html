@@ -366,30 +366,9 @@ html, body, button, input, select, textarea, option {
         .btn-red-3d { background: var(--btn-red-top) !important; box-shadow: 0 2px 5px rgba(0,0,0,.08) !important; }
         .btn-red-3d:active { box-shadow: 0 1px 0px var(--btn-red-shadow) !important; }
 
-        .control-buttons-wrapper { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+        .control-buttons-wrapper { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
         .settings-page-card .control-buttons-wrapper > .settings-btn,
-        .settings-page-card .control-buttons-wrapper > .btn-full {
-            width: 100%;
-            min-height: 48px;
-            padding: 10px 8px;
-            border: 1px solid rgba(0,0,0,.12);
-            border-bottom: 4px solid var(--btn-cyan-shadow);
-            border-radius: 12px;
-            box-shadow: 0 4px 0 var(--btn-cyan-shadow), 0 6px 10px rgba(0,0,0,.12);
-            transition: transform .08s ease, box-shadow .08s ease;
-        }
-        .settings-page-card .control-buttons-wrapper > .btn-red-3d {
-            border-bottom-color: var(--btn-red-shadow);
-            box-shadow: 0 4px 0 var(--btn-red-shadow), 0 6px 10px rgba(0,0,0,.12) !important;
-        }
-        .settings-page-card .control-buttons-wrapper > .settings-btn:active,
-        .settings-page-card .control-buttons-wrapper > .btn-full:active {
-            transform: translateY(3px) !important;
-            box-shadow: 0 1px 0 var(--btn-cyan-shadow), 0 3px 6px rgba(0,0,0,.10) !important;
-        }
-        .settings-page-card .control-buttons-wrapper > .btn-red-3d:active {
-            box-shadow: 0 1px 0 var(--btn-red-shadow), 0 3px 6px rgba(0,0,0,.10) !important;
-        }
+        .settings-page-card .control-buttons-wrapper > .btn-full { width: 100%; min-height: 42px; }
         .btn-full { width: 100%; }
         .grid-2-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .add-btn { padding: 11px; font-size: 0.95rem; }
@@ -1163,61 +1142,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 <!-- Login UI -->
 <style>#loginScreen{position:fixed;inset:0;z-index:99999;background:var(--bg,#f5f7fa);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;direction:rtl}#loginScreen[hidden]{display:none!important}.login-card{width:min(100%,390px);background:var(--card-bg-light,#fff);border:2px solid var(--card-blue,#0284c7);border-radius:18px;padding:22px 18px;box-sizing:border-box;box-shadow:0 8px 24px rgba(0,0,0,.10);text-align:center}.login-card h2{margin:0 0 8px;color:var(--card-blue,#0284c7);font-size:1.35rem}.login-card p{margin:0 0 18px;color:var(--text-muted,#667085);font-weight:700}.login-card input{width:100%;box-sizing:border-box;margin:6px 0;padding:12px;border:1px solid var(--border-color,#d0d5dd);border-radius:10px;background:#fff;color:inherit;font-size:1rem;outline:none}.login-card button{width:100%;border:0;border-radius:10px;padding:12px;margin-top:9px;font-weight:800;font-size:1rem;cursor:pointer}.login-primary{background:#0284c7;color:#fff}.login-google{background:#fff;color:#222;border:1px solid #ccc!important}.login-secondary{background:transparent;color:#0284c7}.login-divider{display:flex;align-items:center;gap:8px;margin:13px 0;color:#98a2b3;font-weight:700}.login-divider:before,.login-divider:after{content:'';height:1px;background:#d0d5dd;flex:1}#loginMessage{min-height:22px;margin-top:10px;color:#d92d20;font-weight:800;font-size:.9rem}body.login-locked{overflow:hidden}</style>
     
-<style id="pdf-export-content-only">
-@media print {
-    @page { size: A4; margin: 12mm; }
-    html, body { background: #fff !important; }
-    body > *:not(#pdfPrintRoot) { display: none !important; }
-    #pdfPrintRoot {
-        display: block !important;
-        width: 100% !important;
-        max-width: none !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        background: #fff !important;
-        color: #111 !important;
-        direction: rtl !important;
-        font-family: system-ui, -apple-system, "Noto Sans Arabic", Arial, sans-serif !important;
-        font-size: 12pt !important;
-        line-height: 1.55 !important;
-    }
-    #pdfPrintRoot .group-header,
-    #pdfPrintRoot .detail-section-card,
-    #pdfPrintRoot .student-report-card {
-        break-inside: avoid;
-        page-break-inside: avoid;
-    }
-    #pdfPrintRoot .detail-section-content,
-    #pdfPrintRoot .report-section-content {
-        display: block !important;
-        height: auto !important;
-        overflow: visible !important;
-    }
-    #pdfPrintRoot .detail-section-card,
-    #pdfPrintRoot .student-report-card {
-        box-shadow: none !important;
-    }
-    #pdfPrintRoot .pdf-field-value {
-        display: inline-block;
-        min-width: 20px;
-        font-weight: 700;
-        white-space: pre-wrap;
-    }
-    #pdfPrintRoot .day-row {
-        break-inside: avoid;
-        page-break-inside: avoid;
-    }
-    #pdfPrintRoot .group-card,
-    #pdfPrintRoot .group-details {
-        background: #fff !important;
-    }
-    #pdfPrintRoot .group-header,
-    #pdfPrintRoot .detail-section-card,
-    #pdfPrintRoot .student-report-card {
-        color: #111 !important;
-    }
-}
-</style>
 </head>
 <body>
 <div id="loginScreen" hidden><div class="login-card"><h2 id="loginTitle">تسجيل الدخول إلى نظم دروسك</h2><p id="loginSubtitle">أدخل بياناتك للدخول إلى حسابك</p><form id="loginForm" autocomplete="on"><input id="loginUsername" type="text" inputmode="text" autocomplete="username" placeholder="اسم المستخدم" required><input id="loginPassword" type="password" autocomplete="current-password" placeholder="رقم السر" required><button class="login-primary" type="submit" id="loginSubmit">تسجيل الدخول</button></form><button class="login-secondary" type="button" id="registerToggle">إنشاء حساب جديد</button><button class="login-secondary" type="button" id="forgotPasswordButton">نسيت كلمة المرور؟</button><div class="login-divider">أو</div><button class="login-google" type="button" id="googleLoginButton">تسجيل الدخول بحساب Google</button><div id="loginMessage" role="alert"></div></div><div class="login-card" id="registerInfoPage" hidden><h2>إنشاء حساب جديد</h2><p>أنشئ حسابك للبدء باستخدام نظم دروسك</p><ul style="text-align:right;line-height:1.9;padding-right:20px"><li>اكتب اسم مستخدم جديد.</li><li>اختر رقم سر لا يقل عن 6 أحرف أو أرقام.</li><li>بعد إنشاء الحساب سيتم حفظ بياناتك بشكل مستقل.</li></ul><button class="login-primary" type="button" id="startRegister">متابعة إنشاء الحساب</button><button class="login-secondary" type="button" id="backLogin">العودة لتسجيل الدخول</button></div></div>
@@ -1826,9 +1750,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         function renderSessionItem(item, pending = false) {
             const div = document.createElement('div');
             div.className = 'today-session-item';
-            div.onclick = () => pending
-                ? openPendingSession(item)
-                : (item.isGroup ? openGroupDetailsPage(item.index) : openStudentDetailsPage(item.index));
+            div.onclick = () => item.isGroup ? openGroupDetailsPage(item.index) : openStudentDetailsPage(item.index);
             let statusText = '';
             if (item.status === 'present') statusText = ' — حاضر';
             else if (item.status === 'absent') statusText = ' — غائب';
@@ -1842,44 +1764,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <div class="today-item-time">${pending ? 'معلقة' : escapeHtml(item.time)}</div>
             `;
             return div;
-        }
-
-        function openPendingSession(item) {
-            if (!item) return;
-
-            // هذا المسار خاص بالحصة المعلقة فقط: افتح صفحة التسجيل مباشرة على يوم الحصة المطلوب.
-            if (item.isGroup) {
-                selectedGroupIndex = item.index;
-                renderGroupDetail(item.index);
-                navigateTo('page3');
-            } else {
-                selectedStudentIndex = item.index;
-                renderStudentDetail(item.index);
-                navigateTo('page5');
-            }
-
-            requestAnimationFrame(() => {
-                const pageId = item.isGroup ? 'page3' : 'page5';
-                const page = document.getElementById(pageId);
-                if (!page) return;
-
-                const sessionsCard = page.querySelector('.sessions-section-card');
-                if (!sessionsCard) return;
-
-                const title = sessionsCard.querySelector('.detail-section-title');
-                const content = sessionsCard.querySelector('.detail-section-content');
-                const icon = title ? title.querySelector('.section-collapse-icon') : null;
-
-                // افتح قائمة تسجيل الحصص فقط للحصة المعلقة التي تم الضغط عليها.
-                if (content) content.style.display = '';
-                if (icon) icon.textContent = '⌃';
-
-                const rows = sessionsCard.querySelectorAll('.day-row');
-                const targetRow = rows[item.dayIndex];
-                if (targetRow) {
-                    targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            });
         }
 
         function renderTodaySessions() {
@@ -3914,112 +3798,7 @@ if(user){
 
 
 <script>
-function exportPDFReport(){
-    const printRoot = document.createElement('div');
-    printRoot.id = 'pdfPrintRoot';
-
-    const report = document.createElement('div');
-    report.style.cssText = 'width:100%;direction:rtl;background:#fff;color:#111;font-family:system-ui,-apple-system,"Noto Sans Arabic",Arial,sans-serif;';
-    report.innerHTML = `
-        <div style="text-align:center;border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:16px;">
-            <h1 style="margin:0 0 5px;font-size:22pt;">نظم دروسك</h1>
-            <div style="font-size:13pt;font-weight:700;">تقرير شامل للبيانات</div>
-        </div>
-    `;
-
-    const tempHost = document.createElement('div');
-    tempHost.style.display = 'none';
-    const tempGroupDetail = document.createElement('div');
-    tempGroupDetail.id = 'singleGroupDetail';
-    const tempStudentDetail = document.createElement('div');
-    tempStudentDetail.id = 'singleStudentDetail';
-    tempHost.appendChild(tempGroupDetail);
-    tempHost.appendChild(tempStudentDetail);
-    document.body.appendChild(tempHost);
-
-    const originalGroups = groups;
-    const originalStudents = students;
-    const originalSelectedGroupIndex = selectedGroupIndex;
-    const originalSelectedStudentIndex = selectedStudentIndex;
-
-    try {
-        groups = JSON.parse(JSON.stringify(originalGroups || []));
-        students = JSON.parse(JSON.stringify(originalStudents || []));
-
-        if (groups.length) {
-            const groupsTitle = document.createElement('h2');
-            groupsTitle.textContent = 'المجموعات';
-            groupsTitle.style.cssText = 'font-size:18pt;margin:18px 0 10px;padding-bottom:5px;border-bottom:1px solid #555;';
-            report.appendChild(groupsTitle);
-
-            groups.forEach((group, index) => {
-                tempGroupDetail.innerHTML = '';
-                renderGroupDetail(index);
-                const section = document.createElement('section');
-                section.style.cssText = 'margin-bottom:20px;';
-                section.innerHTML = tempGroupDetail.innerHTML;
-                report.appendChild(section);
-            });
-        }
-
-        if (students.length) {
-            const studentsTitle = document.createElement('h2');
-            studentsTitle.textContent = 'التلاميذ';
-            studentsTitle.style.cssText = 'font-size:18pt;margin:22px 0 10px;padding-bottom:5px;border-bottom:1px solid #555;';
-            report.appendChild(studentsTitle);
-
-            students.forEach((student, index) => {
-                tempStudentDetail.innerHTML = '';
-                renderStudentDetail(index);
-                const section = document.createElement('section');
-                section.style.cssText = 'margin-bottom:20px;';
-                section.innerHTML = tempStudentDetail.innerHTML;
-                report.appendChild(section);
-            });
-        }
-
-        if (!groups.length && !students.length) {
-            const empty = document.createElement('div');
-            empty.textContent = 'لا توجد بيانات لتصديرها.';
-            empty.style.cssText = 'text-align:center;font-size:14pt;font-weight:700;padding:30px 10px;';
-            report.appendChild(empty);
-        }
-
-        printRoot.appendChild(report);
-        document.body.appendChild(printRoot);
-
-        printRoot.querySelectorAll('.detail-actions-card, .btn-3d, .status-btns, .sessions-buttons-grid, .financial-payment-actions, .section-collapse-icon, .report-collapse-icon').forEach(el => el.remove());
-
-        printRoot.querySelectorAll('input, select, textarea').forEach(field => {
-            const value = field.tagName === 'SELECT'
-                ? (field.options[field.selectedIndex]?.textContent || '')
-                : (field.value || '');
-            const text = document.createElement('span');
-            text.className = 'pdf-field-value';
-            text.textContent = value || '—';
-            field.replaceWith(text);
-        });
-
-        printRoot.querySelectorAll('.detail-section-content, .report-section-content').forEach(el => {
-            el.style.display = 'block';
-            el.style.height = 'auto';
-            el.style.overflow = 'visible';
-        });
-
-        const cleanup = () => {
-            printRoot.remove();
-            tempHost.remove();
-            window.removeEventListener('afterprint', cleanup);
-        };
-        window.addEventListener('afterprint', cleanup);
-        window.print();
-    } finally {
-        groups = originalGroups;
-        students = originalStudents;
-        selectedGroupIndex = originalSelectedGroupIndex;
-        selectedStudentIndex = originalSelectedStudentIndex;
-    }
-}
+function exportPDFReport(){ window.print(); }
 
 function recycleGet(){
     return JSON.parse(localStorage.getItem(userStorageKey('recycle_bin')) || '[]');
