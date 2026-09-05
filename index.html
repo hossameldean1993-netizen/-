@@ -2067,8 +2067,16 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             if (autoDriveBackupTimer) clearTimeout(autoDriveBackupTimer);
             autoDriveBackupTimer = setTimeout(async () => {
                 try {
-                    if (typeof accessToken !== 'undefined' && accessToken && typeof uploadBackupToDrive === 'function') {
+                    if (typeof uploadBackupToDrive !== 'function') return;
+                    if (typeof accessToken !== 'undefined' && accessToken) {
                         await uploadBackupToDrive();
+                        return;
+                    }
+                    // إذا كانت صلاحية Drive ممنوحة سابقًا، جدّد الرمز بصمت عند الحاجة
+                    // حتى يستمر النسخ التلقائي بعد انتهاء صلاحية الرمز الحالي.
+                    if (drivePermissionGranted && typeof initGoogleDriveAuth === 'function') {
+                        initGoogleDriveAuth();
+                        if (tokenClient) tokenClient.requestAccessToken({ prompt: '' });
                     }
                 } catch (err) {
                     console.warn('Auto backup skipped:', err);
