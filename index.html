@@ -464,7 +464,7 @@ html, body, button, input, select, textarea, option {
         .student-notes-container label { font-size: 0.72rem; color: var(--text-muted); font-weight: 700; display: block; margin-bottom: 2px; }
         .student-notes-container input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--card-bg-light); color: var(--text-dark); font-weight: 600; font-size: 0.82rem; outline: none; }
 
-        .debt-input-container { background: var(--day-row-bg); border: 1px solid var(--day-row-border); padding: 10px; border-radius: 10px; margin: 10px 0; display: grid; grid-template-columns: 1.2fr 1fr; gap: 6px; align-items: center; }
+        .debt-input-container { background: var(--day-row-bg); border: 1px solid var(--day-row-border); padding: 10px; border-radius: 10px; margin: 10px 0; display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
         .debt-input-container label { display: block; font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-bottom: 2px; font-weight: 700; }
         .debt-input-container input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--card-bg-light); color: var(--text-dark); font-weight: 700; font-size: 0.82rem; outline: none; text-align: center; }
 
@@ -558,13 +558,7 @@ html, body, button, input, select, textarea, option {
         #studentModal .day-selector-btn, #groupModal .day-selector-btn { padding: 6px 2px; font-size: 0.72rem; }
 
         /* صفا الوقت: من ثم الساعة/الدقائق/ص/م، ثم إلى بنفس الترتيب. */
-        .schedule-time-row {
-            display: grid;
-            grid-template-columns: .55fr 1fr 1fr .72fr .72fr;
-            gap: 5px;
-            width: 100%;
-            align-items: center;
-        }
+        .schedule-time-row { align-items: center; }
         .schedule-time-row .time-range-label {
             width: 100%;
             height: 38px;
@@ -577,20 +571,6 @@ html, body, button, input, select, textarea, option {
             border: 2px solid var(--border-color);
             font-size: .78rem;
             font-weight: 900;
-        }
-        .schedule-time-grid input, .schedule-time-grid button, .schedule-time-row input, .schedule-time-row button {
-            width: 100%;
-            height: 38px;
-            padding: 6px 3px;
-            border: 2px solid var(--border-color);
-            border-radius: 8px;
-            background: var(--bg);
-            color: var(--text-dark);
-            font-size: 0.80rem;
-            font-weight: 800;
-            outline: none;
-            text-align: center;
-            box-sizing: border-box;
         }
         .schedule-time-row input::placeholder { opacity: .45; }
 
@@ -640,7 +620,6 @@ html, body, button, input, select, textarea, option {
             text-align: center;
             box-sizing: border-box;
         }
-        .schedule-time-hint { font-size: 0.68rem; color: var(--text-muted); margin-top: 3px; text-align: center; }
 
         .form-group { margin-bottom: 10px; text-align: right; }
         .form-group label { display: block; margin-bottom: 3px; font-size: 0.78rem; color: var(--text-muted); font-weight: 700; }
@@ -1095,7 +1074,6 @@ html, body, button, input, select, textarea, option {
             width: 100%;
         }
 
-        .debt-input-container { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
         .debt-input-container > div { flex:1 1 180px; }
         .debt-input-container .btn-3d { flex:0 0 auto; min-width:80px; }
 </style>
@@ -3285,10 +3263,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             saveData();
         }
 
-        function toggleStudentDebtPayment(idx, event) {
-            openDebtPaymentDialog('student', idx, event);
-        }
-
         // التحقق من طول رقم الهاتف: التنبيه فقط، بدون منع الحفظ أو تعديل الرقم.
         function warnIfPhoneLengthInvalid(phone, ownerLabel) {
             const digits = String(phone || '').replace(/\D/g, '');
@@ -3388,10 +3362,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             }
             group.isMonthPaid = !group.isMonthPaid;
             saveData();
-        }
-
-        function toggleDebtPayment(index, event) {
-            openDebtPaymentDialog('group', index, event);
         }
 
         function openStartMonthModal() {
