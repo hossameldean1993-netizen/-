@@ -1593,16 +1593,13 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 
                 let h = parseInt(match[1], 10);
                 const m = Math.min(59, Math.max(0, parseInt(match[2], 10) || 0));
-                // اقرأ فترة البداية فقط؛ لا تسمح لفترة نهاية المدى بالتأثير على وقت البداية.
-                const firstTimeEnd = normalized.indexOf('-', match.index + match[0].length);
-                const firstTimeText = firstTimeEnd >= 0 ? raw.slice(0, firstTimeEnd) : raw;
-                const isPM = /(?:م|مساء|مساءً|عصر|عصراً|عصرًا|pm)/i.test(firstTimeText);
+                const isPM = /(?:م|مساء|مساءً|عصر|عصراً|عصرًا|pm)/i.test(raw);
                 if (h > 12) {
                     h = ((h - 1) % 12) + 1;
                     return { hour: h, minute: m, period: 'PM' };
                 }
                 if (h < 1) return { hour: '', minute: '', period: fallback };
-                const isAM = /(?:ص|صباح|am)/i.test(firstTimeText);
+                const isAM = /(?:ص|صباح|am)/i.test(raw);
                 return { hour: h, minute: m, period: isPM ? 'PM' : (isAM ? 'AM' : fallback) };
             },
 
