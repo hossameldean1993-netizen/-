@@ -3551,7 +3551,21 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         let tokenClient = null;
         let accessToken = null;
         let backupInProgress = false;
-        let drivePermissionGranted = localStorage.getItem('drive_permission_granted') === 'true';
+        let drivePermissionGranted = false;
+
+        function getDrivePermissionKey(uid) {
+            return 'drive_permission_granted_' + (uid || 'guest');
+        }
+
+        function loadDrivePermissionState(uid) {
+            drivePermissionGranted = uid ? localStorage.getItem(getDrivePermissionKey(uid)) === 'true' : false;
+            return drivePermissionGranted;
+        }
+
+        function markDrivePermissionGranted(uid) {
+            drivePermissionGranted = true;
+            if (uid) localStorage.setItem(getDrivePermissionKey(uid), 'true');
+        }
 
         function initGoogleDriveAuth() {
             if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
@@ -3568,8 +3582,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                         return;
                     }
                     accessToken = response.access_token;
-                    drivePermissionGranted = true;
-                    localStorage.setItem('drive_permission_granted', 'true');
+                    markDrivePermissionGranted(appUserKey);
                     await uploadBackupToDrive();
                 }
             });
@@ -3860,9 +3873,22 @@ getRedirectResult(auth).then(r=>{if(r){const c=GoogleAuthProvider.credentialFrom
 onAuthStateChanged(auth,user=>{
 if(user){ 
   switchAppUser(user.uid);
+  if(typeof loadDrivePermissionState==='function') loadDrivePermissionState(user.uid);
   hide();
+  // عند تسجيل الدخول بالبريد الإلكتروني: اطلب صلاحية Google Drive مرة واحدة فقط.
+  if(user.providerData?.some(p=>p.providerId==='password') && !drivePermissionGranted){
+    setTimeout(()=>{
+      try{
+        initGoogleDriveAuth();
+        if(tokenClient) tokenClient.requestAccessToken({prompt:'consent'});
+      }catch(err){
+        console.warn('Drive permission request skipped:', err);
+      }
+    }, 500);
+  }
 }else{
   switchAppUser('guest');
+  loadDrivePermissionState(null);
   show();
 }
 }); window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>{
