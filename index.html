@@ -1771,7 +1771,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         function renderSessionItem(item, pending = false) {
             const div = document.createElement('div');
             div.className = 'today-session-item';
-            div.onclick = () => item.isGroup ? openGroupDetailsPage(item.index) : openStudentDetailsPage(item.index);
+            div.onclick = () => pending
+                ? openPendingSession(item)
+                : (item.isGroup ? openGroupDetailsPage(item.index) : openStudentDetailsPage(item.index));
             let statusText = '';
             if (item.status === 'present') statusText = ' — حاضر';
             else if (item.status === 'absent') statusText = ' — غائب';
@@ -1785,6 +1787,44 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <div class="today-item-time">${pending ? 'معلقة' : escapeHtml(item.time)}</div>
             `;
             return div;
+        }
+
+        function openPendingSession(item) {
+            if (!item) return;
+
+            // هذا المسار خاص بالحصة المعلقة فقط: افتح صفحة التسجيل مباشرة على يوم الحصة المطلوب.
+            if (item.isGroup) {
+                selectedGroupIndex = item.index;
+                renderGroupDetail(item.index);
+                navigateTo('page3');
+            } else {
+                selectedStudentIndex = item.index;
+                renderStudentDetail(item.index);
+                navigateTo('page5');
+            }
+
+            requestAnimationFrame(() => {
+                const pageId = item.isGroup ? 'page3' : 'page5';
+                const page = document.getElementById(pageId);
+                if (!page) return;
+
+                const sessionsCard = page.querySelector('.sessions-section-card');
+                if (!sessionsCard) return;
+
+                const title = sessionsCard.querySelector('.detail-section-title');
+                const content = sessionsCard.querySelector('.detail-section-content');
+                const icon = title ? title.querySelector('.section-collapse-icon') : null;
+
+                // افتح قائمة تسجيل الحصص فقط للحصة المعلقة التي تم الضغط عليها.
+                if (content) content.style.display = '';
+                if (icon) icon.textContent = '⌃';
+
+                const rows = sessionsCard.querySelectorAll('.day-row');
+                const targetRow = rows[item.dayIndex];
+                if (targetRow) {
+                    targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            });
         }
 
         function renderTodaySessions() {
