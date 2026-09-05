@@ -3818,8 +3818,159 @@ if(user){
 </script>
 
 
+<style id="pdfExportStyles">
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body.pdf-exporting { background:#fff !important; color:#111 !important; }
+  body.pdf-exporting > *:not(#pdfExportRoot) { display:none !important; }
+  body.pdf-exporting #pdfExportRoot { display:block !important; position:static !important; width:100% !important; min-height:0 !important; background:#fff !important; color:#111 !important; direction:rtl; }
+  #pdfExportRoot * { box-sizing:border-box; }
+  .pdf-page-title { page-break-after:avoid; }
+  .pdf-section, .pdf-person-card, .pdf-group-card { break-inside:avoid; page-break-inside:avoid; }
+  .pdf-table tr { break-inside:avoid; page-break-inside:avoid; }
+}
+#pdfExportRoot { display:none; direction:rtl; font-family:Arial, Tahoma, sans-serif; color:#111; background:#fff; line-height:1.55; }
+.pdf-export-wrap { width:100%; max-width:900px; margin:0 auto; }
+.pdf-cover { text-align:center; border-bottom:2px solid #0284c7; padding-bottom:12px; margin-bottom:16px; }
+.pdf-cover h1 { margin:0; color:#075985; font-size:26px; }
+.pdf-cover .author { margin-top:4px; font-weight:700; color:#444; }
+.pdf-cover .meta { margin-top:8px; font-size:12px; color:#666; }
+.pdf-page-title { color:#075985; font-size:18px; margin:18px 0 8px; border-right:4px solid #0284c7; padding-right:8px; }
+.pdf-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; margin-bottom:12px; }
+.pdf-summary-item { border:1px solid #d7dee5; border-radius:8px; padding:8px; text-align:center; background:#f8fafc; }
+.pdf-summary-item b { display:block; font-size:11px; color:#555; }
+.pdf-summary-item span { display:block; margin-top:3px; font-weight:800; font-size:14px; }
+.pdf-group-card,.pdf-person-card { border:1px solid #d7dee5; border-radius:9px; padding:10px; margin:8px 0; background:#fff; }
+.pdf-card-head { display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed #cbd5e1; padding-bottom:6px; margin-bottom:7px; }
+.pdf-card-head strong { color:#075985; }
+.pdf-muted { color:#666; font-size:11px; }
+.pdf-table { width:100%; border-collapse:collapse; font-size:11px; }
+.pdf-table th,.pdf-table td { border:1px solid #d7dee5; padding:5px 6px; text-align:right; vertical-align:top; }
+.pdf-table th { background:#eef6fb; font-weight:800; }
+.pdf-money { font-weight:800; }
+.pdf-status-paid { color:#15803d; font-weight:800; }
+.pdf-status-unpaid { color:#b91c1c; font-weight:800; }
+.pdf-note { margin-top:7px; padding:6px 8px; border:1px solid #e2e8f0; border-radius:6px; background:#f8fafc; font-size:11px; }
+.pdf-footer { margin-top:18px; padding-top:8px; border-top:1px solid #d7dee5; text-align:center; color:#777; font-size:10px; }
+@media (max-width:700px) { .pdf-summary { grid-template-columns:repeat(2,1fr); } }
+</style>
+<div id="pdfExportRoot" aria-hidden="true"></div>
 <script>
-function exportPDFReport(){ window.print(); }
+function pdfEsc(value){
+    if (typeof escapeHtml === 'function') return escapeHtml(value == null ? '' : String(value));
+    return String(value == null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function pdfMoney(value){
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : 0;
+}
+function pdfStatus(paid){ return paid ? '<span class="pdf-status-paid">مسدد</span>' : '<span class="pdf-status-unpaid">غير مسدد</span>'; }
+function buildPDFExportReport(){
+    const root = document.getElementById('pdfExportRoot');
+    if (!root) return;
+    const now = new Date();
+    const dateText = (()=>{ try { return new Intl.DateTimeFormat('ar-EG-u-ca-gregory-nu-arab',{day:'numeric',month:'long',year:'numeric'}).format(now); } catch(e){ return now.toLocaleDateString('ar-EG'); } })();
+    const groupRows = [];
+    let groupsMonth = 0, groupsDebt = 0, groupsPaid = 0, groupsUnpaid = 0;
+    (Array.isArray(groups) ? groups : []).forEach(group => {
+        const sessions = typeof calculateGroupSessionCount === 'function' ? calculateGroupSessionCount(group) : 0;
+        const monthMoney = sessions * pdfMoney(group.price);
+        const debt = pdfMoney(group.previousDebt);
+        const required = (group.isMonthPaid ? 0 : monthMoney) + (group.isDebtPaid ? 0 : debt);
+        groupsMonth += group.isMonthPaid ? 0 : monthMoney;
+        groupsDebt += group.isDebtPaid ? 0 : debt;
+        if (group.isMonthPaid && (debt === 0 || group.isDebtPaid)) groupsPaid += 1; else groupsUnpaid += 1;
+        groupRows.push({group,sessions,monthMoney,debt,required});
+    });
+    const studentRows = [];
+    let studentsMonth = 0, studentsDebt = 0, studentsPaid = 0, studentsUnpaid = 0;
+    (Array.isArray(students) ? students : []).forEach(student => {
+        const metrics = typeof calculateStudentMetrics === 'function' ? calculateStudentMetrics(student) : {presentSessionsCount:0,totalHeldSessions:0,attendanceRate:0,hwRate:null,sessionRate:null,examRate:null,overallText:'',overallColor:''};
+        const sessions = typeof calculateStudentSessionCount === 'function' ? calculateStudentSessionCount(student) : 0;
+        const monthMoney = sessions * pdfMoney(student.price);
+        const debt = pdfMoney(student.previousDebt);
+        const required = (student.isPaid ? 0 : monthMoney) + (student.isDebtPaid ? 0 : debt);
+        studentsMonth += student.isPaid ? 0 : monthMoney;
+        studentsDebt += student.isDebtPaid ? 0 : debt;
+        if (student.isPaid && (debt === 0 || student.isDebtPaid)) studentsPaid += 1; else studentsUnpaid += 1;
+        studentRows.push({student,metrics,sessions,monthMoney,debt,required});
+    });
+    const totalRequired = groupsMonth + groupsDebt + studentsMonth + studentsDebt;
+    const totalPeople = groupRows.length + studentRows.length;
+    root.innerHTML = `
+      <div class="pdf-export-wrap">
+        <div class="pdf-cover">
+          <h1>نظم دروسك</h1>
+          <div class="author">تصميم وتنفيذ مستر حسام حَلّيص</div>
+          <div class="meta">تقرير شامل للبيانات المالية والتعليمية — ${pdfEsc(dateText)}</div>
+        </div>
+        <div class="pdf-page-title">الملخص العام</div>
+        <div class="pdf-summary">
+          <div class="pdf-summary-item"><b>إجمالي المطلوب</b><span>${totalRequired} جنيه</span></div>
+          <div class="pdf-summary-item"><b>مطلوب الشهر</b><span>${groupsMonth + studentsMonth} جنيه</span></div>
+          <div class="pdf-summary-item"><b>المتأخرات</b><span>${groupsDebt + studentsDebt} جنيه</span></div>
+          <div class="pdf-summary-item"><b>إجمالي السجلات</b><span>${totalPeople}</span></div>
+        </div>
+
+        <div class="pdf-page-title">المجموعات</div>
+        ${groupRows.length ? groupRows.map(({group,sessions,monthMoney,debt,required}) => `
+          <div class="pdf-group-card">
+            <div class="pdf-card-head"><strong>${pdfEsc(group.name || 'مجموعة بدون اسم')}</strong><span class="pdf-muted">${pdfEsc(getDaysDisplayString(group) || '')}${group.time ? ' — ' + pdfEsc(group.time) : ''}</span></div>
+            <table class="pdf-table"><tr><th>الحصص</th><th>سعر الحصة</th><th>حساب الشهر</th><th>المتأخرات</th><th>المطلوب</th><th>الحالة</th></tr>
+            <tr><td>${sessions}</td><td>${pdfMoney(group.price)} ج</td><td>${monthMoney} ج</td><td>${debt} ج</td><td class="pdf-money">${required} ج</td><td>${group.isMonthPaid && (debt === 0 || group.isDebtPaid) ? pdfStatus(true) : pdfStatus(false)}</td></tr></table>
+            ${group.phone ? `<div class="pdf-note">الهاتف: ${pdfEsc(group.phone)}</div>` : ''}
+            ${group.debtNote ? `<div class="pdf-note">ملاحظة المتأخرات: ${pdfEsc(group.debtNote)}</div>` : ''}
+          </div>`).join('') : '<div class="pdf-note">لا توجد مجموعات مسجلة.</div>'}
+
+        <div class="pdf-page-title">التلاميذ والتقارير الشهرية</div>
+        ${studentRows.length ? studentRows.map(({student,metrics,sessions,monthMoney,debt,required}) => {
+            const detailRows = (student.daysData || []).filter(d => d.status === 'present' || d.status === 'absent').map(d => {
+                const status = d.status === 'present' ? 'حاضر' : 'غائب';
+                const evals = [];
+                if (d.homeworkGrade !== undefined && d.homeworkGrade !== '') evals.push('الواجب: ' + pdfEsc(d.homeworkGrade) + '/10');
+                if (d.sessionGrade !== undefined && d.sessionGrade !== '') evals.push('التسميع: ' + pdfEsc(d.sessionGrade) + '/10');
+                if (d.examGrade !== undefined && d.examGrade !== '') evals.push('الاختبار: ' + pdfEsc(d.examGrade));
+                if (d.notes) evals.push('ملاحظة: ' + pdfEsc(d.notes));
+                return `<tr><td>${pdfEsc(d.label || '')}</td><td>${pdfEsc(d.dateStr || '')}</td><td>${status}</td><td>${evals.join(' | ') || '—'}</td></tr>`;
+            }).join('');
+            return `
+            <div class="pdf-person-card">
+              <div class="pdf-card-head"><strong>${pdfEsc(student.name || 'تلميذ بدون اسم')}</strong><span class="pdf-muted">${student.grade ? 'الصف: ' + pdfEsc(student.grade) : 'تلميذ فردي'}</span></div>
+              <table class="pdf-table"><tr><th>الحضور</th><th>الواجبات</th><th>التسميع</th><th>الاختبار</th><th>التقييم العام</th></tr>
+              <tr><td>${metrics.attendanceRate}% (${metrics.presentSessionsCount} من ${metrics.totalHeldSessions})</td><td>${metrics.hwRate !== null ? metrics.hwRate + '%' : 'غير مسجل'}</td><td>${metrics.sessionRate !== null ? metrics.sessionRate + '%' : 'غير مسجل'}</td><td>${metrics.examRate !== null ? metrics.examRate + '%' : 'غير مسجل'}</td><td>${pdfEsc(metrics.overallText || 'غير محدد')}</td></tr></table>
+              <table class="pdf-table" style="margin-top:7px"><tr><th>الحصص المحتسبة</th><th>سعر الحصة</th><th>حساب الشهر</th><th>المتأخرات</th><th>المطلوب</th><th>الحالة</th></tr>
+              <tr><td>${sessions}</td><td>${pdfMoney(student.price)} ج</td><td>${monthMoney} ج</td><td>${debt} ج</td><td class="pdf-money">${required} ج</td><td>${student.isPaid && (debt === 0 || student.isDebtPaid) ? pdfStatus(true) : pdfStatus(false)}</td></tr></table>
+              ${student.phone ? `<div class="pdf-note">الهاتف: ${pdfEsc(student.phone)}</div>` : ''}
+              ${student.debtNote ? `<div class="pdf-note">ملاحظة المتأخرات: ${pdfEsc(student.debtNote)}</div>` : ''}
+              <div class="pdf-page-title" style="font-size:13px;margin-top:12px">سجل الحضور والتقييم</div>
+              ${detailRows ? `<table class="pdf-table"><tr><th>اليوم</th><th>التاريخ</th><th>الحالة</th><th>التقييمات والملاحظات</th></tr>${detailRows}</table>` : '<div class="pdf-note">لا توجد حصص مسجلة.</div>'}
+            </div>`;
+        }).join('') : '<div class="pdf-note">لا توجد تلاميذ مسجلون.</div>'}
+
+        <div class="pdf-footer">تم إنشاء التقرير من بيانات التطبيق الحالية فقط — لا يتم تعديل أو حذف أي بيانات أثناء التصدير.</div>
+      </div>`;
+}
+function exportPDFReport(){
+    try {
+        buildPDFExportReport();
+        const root = document.getElementById('pdfExportRoot');
+        if (!root) throw new Error('PDF_EXPORT_ROOT_NOT_FOUND');
+        document.title = 'تقرير_نظم_دروسك_' + new Date().toISOString().slice(0,10);
+        document.body.classList.add('pdf-exporting');
+        root.setAttribute('aria-hidden','false');
+        setTimeout(() => {
+            window.print();
+            setTimeout(() => {
+                document.body.classList.remove('pdf-exporting');
+                root.setAttribute('aria-hidden','true');
+                document.title = 'نظم دروسك';
+            }, 700);
+        }, 120);
+    } catch (err) {
+        console.error('PDF export error:', err);
+        if (typeof showAppAlert === 'function') showAppAlert('تعذر إنشاء التقرير', 'حدث خطأ أثناء تجهيز تقرير PDF. بياناتك لم تتأثر.');
+    }
+}
 
 function recycleGet(){
     return JSON.parse(localStorage.getItem(userStorageKey('recycle_bin')) || '[]');
