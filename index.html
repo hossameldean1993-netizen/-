@@ -1574,23 +1574,50 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             return `${String(t.hour).padStart(2,'0')}:${String(t.minute).padStart(2,'0')} ${t.period === 'PM' ? 'م' : 'ص'}`;
         }
 
-        function scheduleTimeToMinutes(hour, minute, period) {
-            const t = normalizeTimeParts(hour, minute, period);
-            let h = t.hour % 12;
-            if (t.period === 'PM') h += 12;
-            return h * 60 + t.minute;
-        }
-
+        /* نظام الوقت الموحد:
+           كل أوقات الجدول تُعامل كـ (ساعة + دقيقة + ص/م) ثم تُحوّل داخلياً إلى
+           دقائق من بداية اليوم. لا توجد مقارنة نصية للوقت ولا اعتماد على الساعة وحدها. */
         function parseStoredTime(value) {
-            const raw = String(value || '').trim();
+            const raw = String(value ?? '').trim();
             if (!raw) return { hour: '', minute: '', period: 'AM' };
             const match = raw.match(/(\d{1,2})\s*[:٫.]\s*(\d{1,2})/);
             if (!match) return { hour: '', minute: '', period: 'AM' };
             let h = parseInt(match[1], 10);
             const m = Math.min(59, Math.max(0, parseInt(match[2], 10) || 0));
             const isPM = /(?:م|مساء|مساءً|عصر|عصراً|عصرًا|pm)/i.test(raw);
-            if (h > 12) { h = ((h - 1) % 12) + 1; return { hour: h, minute: m, period: 'PM' }; }
+            if (h > 12) {
+                h = ((h - 1) % 12) + 1;
+                return { hour: h, minute: m, period: 'PM' };
+            }
             return { hour: h, minute: m, period: isPM ? 'PM' : 'AM' };
+        }
+
+        function getCurrentTimeMinutes(now = new Date()) {
+            return now.getHours() * 60 + now.getMinutes();
+        }
+
+        function getScheduleTimeMinutes(obj, end = false) {
+            if (!obj) return null;
+            const suffix = end ? 'End' : '';
+            const hourKey = `time${suffix}Hour`;
+            const minuteKey = `time${suffix}Minute`;
+            const periodKey = `time${suffix}Period`;
+            const textKey = end ? 'timeEnd' : 'time';
+
+            const hasExplicitParts =
+                obj[hourKey] !== undefined && obj[hourKey] !== null && String(obj[hourKey]).trim() !== '' &&
+                obj[minuteKey] !== undefined && obj[minuteKey] !== null && String(obj[minuteKey]).trim() !== '' &&
+                obj[periodKey] !== undefined && obj[periodKey] !== null && String(obj[periodKey]).trim() !== '';
+
+            const parsed = hasExplicitParts
+                ? normalizeTimeParts(obj[hourKey], obj[minuteKey], obj[periodKey])
+                : parseStoredTime(obj[textKey]);
+
+            if (parsed.hour === '') return null;
+
+            let hour24 = parsed.hour % 12;
+            if (parsed.period === 'PM') hour24 += 12;
+            return hour24 * 60 + parsed.minute;
         }
 
         function attachTwoDigitTimeInputs() {
@@ -1654,13 +1681,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             };
         }
 
-        function parseScheduleTime(timeValue) {
-            if (!timeValue) return null;
-            const parsed = parseStoredTime(timeValue);
-            if (!parsed.hour) return null;
-            return scheduleTimeToMinutes(parsed.hour, parsed.minute, parsed.period);
-        }
-
         function getDayDateKey(obj, dayObj) {
             if (!dayObj) return '';
             if (dayObj.dateKey) return dayObj.dateKey;
@@ -1683,9 +1703,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
             if (dueStart < todayStart) return true;
             if (dueStart > todayStart) return false;
-            const scheduledMinutes = parseScheduleTime(obj.time);
+            const scheduledMinutes = getScheduleTimeMinutes(obj);
             if (scheduledMinutes === null) return true;
-            return (now.getHours() * 60 + now.getMinutes()) >= scheduledMinutes;
+            return getCurrentTimeMinutes(now) >= scheduledMinutes;
         }
 
         function isTodaySession(obj, dayObj, now = new Date()) {
@@ -1695,9 +1715,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const todayKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
             if (dateKey !== todayKey) return false;
             // تظل الحصة في "حصص اليوم" حتى وقت انتهاء الحصة، ثم تنتقل إلى "المعلقة" إذا لم تُسجل.
-            const endMinutes = parseScheduleTime(obj.timeEnd);
+            const endMinutes = getScheduleTimeMinutes(obj, true);
             if (endMinutes === null) return true;
-            const nowMinutes = now.getHours() * 60 + now.getMinutes();
+            const nowMinutes = getCurrentTimeMinutes(now);
             return nowMinutes < endMinutes;
         }
 
@@ -1713,7 +1733,10 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     dayIndex,
                     isGroup,
                     dateKey: getDayDateKey(obj, dayObj),
-                    status: dayObj.status || ''
+                    status: dayObj.status || '',
+                    timeHour: obj.timeHour,
+                    timeMinute: obj.timeMinute,
+                    timePeriod: obj.timePeriod
                 };
                 if (isTodaySession(obj, dayObj, now)) todayItems.push(item);
                 if (isSessionDue(obj, dayObj, now)) pendingItems.push(item);
@@ -1778,8 +1801,16 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             pendingContainer.innerHTML = '';
 
             const { todayItems, pendingItems } = collectSessionItems(now);
-            todayItems.sort((a,b) => String(a.time).localeCompare(String(b.time)));
-            pendingItems.sort((a,b) => String(a.dateKey).localeCompare(String(b.dateKey)) || String(a.time).localeCompare(String(b.time)));
+            const compareSessionTime = (a, b) => {
+                const aMinutes = getScheduleTimeMinutes(a, false);
+                const bMinutes = getScheduleTimeMinutes(b, false);
+                if (aMinutes === null && bMinutes === null) return 0;
+                if (aMinutes === null) return 1;
+                if (bMinutes === null) return -1;
+                return aMinutes - bMinutes;
+            };
+            todayItems.sort(compareSessionTime);
+            pendingItems.sort((a,b) => String(a.dateKey).localeCompare(String(b.dateKey)) || compareSessionTime(a,b));
 
             if (!todayItems.length) {
                 todayContainer.innerHTML = `<div class="no-sessions">لا توجد حصص اليوم</div>`;
@@ -1862,15 +1893,42 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         function migrateScheduleTimes() {
             const migrate = obj => {
                 if (!obj) return;
-                if (obj.timeHour && obj.timeMinute !== undefined && obj.timePeriod) return;
-                const t = parseStoredTime(obj.time || '');
-                if (t.hour !== '') {
-                    obj.timeHour = t.hour;
-                    obj.timeMinute = t.minute;
-                    obj.timePeriod = t.period;
-                    obj.time = formatScheduleTime(t.hour, t.minute, t.period);
-                }
+
+                const normalizeStoredPart = (isEnd = false) => {
+                    const suffix = isEnd ? 'End' : '';
+                    const hourKey = `time${suffix}Hour`;
+                    const minuteKey = `time${suffix}Minute`;
+                    const periodKey = `time${suffix}Period`;
+                    const textKey = isEnd ? 'timeEnd' : 'time';
+
+                    const hasParts =
+                        obj[hourKey] !== undefined && obj[hourKey] !== null && String(obj[hourKey]).trim() !== '' &&
+                        obj[minuteKey] !== undefined && obj[minuteKey] !== null && String(obj[minuteKey]).trim() !== '' &&
+                        obj[periodKey] !== undefined && obj[periodKey] !== null && String(obj[periodKey]).trim() !== '';
+
+                    const t = hasParts
+                        ? normalizeTimeParts(obj[hourKey], obj[minuteKey], obj[periodKey])
+                        : parseStoredTime(obj[textKey] || '');
+
+                    if (t.hour === '') {
+                        obj[hourKey] = '';
+                        obj[minuteKey] = '';
+                        obj[periodKey] = 'AM';
+                        if (isEnd) obj.timeEnd = '';
+                        else obj.time = '';
+                        return;
+                    }
+
+                    obj[hourKey] = t.hour;
+                    obj[minuteKey] = t.minute;
+                    obj[periodKey] = t.period;
+                    obj[textKey] = formatScheduleTime(t.hour, t.minute, t.period);
+                };
+
+                normalizeStoredPart(false);
+                normalizeStoredPart(true);
             };
+
             groups.forEach(migrate);
             students.forEach(migrate);
         }
