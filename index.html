@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="format-detection" content="telephone=no">
@@ -365,9 +366,51 @@ html, body, button, input, select, textarea, option {
         .btn-red-3d { background: var(--btn-red-top) !important; box-shadow: 0 2px 5px rgba(0,0,0,.08) !important; }
         .btn-red-3d:active { box-shadow: 0 1px 0px var(--btn-red-shadow) !important; }
 
-        .control-buttons-wrapper { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+        .drive-backup-status {
+            grid-column: 1 / -1;
+            width: 100%;
+            min-height: 42px;
+            padding: 7px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--day-row-bg);
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            text-align: center;
+            font-size: .76rem;
+            font-weight: 700;
+        }
+        .drive-backup-status b { color: var(--text-dark); }
+        .drive-backup-status-icon { font-size: .95rem; }
+        body.dark-mode .drive-backup-status { background: #252a30; }
+
+        .control-buttons-wrapper { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
         .settings-page-card .control-buttons-wrapper > .settings-btn,
-        .settings-page-card .control-buttons-wrapper > .btn-full { width: 100%; min-height: 42px; }
+        .settings-page-card .control-buttons-wrapper > .btn-full {
+            width: 100%;
+            min-height: 48px;
+            padding: 10px 8px;
+            border: 1px solid rgba(0,0,0,.12);
+            border-bottom: 4px solid var(--btn-cyan-shadow);
+            border-radius: 12px;
+            box-shadow: 0 4px 0 var(--btn-cyan-shadow), 0 6px 10px rgba(0,0,0,.12);
+            transition: transform .08s ease, box-shadow .08s ease;
+        }
+        .settings-page-card .control-buttons-wrapper > .btn-red-3d {
+            border-bottom-color: var(--btn-red-shadow);
+            box-shadow: 0 4px 0 var(--btn-red-shadow), 0 6px 10px rgba(0,0,0,.12) !important;
+        }
+        .settings-page-card .control-buttons-wrapper > .settings-btn:active,
+        .settings-page-card .control-buttons-wrapper > .btn-full:active {
+            transform: translateY(3px) !important;
+            box-shadow: 0 1px 0 var(--btn-cyan-shadow), 0 3px 6px rgba(0,0,0,.10) !important;
+        }
+        .settings-page-card .control-buttons-wrapper > .btn-red-3d:active {
+            box-shadow: 0 1px 0 var(--btn-red-shadow), 0 3px 6px rgba(0,0,0,.10) !important;
+        }
         .btn-full { width: 100%; }
         .grid-2-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .add-btn { padding: 11px; font-size: 0.95rem; }
@@ -442,7 +485,7 @@ html, body, button, input, select, textarea, option {
         .student-notes-container label { font-size: 0.72rem; color: var(--text-muted); font-weight: 700; display: block; margin-bottom: 2px; }
         .student-notes-container input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--card-bg-light); color: var(--text-dark); font-weight: 600; font-size: 0.82rem; outline: none; }
 
-        .debt-input-container { background: var(--day-row-bg); border: 1px solid var(--day-row-border); padding: 10px; border-radius: 10px; margin: 10px 0; display: grid; grid-template-columns: 1.2fr 1fr; gap: 6px; align-items: center; }
+        .debt-input-container { background: var(--day-row-bg); border: 1px solid var(--day-row-border); padding: 10px; border-radius: 10px; margin: 10px 0; display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
         .debt-input-container label { display: block; font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-bottom: 2px; font-weight: 700; }
         .debt-input-container input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--card-bg-light); color: var(--text-dark); font-weight: 700; font-size: 0.82rem; outline: none; text-align: center; }
 
@@ -536,13 +579,7 @@ html, body, button, input, select, textarea, option {
         #studentModal .day-selector-btn, #groupModal .day-selector-btn { padding: 6px 2px; font-size: 0.72rem; }
 
         /* صفا الوقت: من ثم الساعة/الدقائق/ص/م، ثم إلى بنفس الترتيب. */
-        .schedule-time-row {
-            display: grid;
-            grid-template-columns: .55fr 1fr 1fr .72fr .72fr;
-            gap: 5px;
-            width: 100%;
-            align-items: center;
-        }
+        .schedule-time-row { align-items: center; }
         .schedule-time-row .time-range-label {
             width: 100%;
             height: 38px;
@@ -555,20 +592,6 @@ html, body, button, input, select, textarea, option {
             border: 2px solid var(--border-color);
             font-size: .78rem;
             font-weight: 900;
-        }
-        .schedule-time-grid input, .schedule-time-grid button, .schedule-time-row input, .schedule-time-row button {
-            width: 100%;
-            height: 38px;
-            padding: 6px 3px;
-            border: 2px solid var(--border-color);
-            border-radius: 8px;
-            background: var(--bg);
-            color: var(--text-dark);
-            font-size: 0.80rem;
-            font-weight: 800;
-            outline: none;
-            text-align: center;
-            box-sizing: border-box;
         }
         .schedule-time-row input::placeholder { opacity: .45; }
 
@@ -618,7 +641,6 @@ html, body, button, input, select, textarea, option {
             text-align: center;
             box-sizing: border-box;
         }
-        .schedule-time-hint { font-size: 0.68rem; color: var(--text-muted); margin-top: 3px; text-align: center; }
 
         .form-group { margin-bottom: 10px; text-align: right; }
         .form-group label { display: block; margin-bottom: 3px; font-size: 0.78rem; color: var(--text-muted); font-weight: 700; }
@@ -1073,7 +1095,6 @@ html, body, button, input, select, textarea, option {
             width: 100%;
         }
 
-        .debt-input-container { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
         .debt-input-container > div { flex:1 1 180px; }
         .debt-input-container .btn-3d { flex:0 0 auto; min-width:80px; }
 </style>
@@ -1130,9 +1151,21 @@ html, body, button, input, select, textarea, option {
         /* ضبط المسافة أسفل الرأس الثابت فقط لمنع دخول أول بطاقة تحته دون ترك فراغ كبير */
         #page6 > .financial-list-full:first-of-type { margin-top: 0 !important; }
     </style>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4293253189361995" crossorigin="anonymous"></script>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icons/icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+<style id="pwa-background-only">
+html, body { background-color: #e2e5e8 !important; background-image: none !important; }
+</style>
+
+<!-- Login UI -->
+<style>#loginScreen{position:fixed;inset:0;z-index:99999;background:var(--bg,#f5f7fa);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;direction:rtl}#loginScreen[hidden]{display:none!important}.login-card{width:min(100%,390px);background:var(--card-bg-light,#fff);border:2px solid var(--card-blue,#0284c7);border-radius:18px;padding:22px 18px;box-sizing:border-box;box-shadow:0 8px 24px rgba(0,0,0,.10);text-align:center}.login-card h2{margin:0 0 8px;color:var(--card-blue,#0284c7);font-size:1.35rem}.login-card p{margin:0 0 18px;color:var(--text-muted,#667085);font-weight:700}.login-card input{width:100%;box-sizing:border-box;margin:6px 0;padding:12px;border:1px solid var(--border-color,#d0d5dd);border-radius:10px;background:#fff;color:inherit;font-size:1rem;outline:none}.login-card button{width:100%;border:0;border-radius:10px;padding:12px;margin-top:9px;font-weight:800;font-size:1rem;cursor:pointer}.login-primary{background:#0284c7;color:#fff}.login-google{background:#fff;color:#222;border:1px solid #ccc!important}.login-secondary{background:transparent;color:#0284c7}.login-divider{display:flex;align-items:center;gap:8px;margin:13px 0;color:#98a2b3;font-weight:700}.login-divider:before,.login-divider:after{content:'';height:1px;background:#d0d5dd;flex:1}#loginMessage{min-height:22px;margin-top:10px;color:#d92d20;font-weight:800;font-size:.9rem}body.login-locked{overflow:hidden}</style>
+    
 </head>
 <body>
+<div id="loginScreen" hidden><div class="login-card"><h2 id="loginTitle">تسجيل الدخول إلى نظم دروسك</h2><p id="loginSubtitle">أدخل بياناتك للدخول إلى حسابك</p><form id="loginForm" autocomplete="on"><input id="loginUsername" type="text" inputmode="text" autocomplete="username" placeholder="اسم المستخدم" required><input id="loginPassword" type="password" autocomplete="current-password" placeholder="رقم السر" required><button class="login-primary" type="submit" id="loginSubmit">تسجيل الدخول</button></form><button class="login-secondary" type="button" id="registerToggle">إنشاء حساب جديد</button><button class="login-secondary" type="button" id="forgotPasswordButton">نسيت كلمة المرور؟</button><div class="login-divider">أو</div><button class="login-google" type="button" id="googleLoginButton">تسجيل الدخول بحساب Google</button><div id="loginMessage" role="alert"></div></div><div class="login-card" id="registerInfoPage" hidden><h2>إنشاء حساب جديد</h2><p>أنشئ حسابك للبدء باستخدام نظم دروسك</p><ul style="text-align:right;line-height:1.9;padding-right:20px"><li>اكتب اسم مستخدم جديد.</li><li>اختر رقم سر لا يقل عن 6 أحرف أو أرقام.</li><li>بعد إنشاء الحساب سيتم حفظ بياناتك بشكل مستقل.</li></ul><button class="login-primary" type="button" id="startRegister">متابعة إنشاء الحساب</button><button class="login-secondary" type="button" id="backLogin">العودة لتسجيل الدخول</button></div></div>
+
 
     <header>
         <h1 class="app-title">نظم دروسك</h1>
@@ -1156,16 +1189,23 @@ html, body, button, input, select, textarea, option {
     <div id="page7" class="page">
         <div class="settings-page-card">
             <div class="settings-page-title">الإعدادات</div>
+                <div id="driveBackupStatus" class="drive-backup-status" aria-live="polite">
+                    <span class="drive-backup-status-icon">☁️</span>
+                    <span><b>آخر نسخ احتياطي:</b> <span id="lastDriveBackupTime">لم يتم التحقق بعد</span></span>
+                </div>
             <div class="control-buttons-wrapper">
                 <button class="btn-3d btn-red-3d settings-btn" onclick="openStartMonthModal()">بدء شهر جديد</button>
                 <button class="btn-3d btn-red-3d settings-btn" onclick="deleteAllData()">حذف جميع البيانات</button>
-                <button class="btn-3d settings-btn" onclick="exportDataToFile()">النسخ الاحتياطي</button>
-                <button class="btn-3d settings-btn" onclick="triggerRestoreFileInput()">استعادة البيانات</button>
-                <input type="file" id="backupFileInput" accept=".json,application/json,text/json" style="display: none;" onchange="handleRestoreFile(event)">
+                <button class="btn-3d settings-btn" onclick="startGoogleDriveBackup()">النسخ الاحتياطي إلى Google Drive</button>
+                
+                <button class="btn-3d settings-btn" onclick="triggerRestoreFileInput()">استعادة النسخة الاحتياطية</button>
+                <button class="btn-3d settings-btn" onclick="exportPDFReport()">تصدير PDF</button>
+                <button class="btn-3d settings-btn" onclick="openRecycleBin()">سلة المحذوفات</button>
                 <button class="btn-3d btn-full" onclick="toggleTheme()" id="themeToggleText">
                     <span class="theme-icon" aria-hidden="true"></span>
                     <span class="theme-label">الوضع الليلي</span>
                 </button>
+                <button class="btn-3d btn-red-3d settings-btn" onclick="logoutFromGoogle()">خروج من البرنامج</button>
                             </div>
         </div>
     </div>
@@ -1412,7 +1452,27 @@ html, body, button, input, select, textarea, option {
         const dayMap = { "الأحد": 0, "الإثنين": 1, "الثلاثاء": 2, "الأربعاء": 3, "الخميس": 4, "الجمعة": 5, "السبت": 6 };
         const arabicDaysNames = ["السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"];
         
+        let appUserKey = localStorage.getItem('app_user_key') || 'guest';
+
+        function userStorageKey(key) {
+            return key + '_' + appUserKey;
+        }
+
+        function switchAppUser(uid) {
+            appUserKey = uid || 'guest';
+            localStorage.setItem('app_user_key', appUserKey);
+            groups = loadStoredArray('teacher_groups_local');
+            students = loadStoredArray('teacher_students_local');
+            selectedGroupIndex = null;
+            selectedStudentIndex = null;
+            renderTodaySessions();
+            renderMiniCards();
+            renderStudentMiniCards();
+            calculateSummaryTotals();
+        }
+
         function loadStoredArray(key) {
+            key = userStorageKey(key);
             try {
                 const raw = localStorage.getItem(key);
                 if (!raw) return [];
@@ -1475,6 +1535,8 @@ html, body, button, input, select, textarea, option {
             } else if (pageId === 'page6') {
                 document.getElementById('navAccounts').classList.add('active');
             } else if (pageId === 'page7') {
+                loadSavedDriveBackupTime();
+                refreshDriveBackupStatus();
                 document.getElementById('navSettings').classList.add('active');
             }
         }
@@ -1539,23 +1601,51 @@ html, body, button, input, select, textarea, option {
             return `${String(t.hour).padStart(2,'0')}:${String(t.minute).padStart(2,'0')} ${t.period === 'PM' ? 'م' : 'ص'}`;
         }
 
-        function scheduleTimeToMinutes(hour, minute, period) {
-            const t = normalizeTimeParts(hour, minute, period);
-            let h = t.hour % 12;
-            if (t.period === 'PM') h += 12;
-            return h * 60 + t.minute;
-        }
-
+        /* نظام الوقت الموحد:
+           كل أوقات الجدول تُعامل كـ (ساعة + دقيقة + ص/م) ثم تُحوّل داخلياً إلى
+           دقائق من بداية اليوم. لا توجد مقارنة نصية للوقت ولا اعتماد على الساعة وحدها. */
         function parseStoredTime(value) {
-            const raw = String(value || '').trim();
+            const raw = String(value ?? '').trim();
             if (!raw) return { hour: '', minute: '', period: 'AM' };
             const match = raw.match(/(\d{1,2})\s*[:٫.]\s*(\d{1,2})/);
             if (!match) return { hour: '', minute: '', period: 'AM' };
             let h = parseInt(match[1], 10);
             const m = Math.min(59, Math.max(0, parseInt(match[2], 10) || 0));
             const isPM = /(?:م|مساء|مساءً|عصر|عصراً|عصرًا|pm)/i.test(raw);
-            if (h > 12) { h = ((h - 1) % 12) + 1; return { hour: h, minute: m, period: 'PM' }; }
+            if (h > 12) {
+                h = ((h - 1) % 12) + 1;
+                return { hour: h, minute: m, period: 'PM' };
+            }
             return { hour: h, minute: m, period: isPM ? 'PM' : 'AM' };
+        }
+
+        function getCurrentTimeMinutes(now = new Date()) {
+            return now.getHours() * 60 + now.getMinutes();
+        }
+
+        function getScheduleTimeMinutes(obj, end = false) {
+            if (!obj) return null;
+            const suffix = end ? 'End' : '';
+            const hourKey = `time${suffix}Hour`;
+            const minuteKey = `time${suffix}Minute`;
+            const periodKey = `time${suffix}Period`;
+
+            const hour = obj[hourKey];
+            const minute = obj[minuteKey];
+            const period = obj[periodKey];
+
+            if (hour === undefined || hour === null || String(hour).trim() === '' ||
+                minute === undefined || minute === null || String(minute).trim() === '' ||
+                period === undefined || period === null || String(period).trim() === '') {
+                return null;
+            }
+
+            const parsed = normalizeTimeParts(hour, minute, period);
+            if (parsed.hour === '') return null;
+
+            let hour24 = parsed.hour % 12;
+            if (parsed.period === 'PM') hour24 += 12;
+            return hour24 * 60 + parsed.minute;
         }
 
         function attachTwoDigitTimeInputs() {
@@ -1619,13 +1709,6 @@ html, body, button, input, select, textarea, option {
             };
         }
 
-        function parseScheduleTime(timeValue) {
-            if (!timeValue) return null;
-            const parsed = parseStoredTime(timeValue);
-            if (!parsed.hour) return null;
-            return scheduleTimeToMinutes(parsed.hour, parsed.minute, parsed.period);
-        }
-
         function getDayDateKey(obj, dayObj) {
             if (!dayObj) return '';
             if (dayObj.dateKey) return dayObj.dateKey;
@@ -1648,9 +1731,9 @@ html, body, button, input, select, textarea, option {
             const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
             if (dueStart < todayStart) return true;
             if (dueStart > todayStart) return false;
-            const scheduledMinutes = parseScheduleTime(obj.time);
+            const scheduledMinutes = getScheduleTimeMinutes(obj);
             if (scheduledMinutes === null) return true;
-            return (now.getHours() * 60 + now.getMinutes()) >= scheduledMinutes;
+            return getCurrentTimeMinutes(now) >= scheduledMinutes;
         }
 
         function isTodaySession(obj, dayObj, now = new Date()) {
@@ -1660,9 +1743,9 @@ html, body, button, input, select, textarea, option {
             const todayKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
             if (dateKey !== todayKey) return false;
             // تظل الحصة في "حصص اليوم" حتى وقت انتهاء الحصة، ثم تنتقل إلى "المعلقة" إذا لم تُسجل.
-            const endMinutes = parseScheduleTime(obj.timeEnd);
+            const endMinutes = getScheduleTimeMinutes(obj, true);
             if (endMinutes === null) return true;
-            const nowMinutes = now.getHours() * 60 + now.getMinutes();
+            const nowMinutes = getCurrentTimeMinutes(now);
             return nowMinutes < endMinutes;
         }
 
@@ -1678,7 +1761,10 @@ html, body, button, input, select, textarea, option {
                     dayIndex,
                     isGroup,
                     dateKey: getDayDateKey(obj, dayObj),
-                    status: dayObj.status || ''
+                    status: dayObj.status || '',
+                    timeHour: obj.timeHour,
+                    timeMinute: obj.timeMinute,
+                    timePeriod: obj.timePeriod
                 };
                 if (isTodaySession(obj, dayObj, now)) todayItems.push(item);
                 if (isSessionDue(obj, dayObj, now)) pendingItems.push(item);
@@ -1743,8 +1829,16 @@ html, body, button, input, select, textarea, option {
             pendingContainer.innerHTML = '';
 
             const { todayItems, pendingItems } = collectSessionItems(now);
-            todayItems.sort((a,b) => String(a.time).localeCompare(String(b.time)));
-            pendingItems.sort((a,b) => String(a.dateKey).localeCompare(String(b.dateKey)) || String(a.time).localeCompare(String(b.time)));
+            const compareSessionTime = (a, b) => {
+                const aMinutes = getScheduleTimeMinutes(a, false);
+                const bMinutes = getScheduleTimeMinutes(b, false);
+                if (aMinutes === null && bMinutes === null) return 0;
+                if (aMinutes === null) return 1;
+                if (bMinutes === null) return -1;
+                return aMinutes - bMinutes;
+            };
+            todayItems.sort(compareSessionTime);
+            pendingItems.sort((a,b) => String(a.dateKey).localeCompare(String(b.dateKey)) || compareSessionTime(a,b));
 
             if (!todayItems.length) {
                 todayContainer.innerHTML = `<div class="no-sessions">لا توجد حصص اليوم</div>`;
@@ -1827,15 +1921,42 @@ html, body, button, input, select, textarea, option {
         function migrateScheduleTimes() {
             const migrate = obj => {
                 if (!obj) return;
-                if (obj.timeHour && obj.timeMinute !== undefined && obj.timePeriod) return;
-                const t = parseStoredTime(obj.time || '');
-                if (t.hour !== '') {
-                    obj.timeHour = t.hour;
-                    obj.timeMinute = t.minute;
-                    obj.timePeriod = t.period;
-                    obj.time = formatScheduleTime(t.hour, t.minute, t.period);
-                }
+
+                const normalizeStoredPart = (isEnd = false) => {
+                    const suffix = isEnd ? 'End' : '';
+                    const hourKey = `time${suffix}Hour`;
+                    const minuteKey = `time${suffix}Minute`;
+                    const periodKey = `time${suffix}Period`;
+                    const textKey = isEnd ? 'timeEnd' : 'time';
+
+                    const hasParts =
+                        obj[hourKey] !== undefined && obj[hourKey] !== null && String(obj[hourKey]).trim() !== '' &&
+                        obj[minuteKey] !== undefined && obj[minuteKey] !== null && String(obj[minuteKey]).trim() !== '' &&
+                        obj[periodKey] !== undefined && obj[periodKey] !== null && String(obj[periodKey]).trim() !== '';
+
+                    const t = hasParts
+                        ? normalizeTimeParts(obj[hourKey], obj[minuteKey], obj[periodKey])
+                        : parseStoredTime(obj[textKey] || '');
+
+                    if (t.hour === '') {
+                        obj[hourKey] = '';
+                        obj[minuteKey] = '';
+                        obj[periodKey] = 'AM';
+                        if (isEnd) obj.timeEnd = '';
+                        else obj.time = '';
+                        return;
+                    }
+
+                    obj[hourKey] = t.hour;
+                    obj[minuteKey] = t.minute;
+                    obj[periodKey] = t.period;
+                    obj[textKey] = formatScheduleTime(t.hour, t.minute, t.period);
+                };
+
+                normalizeStoredPart(false);
+                normalizeStoredPart(true);
             };
+
             groups.forEach(migrate);
             students.forEach(migrate);
         }
@@ -1870,8 +1991,8 @@ html, body, button, input, select, textarea, option {
             try {
                 const groupsJson = JSON.stringify(groups);
                 const studentsJson = JSON.stringify(students);
-                localStorage.setItem('teacher_groups_local', groupsJson);
-                localStorage.setItem('teacher_students_local', studentsJson);
+                localStorage.setItem(userStorageKey('teacher_groups_local'), groupsJson);
+                localStorage.setItem(userStorageKey('teacher_students_local'), studentsJson);
             } catch (err) {
                 console.error('Save data error:', err);
                 showAppAlert('تعذر حفظ البيانات', 'مساحة التخزين في الهاتف ممتلئة أو غير متاحة. بياناتك الحالية لم تُحذف من الذاكرة. يُفضّل عمل نسخة احتياطية ثم تحرير مساحة.');
@@ -1934,7 +2055,33 @@ html, body, button, input, select, textarea, option {
                 restoreSectionState('singleStudentDetail', studentSectionState);
             }
             if (document.getElementById('page6').classList.contains('active')) renderFinancialLists();
+
+            // نسخ احتياطي تلقائي بعد أي عملية حفظ ناجحة
+            scheduleAutoDriveBackup();
             return true;
+        }
+
+        let autoDriveBackupTimer = null;
+
+        function scheduleAutoDriveBackup() {
+            if (autoDriveBackupTimer) clearTimeout(autoDriveBackupTimer);
+            autoDriveBackupTimer = setTimeout(async () => {
+                try {
+                    if (typeof uploadBackupToDrive !== 'function') return;
+                    if (typeof accessToken !== 'undefined' && accessToken) {
+                        await uploadBackupToDrive();
+                        return;
+                    }
+                    // إذا كانت صلاحية Drive ممنوحة سابقًا، جدّد الرمز بصمت عند الحاجة
+                    // حتى يستمر النسخ التلقائي بعد انتهاء صلاحية الرمز الحالي.
+                    if (drivePermissionGranted && typeof initGoogleDriveAuth === 'function') {
+                        initGoogleDriveAuth();
+                        if (tokenClient) tokenClient.requestAccessToken({ prompt: '' });
+                    }
+                } catch (err) {
+                    console.warn('Auto backup skipped:', err);
+                }
+            }, 3000);
         }
 
         function generateDatesForGroup(day1Name, day2Name, startDateStr, defaultStatus = 'present', day3Name = '', day4Name = '', ...extraDayNames) {
@@ -2096,6 +2243,8 @@ html, body, button, input, select, textarea, option {
             if (!pending) return;
             const obj = pending.type === 'group' ? groups[pending.index] : students[pending.index];
             if (!obj) return;
+            const paidDebtAmount = Math.max(0, parseFloat(obj.previousDebt) || 0);
+            addCollectedPayment(obj, paidDebtAmount, 'debt');
             obj.previousDebt = 0;
             obj.debtHistory = [];
             obj.debtNote = '';
@@ -2145,6 +2294,7 @@ html, body, button, input, select, textarea, option {
                 showAppAlert('استخدم الدفع الكامل', 'هذا المبلغ يساوي أو يتجاوز كامل المتأخرات. اختر «دفع المتأخرات بالكامل».');
                 return;
             }
+            addCollectedPayment(obj, amount, 'debt');
             applyDebtPayment(obj, amount);
             window.pendingDebtPayment = null;
             saveData();
@@ -2247,10 +2397,24 @@ html, body, button, input, select, textarea, option {
 
         function normalizeImportedData(data) {
             if (!data || typeof data !== 'object') return null;
-            if (!Array.isArray(data.groups) || !Array.isArray(data.students)) return null;
+
+            // دعم صيغة النسخ الحالية الخاصة بـ Google Drive.
+            let importedGroups = Array.isArray(data.groups) ? data.groups : null;
+            let importedStudents = Array.isArray(data.students) ? data.students : null;
+
+            // دعم صيغة ملف النسخ المحلي القديمة/المضافة:
+            // teacher_groups_local و teacher_students_local
+            if (!importedGroups && Array.isArray(data.teacher_groups_local)) {
+                importedGroups = data.teacher_groups_local;
+            }
+            if (!importedStudents && Array.isArray(data.teacher_students_local)) {
+                importedStudents = data.teacher_students_local;
+            }
+
+            if (!Array.isArray(importedGroups) || !Array.isArray(importedStudents)) return null;
             return {
-                groups: data.groups.filter(item => item && typeof item === 'object'),
-                students: data.students.filter(item => item && typeof item === 'object')
+                groups: importedGroups.filter(item => item && typeof item === 'object'),
+                students: importedStudents.filter(item => item && typeof item === 'object')
             };
         }
 
@@ -2258,8 +2422,8 @@ html, body, button, input, select, textarea, option {
             showAppConfirm('تحذير', 'سيتم حذف جميع البيانات بالكامل (المجموعات والتلاميذ)!', function() {
                 groups = [];
                 students = [];
-                localStorage.removeItem('teacher_groups_local');
-                localStorage.removeItem('teacher_students_local');
+                localStorage.removeItem(userStorageKey('teacher_groups_local'));
+                localStorage.removeItem(userStorageKey('teacher_students_local'));
                 calculateSummaryTotals();
                 renderTodaySessions();
                 renderMiniCards();
@@ -2269,12 +2433,84 @@ html, body, button, input, select, textarea, option {
         }
 
         function deleteGroup(index) {
-            showAppConfirm('حذف', `حذف مجموعة ${groups[index].name}؟`, function() {
+            showAppConfirm('حذف', `نقل مجموعة ${groups[index].name} إلى سلة المحذوفات؟`, function() {
+                recycleAdd('group', groups[index]);
                 groups.splice(index, 1);
                 if (selectedGroupIndex === index) selectedGroupIndex = null;
                 saveData();
                 navigateTo('page2');
             });
+        }
+
+        // ===== سجل التحصيل الفعلي: مستقل عن قوائم المطلوب والمتبقي، ويُحسب للشهر الحالي فقط =====
+        function getCollectionMonthKey(date = new Date()) {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        function ensurePaymentHistory(obj) {
+            if (!obj) return [];
+            if (!Array.isArray(obj.paymentHistory)) {
+                obj.paymentHistory = [];
+                // توافق مع البيانات القديمة: الحالات المدفوعة سابقًا تمثل مبالغ محصلة بالفعل.
+                // تُنسب للشهر المسجل على العنصر حتى لا تُخلط مع تحصيل شهر آخر.
+                const legacyMonthKey = obj.monthKey || getCollectionMonthKey();
+                if (obj.isMonthPaid) {
+                    const sessions = obj.daysData ? (Array.isArray(obj.daysData) ? obj.daysData.reduce((n, d) => {
+                        if (d.status === 'present') return n + Math.max(1, parseInt(d.sessionsCount, 10) || 1);
+                        if (!d.status && (d.count || 0) > 0) return n + 1;
+                        return n;
+                    }, 0) : 0) : 0;
+                    const amount = sessions * (parseFloat(obj.price) || 0);
+                    if (amount > 0) obj.paymentHistory.push({type: 'month', amount, monthKey: legacyMonthKey});
+                }
+                if (obj.isPaid) {
+                    const sessions = Array.isArray(obj.daysData) ? obj.daysData.reduce((n, d) => {
+                        if (d.status === 'present') return n + 1;
+                        if (!d.status && (d.count || 0) > 0) return n + 1;
+                        return n;
+                    }, 0) : (parseInt(obj.sessionsCount, 10) || 0);
+                    const amount = sessions * (parseFloat(obj.price) || 0);
+                    if (amount > 0) obj.paymentHistory.push({type: 'month', amount, monthKey: legacyMonthKey});
+                }
+                if (obj.isDebtPaid && (parseFloat(obj.previousDebt) || 0) > 0) {
+                    obj.paymentHistory.push({type: 'debt', amount: parseFloat(obj.previousDebt) || 0, monthKey: legacyMonthKey});
+                }
+            }
+            return obj.paymentHistory;
+        }
+
+        function addCollectedPayment(obj, amount, type) {
+            amount = Math.max(0, parseFloat(amount) || 0);
+            if (!obj || amount <= 0) return;
+            ensurePaymentHistory(obj).push({
+                type: type || 'other',
+                amount,
+                monthKey: getCollectionMonthKey(),
+                date: new Date().toISOString()
+            });
+        }
+
+        function removeCollectedPayment(obj, amount, type) {
+            amount = Math.max(0, parseFloat(amount) || 0);
+            if (!obj || amount <= 0) return;
+            const history = ensurePaymentHistory(obj);
+            const currentMonthKey = getCollectionMonthKey();
+            for (let i = history.length - 1; i >= 0; i--) {
+                if (history[i].monthKey === currentMonthKey && (!type || history[i].type === type) && Math.abs((parseFloat(history[i].amount) || 0) - amount) < 0.000001) {
+                    history.splice(i, 1);
+                    return;
+                }
+            }
+        }
+
+        function getCollectedPaymentsTotal(obj) {
+            const currentMonthKey = getCollectionMonthKey();
+            return ensurePaymentHistory(obj).reduce((sum, item) => {
+                if (item && item.monthKey === currentMonthKey) {
+                    return sum + Math.max(0, parseFloat(item.amount) || 0);
+                }
+                return sum;
+            }, 0);
         }
 
         function calculateSummaryTotals() {
@@ -2291,10 +2527,9 @@ html, body, button, input, select, textarea, option {
 
                 totalCurrentMonthSum += groupMonthMoney;
                 totalOldDebtsSum += previousDebt;
-                if (group.isMonthPaid) totalPaidSum += groupMonthMoney;
-                else totalUnpaidSum += groupMonthMoney;
-                if (group.isDebtPaid) totalPaidSum += previousDebt;
-                else totalUnpaidSum += previousDebt;
+                totalPaidSum += getCollectedPaymentsTotal(group);
+                totalUnpaidSum += Math.max(0, groupMonthMoney - (parseFloat(group.paidAmount) || 0));
+                totalUnpaidSum += Math.max(0, previousDebt - (parseFloat(group.paidDebtAmount) || 0));
             });
 
             // ===== التلاميذ فقط =====
@@ -2305,10 +2540,9 @@ html, body, button, input, select, textarea, option {
 
                 totalCurrentMonthSum += studentMonthMoney;
                 totalOldDebtsSum += previousDebt;
-                if (student.isPaid) totalPaidSum += studentMonthMoney;
-                else totalUnpaidSum += studentMonthMoney;
-                if (student.isDebtPaid) totalPaidSum += previousDebt;
-                else totalUnpaidSum += previousDebt;
+                totalPaidSum += getCollectedPaymentsTotal(student);
+                totalUnpaidSum += Math.max(0, studentMonthMoney - (parseFloat(student.paidAmount) || 0));
+                totalUnpaidSum += Math.max(0, previousDebt - (parseFloat(student.paidDebtAmount) || 0));
             });
 
             document.getElementById('grandTotal').innerText = (totalCurrentMonthSum + totalOldDebtsSum) + ' جنيه';
@@ -3053,12 +3287,16 @@ html, body, button, input, select, textarea, option {
         }
 
         function toggleStudentPayment(idx) {
-            students[idx].isPaid = !students[idx].isPaid;
+            const student = students[idx];
+            if (!student) return;
+            const amount = calculateStudentSessionCount(student) * (parseFloat(student.price) || 0);
+            if (student.isPaid) {
+                removeCollectedPayment(student, amount, 'month');
+            } else {
+                addCollectedPayment(student, amount, 'month');
+            }
+            student.isPaid = !student.isPaid;
             saveData();
-        }
-
-        function toggleStudentDebtPayment(idx, event) {
-            openDebtPaymentDialog('student', idx, event);
         }
 
         // التحقق من طول رقم الهاتف: التنبيه فقط، بدون منع الحفظ أو تعديل الرقم.
@@ -3139,7 +3377,8 @@ html, body, button, input, select, textarea, option {
         }
 
         function deleteStudent(idx) {
-            showAppConfirm('حذف تلميذ', `هل تريد حذف الطالب ${students[idx].name}؟`, function() {
+            showAppConfirm('حذف تلميذ', `نقل الطالب ${students[idx].name} إلى سلة المحذوفات؟`, function() {
+                recycleAdd('student', students[idx]);
                 students.splice(idx, 1);
                 if (selectedStudentIndex === idx) selectedStudentIndex = null;
                 saveData();
@@ -3149,12 +3388,16 @@ html, body, button, input, select, textarea, option {
 
         function toggleMonthPayment(index, event) {
             if(event) event.stopPropagation();
-            groups[index].isMonthPaid = !groups[index].isMonthPaid;
+            const group = groups[index];
+            if (!group) return;
+            const amount = calculateGroupSessionCount(group) * (parseFloat(group.price) || 0);
+            if (group.isMonthPaid) {
+                removeCollectedPayment(group, amount, 'month');
+            } else {
+                addCollectedPayment(group, amount, 'month');
+            }
+            group.isMonthPaid = !group.isMonthPaid;
             saveData();
-        }
-
-        function toggleDebtPayment(index, event) {
-            openDebtPaymentDialog('group', index, event);
         }
 
         function openStartMonthModal() {
@@ -3185,8 +3428,8 @@ html, body, button, input, select, textarea, option {
                 // ===== المجموعات فقط =====
                 groups.forEach(group => {
                     const scheduleDays = getStableScheduleDays(group);
-                    const scheduleTime = group.time || formatScheduleTime(group.timeHour || '', group.timeMinute || '', group.timePeriod || '');
-                    const scheduleTimeEnd = group.timeEnd || formatScheduleTime(group.timeEndHour || '', group.timeEndMinute || '', group.timeEndPeriod || '');
+                    const scheduleTime = formatScheduleTime(group.timeHour || '', group.timeMinute || '', group.timePeriod || '');
+                    const scheduleTimeEnd = formatScheduleTime(group.timeEndHour || '', group.timeEndMinute || '', group.timeEndPeriod || '');
 
                     ensureDebtHistory(group);
                     if (!group.isMonthPaid) {
@@ -3207,8 +3450,8 @@ html, body, button, input, select, textarea, option {
                 // ===== التلاميذ فقط =====
                 students.forEach(student => {
                     const scheduleDays = getStableScheduleDays(student);
-                    const scheduleTime = student.time || formatScheduleTime(student.timeHour || '', student.timeMinute || '', student.timePeriod || '');
-                    const scheduleTimeEnd = student.timeEnd || formatScheduleTime(student.timeEndHour || '', student.timeEndMinute || '', student.timeEndPeriod || '');
+                    const scheduleTime = formatScheduleTime(student.timeHour || '', student.timeMinute || '', student.timePeriod || '');
+                    const scheduleTimeEnd = formatScheduleTime(student.timeEndHour || '', student.timeEndMinute || '', student.timeEndPeriod || '');
 
                     ensureDebtHistory(student);
                     if (!student.isPaid) {
@@ -3301,166 +3544,276 @@ html, body, button, input, select, textarea, option {
             saveData(); closeGroupModal(); if (editId !== '') renderGroupDetail(parseInt(editId, 10)); else navigateTo('page2');
         }
 
+        // ==================== النسخ الاحتياطي إلى Google Drive ====================
+        // Google Identity Services - مناسب للـ PWA/المتصفح
+        const CLIENT_ID = '310650752416-dskh559v6u5vjbc2jih585o35ola5a2p.apps.googleusercontent.com';
+        const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+        let tokenClient = null;
+        let accessToken = null;
         let backupInProgress = false;
-        async function exportDataToFile() {
+        let drivePermissionGranted = false;
+
+        function getDrivePermissionKey(uid) {
+            return 'drive_permission_granted_' + (uid || 'guest');
+        }
+
+        function loadDrivePermissionState(uid) {
+            drivePermissionGranted = uid ? localStorage.getItem(getDrivePermissionKey(uid)) === 'true' : false;
+            return drivePermissionGranted;
+        }
+
+        function markDrivePermissionGranted(uid) {
+            drivePermissionGranted = true;
+            if (uid) localStorage.setItem(getDrivePermissionKey(uid), 'true');
+        }
+
+        function initGoogleDriveAuth() {
+            if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+                throw new Error('GOOGLE_IDENTITY_SERVICES_UNAVAILABLE');
+            }
+            if (tokenClient) return;
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: DRIVE_SCOPE,
+                callback: async (response) => {
+                    if (response.error || !response.access_token) {
+                        console.error('Google OAuth error:', response);
+                        showAppAlert('خطأ في صلاحية Google', 'لم يتم منح صلاحية Google Drive. تأكد من السماح للتطبيق بالوصول إلى Drive ثم حاول مرة أخرى.');
+                        return;
+                    }
+                    accessToken = response.access_token;
+                    markDrivePermissionGranted(appUserKey);
+                    await uploadBackupToDrive();
+                }
+            });
+        }
+
+        async function startGoogleDriveBackup() {
             if (backupInProgress) return;
-            backupInProgress = true;
-
             try {
-                const dataToExport = {
-                    version: 3,
-                    app: 'نظم دروسك',
-                    groups: groups,
-                    students: students,
-                    exportDate: new Date().toISOString()
-                };
-
-                const backupText = JSON.stringify(dataToExport);
-
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    await navigator.clipboard.writeText(backupText);
+                initGoogleDriveAuth();
+                if (accessToken) {
+                    await uploadBackupToDrive();
+                    return;
+                }
+                // Google يرفض الطلب قبل ظهور نافذة الاختيار إذا كان Origin غير مسجل.
+                // في هذه الحالة نستخدم حساب Google المرتبط بـ Firebase كمسار احتياطي للـPWA.
+                try {
+                    // طلب الإذن مرة واحدة فقط طوال استخدام البرنامج
+                tokenClient.requestAccessToken({ prompt: drivePermissionGranted ? '' : 'consent' });
+                } catch (err) {
+                    console.error('Google GIS request error:', err);
+                    if (window.firebaseDriveAuth) {
+                        const fallbackToken = await window.firebaseDriveAuth();
+                        if (fallbackToken) {
+                            accessToken = fallbackToken;
+                            await uploadBackupToDrive();
+                            return;
+                        }
+                    }
+                    throw err;
+                }
+            } catch (err) {
+                console.error('Google Drive auth init error:', err);
+                const origin = location.origin || (location.protocol + '//' + location.host);
+                if (String(err?.message || '').toLowerCase().includes('origin') || String(err?.error || '').toLowerCase().includes('origin')) {
+                    showAppAlert('Google رفض الاتصال', 'خطأ 400: origin_mismatch\n\nأصل التطبيق الحالي هو:\n' + origin + '\n\nأضف هذا العنوان في Google Cloud ضمن Authorized JavaScript origins لنفس Client ID.');
                 } else {
-                    const ta = document.createElement('textarea');
-                    ta.value = backupText;
-                    ta.setAttribute('readonly', '');
-                    ta.style.position = 'fixed';
-                    ta.style.left = '-9999px';
-                    document.body.appendChild(ta);
-                    ta.focus();
-                    ta.select();
-                    const ok = document.execCommand('copy');
-                    ta.remove();
-                    if (!ok) throw new Error('Clipboard copy failed');
+                    showAppAlert('تعذر تشغيل Google Drive', 'تعذر الحصول على صلاحية Google Drive. تأكد من اتصال الإنترنت وإعداد OAuth ثم حاول مرة أخرى.');
+                }
+            }
+        }
+
+        async function driveFetch(url, options = {}) {
+            if (!accessToken) throw new Error('NO_DRIVE_TOKEN');
+            const response = await fetch(url, {
+                ...options,
+                headers: {
+                    ...(options.headers || {}),
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            });
+            if (response.status === 401) {
+                accessToken = null;
+                throw new Error('DRIVE_UNAUTHORIZED');
+            }
+            return response;
+        }
+
+        async function getDriveError(response) {
+            let body = '';
+            try { body = await response.text(); } catch (_) {}
+            let message = '';
+            try { message = JSON.parse(body)?.error?.message || ''; } catch (_) {}
+            return `HTTP ${response.status}${message ? `: ${message}` : ''}`;
+        }
+
+        async function findDriveBackupFile(fileName = null) {
+            const q = fileName
+                ? `name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`
+                : "name contains 'backup_drosak_' and trashed = false";
+            const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
+                '&spaces=drive&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime desc&pageSize=100';
+            const response = await driveFetch(url);
+            if (!response.ok) throw new Error('DRIVE_LIST_FAILED: ' + await getDriveError(response));
+            const data = await response.json();
+            const files = Array.isArray(data.files) ? data.files : [];
+            if (fileName) return files.find(f => f.name === fileName) || null;
+            return files.find(f => /^backup_drosak_\d{4}-\d{2}-\d{2}\.json$/i.test(f.name)) || null;
+        }
+
+        function formatDriveBackupTime(dateValue) {
+            if (!dateValue) return 'لم يتم العثور على نسخة احتياطية';
+            const d = new Date(dateValue);
+            if (Number.isNaN(d.getTime())) return 'غير معروف';
+            return d.toLocaleString('ar-EG', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+
+        function setLastDriveBackupTime(dateValue) {
+            const el = document.getElementById('lastDriveBackupTime');
+            if (el) el.textContent = formatDriveBackupTime(dateValue);
+            if (dateValue) localStorage.setItem('last_drive_backup_time', dateValue);
+        }
+
+        function loadSavedDriveBackupTime() {
+            const saved = localStorage.getItem('last_drive_backup_time');
+            const el = document.getElementById('lastDriveBackupTime');
+            if (el && saved) el.textContent = formatDriveBackupTime(saved);
+        }
+
+        async function refreshDriveBackupStatus() {
+            loadSavedDriveBackupTime();
+            if (!accessToken || typeof findDriveBackupFile !== 'function') return;
+            try {
+                const existing = await findDriveBackupFile();
+                if (existing?.modifiedTime) {
+                    setLastDriveBackupTime(existing.modifiedTime);
+                } else {
+                    const el = document.getElementById('lastDriveBackupTime');
+                    if (el && !localStorage.getItem('last_drive_backup_time')) {
+                        el.textContent = 'لا توجد نسخة احتياطية';
+                    }
+                }
+            } catch (err) {
+                console.warn('Could not refresh Drive backup status:', err);
+            }
+        }
+
+        async function uploadBackupToDrive() {
+            if (!accessToken || backupInProgress) return false;
+            backupInProgress = true;
+            try {
+                const backupData = {
+                    teacher_groups_local: JSON.parse(localStorage.getItem(userStorageKey('teacher_groups_local')) || '[]'),
+                    teacher_students_local: JSON.parse(localStorage.getItem(userStorageKey('teacher_students_local')) || '[]')
+                };
+                const fileName = `backup_drosak_${new Date().toISOString().slice(0,10)}.json`;
+                const fileContent = JSON.stringify(backupData, null, 2);
+                const existing = await findDriveBackupFile(fileName);
+                let response;
+
+                if (existing?.id) {
+                    // تحديث محتوى النسخة الموجودة اليوم فقط.
+                    response = await driveFetch(
+                        'https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(existing.id) + '?uploadType=media',
+                        {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: fileContent
+                        }
+                    );
+                } else {
+                    // إنشاء الملف كملف JSON في Drive.
+                    const form = new FormData();
+                    form.append('metadata', new Blob([
+                        JSON.stringify({name: fileName, mimeType: 'application/json'})
+                    ], {type: 'application/json'}));
+                    form.append('file', new Blob([fileContent], {type: 'application/json'}));
+                    response = await driveFetch(
+                        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
+                        {method: 'POST', body: form}
+                    );
                 }
 
-                showAppAlert(
-                    'تم النسخ الاحتياطي',
-                    'تم النسخ إلى الحافظة، برجاء لصق النص في مكان آمن لاستعادته عند الحاجة.'
-                );
+                if (!response.ok) {
+                    const detail = await getDriveError(response);
+                    console.error('Google Drive upload error:', detail);
+                    showAppAlert('فشل النسخ الاحتياطي',
+                        response.status === 403
+                            ? 'Google رفض العملية (403). غالبًا Google Drive API غير مفعّل أو صلاحية Drive غير مضافة لهذا العميل.'
+                            : `تعذر رفع النسخة إلى Google Drive. ${detail}`
+                    );
+                    return false;
+                }
+
+                const backupCompletedAt = new Date().toISOString();
+                setLastDriveBackupTime(backupCompletedAt);
+                showAppAlert('تم النسخ الاحتياطي', 'تم حفظ النسخة الاحتياطية بنجاح داخل Google Drive.');
+                return true;
             } catch (err) {
-                console.error('Backup clipboard error:', err);
-                showAppAlert(
-                    'تعذر النسخ',
-                    'تعذر نسخ النسخة الاحتياطية إلى الحافظة. لم يتم تغيير أي من بياناتك.'
-                );
+                console.error('Google Drive backup error:', err);
+                const msg = String(err?.message || err);
+                if (msg.includes('DRIVE_UNAUTHORIZED')) {
+                    showAppAlert('انتهت صلاحية Google Drive', 'اضغط النسخ الاحتياطي مرة أخرى لمنح الصلاحية من جديد.');
+                } else if (msg.includes('DRIVE_LIST_FAILED')) {
+                    showAppAlert('تعذر الوصول إلى Google Drive', 'تعذر قراءة ملفات Drive. تأكد من تفعيل Google Drive API ومنح التطبيق صلاحية Drive.');
+                } else {
+                    showAppAlert('خطأ أثناء الرفع', 'حدث خطأ أثناء رفع النسخة الاحتياطية إلى Google Drive. افتح التطبيق من HTTPS وتأكد من اتصال الإنترنت.');
+                }
+                return false;
             } finally {
                 backupInProgress = false;
             }
         }
 
-        function triggerRestoreFileInput() {
-            openClipboardRestoreDialog();
-        }
-
-        function openClipboardRestoreDialog() {
-            let modal = document.getElementById('clipboardRestoreModal');
-
-            if (!modal) {
-                modal = document.createElement('div');
-                modal.id = 'clipboardRestoreModal';
-                modal.style.cssText =
-                    'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.65);' +
-                    'display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
-
-                modal.innerHTML = `
-                    <div style="background:#fff;border-radius:16px;width:min(620px,100%);padding:20px;box-sizing:border-box;direction:rtl;">
-                        <h3 style="margin:0 0 12px;">استعادة النسخة الاحتياطية</h3>
-                        <p style="margin:0 0 10px;">الصق نص النسخة الاحتياطية هنا ثم اضغط استعادة.</p>
-                        <textarea id="clipboardRestoreText"
-                            style="width:100%;height:220px;box-sizing:border-box;resize:vertical;padding:10px;border:1px solid #ccc;border-radius:10px;direction:ltr;text-align:left;"
-                            placeholder="الصق النسخة الاحتياطية هنا"></textarea>
-                        <div style="display:flex;gap:10px;justify-content:flex-start;margin-top:12px;">
-                            <button class="btn-3d" type="button" onclick="restoreFromClipboardText()">استعادة</button>
-                            <button class="btn-3d" type="button" onclick="closeClipboardRestoreDialog()">إلغاء</button>
-                        </div>
-                    </div>`;
-
-                document.body.appendChild(modal);
-            }
-
-            modal.style.display = 'flex';
-
-            if (navigator.clipboard && navigator.clipboard.readText) {
-                navigator.clipboard.readText().then(function(txt) {
-                    const box = document.getElementById('clipboardRestoreText');
-                    if (box && txt) box.value = txt;
-                }).catch(function() {});
-            }
-        }
-
-        function closeClipboardRestoreDialog() {
-            const modal = document.getElementById('clipboardRestoreModal');
-            if (modal) modal.style.display = 'none';
-        }
-
-        function restoreFromClipboardText() {
-            const box = document.getElementById('clipboardRestoreText');
-            const raw = box ? box.value.trim() : '';
-
-            if (!raw) {
-                showAppAlert('لا توجد نسخة', 'الصق نص النسخة الاحتياطية أولًا.');
-                return;
-            }
-
+        async function triggerRestoreFileInput() {
+            if (backupInProgress) return;
             try {
-                const importedData = normalizeImportedData(JSON.parse(raw));
-
-                if (!importedData) {
-                    showAppAlert(
-                        'خطأ',
-                        'النسخة غير صالحة. يجب أن تحتوي على بيانات المجموعات والتلاميذ.'
-                    );
+                initGoogleDriveAuth();
+                if (!accessToken) {
+                    // طلب الإذن مرة واحدة فقط طوال استخدام البرنامج
+                tokenClient.requestAccessToken({ prompt: drivePermissionGranted ? '' : 'consent' });
+                    showAppAlert('السماح بالوصول', 'اسمح للتطبيق بالوصول إلى Google Drive، ثم اضغط استعادة النسخة الاحتياطية مرة أخرى.');
                     return;
                 }
-
-                showAppConfirm(
-                    'استعادة البيانات',
-                    'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية بالبيانات المستوردة.',
-                    function() {
-                        groups = importedData.groups;
-                        students = importedData.students;
-                        selectedGroupIndex = null;
-                        selectedStudentIndex = null;
-                        dataNormalizationDone = false;
-                        saveData();
-                        closeClipboardRestoreDialog();
-                        showAppAlert('تم بنجاح', 'تمت استعادة البيانات بنجاح!');
-                        navigateTo('page1');
-                    }
-                );
-            } catch (err) {
-                console.error('Clipboard restore error:', err);
-                showAppAlert('خطأ', 'تعذر قراءة النسخة الاحتياطية. تأكد من لصق النص كاملًا.');
-            }
-        }
-
-        function handleRestoreFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const importedData = normalizeImportedData(JSON.parse(e.target.result));
-                    if (!importedData) {
-                        showAppAlert('خطأ', 'ملف غير صالح. يجب أن يحتوي ملف النسخة الاحتياطية على قوائم المجموعات والتلاميذ.');
-                        return;
-                    }
-                    showAppConfirm('استعادة البيانات', 'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية بالبيانات المستوردة.', function() {
-                        groups = importedData.groups;
-                        students = importedData.students;
-                        selectedGroupIndex = null;
-                        selectedStudentIndex = null;
-                        dataNormalizationDone = false;
-                        saveData();
-                        showAppAlert('تم بنجاح', 'تمت استعادة البيانات بنجاح!');
-                        navigateTo('page1');
-                    });
-                } catch (err) {
-                    showAppAlert('خطأ', 'حدث خطأ أثناء قراءة الملف. يرجى التأكد من اختيار نسخة احتياطية صحيحة.');
+                backupInProgress = true;
+                const existing = await findDriveBackupFile();
+                if (!existing?.id) {
+                    showAppAlert('لا توجد نسخة احتياطية', 'لم يتم العثور على نسخة احتياطية للتطبيق على Google Drive.');
+                    return;
                 }
-            };
-            reader.readAsText(file);
-            event.target.value = '';
+                const response = await driveFetch(
+                    'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(existing.id) + '?alt=media'
+                );
+                if (!response.ok) throw new Error('DRIVE_DOWNLOAD_FAILED: ' + await getDriveError(response));
+                const importedData = normalizeImportedData(JSON.parse(await response.text()));
+                if (!importedData) {
+                    showAppAlert('خطأ', 'النسخة الاحتياطية الموجودة على Google Drive غير صالحة.');
+                    return;
+                }
+                showAppConfirm('استعادة النسخة الاحتياطية', 'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية بالبيانات الموجودة في النسخة الاحتياطية.', function () {
+                    groups = importedData.groups;
+                    students = importedData.students;
+                    selectedGroupIndex = null;
+                    selectedStudentIndex = null;
+                    dataNormalizationDone = false;
+                    saveData();
+                    showAppAlert('تم بنجاح', 'تمت استعادة النسخة الاحتياطية من Google Drive بنجاح!');
+                    navigateTo('page1');
+                });
+            } catch (err) {
+                console.error('Google Drive restore error:', err);
+                showAppAlert('تعذر الاستعادة', 'تعذر قراءة النسخة الاحتياطية من Google Drive. تأكد من الصلاحيات واتصال الإنترنت ثم حاول مرة أخرى.');
+            } finally {
+                backupInProgress = false;
+            }
         }
 
         // إعداد التشغيل الأولي والتنقل عند تحميل الصفحة
@@ -3472,10 +3825,326 @@ html, body, button, input, select, textarea, option {
             renderTodaySessions();
             calculateSummaryTotals();
             setThemeButton(document.body.classList.contains('dark-mode'));
+            loadSavedDriveBackupTime();
         });
             window.addEventListener('resize', syncFixedContentOffsets);
         window.addEventListener('load', syncFixedContentOffsets);
 
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('./service-worker.js').catch(function () {});
+  });
+}
+</script>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",storageBucket:"your-works-1aea7.firebasestorage.app",messagingSenderId:"1084540974820",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1",measurementId:"G-RYZPVNLKZQ"};
+const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider();
+provider.addScope('https://www.googleapis.com/auth/drive.file');
+window.firebaseDriveAuth=async function(){
+  try{
+    const r=await signInWithPopup(auth,provider);
+    const c=GoogleAuthProvider.credentialFromResult(r);
+    return c?.accessToken||null;
+  }catch(e){
+    if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){
+      sessionStorage.setItem('drive_auth_pending','1');
+      await signInWithRedirect(auth,provider);
+      return null;
+    }
+    throw e;
+  }
+};
+
+const loginScreen=document.getElementById('loginScreen'),loginForm=document.getElementById('loginForm'),loginUsername=document.getElementById('loginUsername'),loginPassword=document.getElementById('loginPassword'),loginSubmit=document.getElementById('loginSubmit'),registerToggle=document.getElementById('registerToggle'),googleLoginButton=document.getElementById('googleLoginButton'),loginTitle=document.getElementById('loginTitle'),loginMessage=document.getElementById('loginMessage'),registerInfoPage=document.getElementById('registerInfoPage'),startRegister=document.getElementById('startRegister'),backLogin=document.getElementById('backLogin'),loginSubtitle=document.getElementById('loginSubtitle'); let registerMode=false;
+function msg(x){loginMessage.textContent=x||''} function mode(x){registerMode=x;loginTitle.textContent=x?'إنشاء حساب جديد':'تسجيل الدخول إلى نظم دروسك';loginSubtitle.textContent=x?'أدخل بيانات الحساب الجديد':'أدخل بياناتك للدخول إلى حسابك';loginSubmit.textContent=x?'إنشاء الحساب':'تسجيل الدخول';registerToggle.textContent=x?'إلغاء إنشاء الحساب':'إنشاء حساب جديد';loginPassword.autocomplete=x?'new-password':'current-password';msg('')} function usernameEmail(u){return u.trim().toLowerCase()+'@username.your-works-1aea7.firebaseapp.com'}
+async function resetPassword(){const u=loginUsername.value.trim(); if(!validUser(u)){msg('اكتب اسم المستخدم أولاً لاستعادة كلمة المرور.');return;} try{await sendPasswordResetEmail(auth, usernameEmail(u)); msg('تم إرسال رابط استعادة كلمة المرور إلى البريد المرتبط بالحساب.');}catch(e){msg(friendly(e));}} function validUser(u){return /^[A-Za-z0-9._-]{3,30}$/.test(u.trim())} function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')} function hide(){loginScreen.hidden=true;document.body.classList.remove('login-locked')}
+function friendly(e){const m={'auth/invalid-credential':'اسم المستخدم أو رقم السر غير صحيح.','auth/invalid-login-credentials':'اسم المستخدم أو رقم السر غير صحيح.','auth/user-not-found':'اسم المستخدم غير موجود.','auth/wrong-password':'رقم السر غير صحيح.','auth/email-already-in-use':'اسم المستخدم مستخدم بالفعل.','auth/weak-password':'رقم السر يجب أن يكون 6 أحرف أو أرقام على الأقل.','auth/invalid-email':'اسم المستخدم غير صالح.','auth/too-many-requests':'تمت محاولات كثيرة. حاول مرة أخرى لاحقًا.','auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google؛ سيتم فتح تسجيل الدخول بالطريقة البديلة.','auth/operation-not-allowed':'يجب تفعيل طريقة تسجيل الدخول المطلوبة من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول. تأكد من الإنترنت وإعدادات Firebase.'}
+async function loginWithGoogle(){try{const r=await signInWithPopup(auth,provider);return{user:r.user}}catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null}throw e}}
+loginForm.addEventListener('submit',async e=>{e.preventDefault();const u=loginUsername.value.trim(),p=loginPassword.value;msg('');if(!validUser(u)){msg('اسم المستخدم يجب أن يكون من 3 إلى 30 حرفًا أو رقمًا، ويمكن استخدام . _ -');return}if(p.length<6){msg('رقم السر يجب أن يكون 6 أحرف أو أرقام على الأقل.');return}loginSubmit.disabled=true;try{const email=usernameEmail(u);if(registerMode)await createUserWithEmailAndPassword(auth,email,p);else await signInWithEmailAndPassword(auth,email,p)}catch(err){console.error('خطأ في تسجيل الدخول:',err);msg(friendly(err))}finally{loginSubmit.disabled=false}});
+registerToggle.addEventListener('click',()=>{if(!registerMode){document.querySelector('.login-card').hidden=true;registerInfoPage.hidden=false;}else mode(false);}); startRegister.addEventListener('click',()=>{registerInfoPage.hidden=true;document.querySelector('.login-card').hidden=false;mode(true);}); backLogin.addEventListener('click',()=>{registerInfoPage.hidden=true;document.querySelector('.login-card').hidden=false;mode(false);}); forgotPasswordButton.addEventListener('click',resetPassword);
+googleLoginButton.addEventListener('click',async()=>{msg('جارٍ فتح تسجيل الدخول بحساب Google...');googleLoginButton.disabled=true;try{await loginWithGoogle()}catch(e){console.error('خطأ في Google:',e);msg(friendly(e))}finally{googleLoginButton.disabled=false}});
+getRedirectResult(auth).then(r=>{if(r){const c=GoogleAuthProvider.credentialFromResult(r);if(c?.accessToken){window.pendingDriveAccessToken=c.accessToken;window.dispatchEvent(new CustomEvent('drive-auth-ready'));}if(sessionStorage.getItem('drive_auth_pending')==='1'){sessionStorage.removeItem('drive_auth_pending');setTimeout(()=>{if(window.pendingDriveAccessToken){window.dispatchEvent(new CustomEvent('drive-auth-ready'));}},150);}}return r}).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
+onAuthStateChanged(auth,user=>{
+if(user){ 
+  switchAppUser(user.uid);
+  if(typeof loadDrivePermissionState==='function') loadDrivePermissionState(user.uid);
+  hide();
+  // عند تسجيل الدخول بالبريد الإلكتروني: اطلب صلاحية Google Drive مرة واحدة فقط.
+  if(user.providerData?.some(p=>p.providerId==='password') && !drivePermissionGranted){
+    setTimeout(()=>{
+      try{
+        initGoogleDriveAuth();
+        if(tokenClient) tokenClient.requestAccessToken({prompt:'consent'});
+      }catch(err){
+        console.warn('Drive permission request skipped:', err);
+      }
+    }, 500);
+  }
+}else{
+  switchAppUser('guest');
+  loadDrivePermissionState(null);
+  show();
+}
+}); window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>{
+ showAppConfirm("هل تريد تسجيل الخروج ؟", "", function(){ signOut(auth); });
+};
+</script>
+
+
+<style id="pdfExportStyles">
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body.pdf-exporting { background:#fff !important; color:#111 !important; }
+  body.pdf-exporting > *:not(#pdfExportRoot) { display:none !important; }
+  body.pdf-exporting #pdfExportRoot { display:block !important; position:static !important; width:100% !important; min-height:0 !important; background:#fff !important; color:#111 !important; direction:rtl; }
+  #pdfExportRoot * { box-sizing:border-box; }
+  .pdf-page-title { page-break-after:avoid; }
+  .pdf-section, .pdf-person-card, .pdf-group-card { break-inside:avoid; page-break-inside:avoid; }
+  .pdf-table tr { break-inside:avoid; page-break-inside:avoid; }
+}
+#pdfExportRoot { display:none; direction:rtl; font-family:Arial, Tahoma, sans-serif; color:#111; background:#fff; line-height:1.55; }
+.pdf-export-wrap { width:100%; max-width:900px; margin:0 auto; }
+.pdf-cover { text-align:center; border-bottom:2px solid #0284c7; padding-bottom:12px; margin-bottom:16px; }
+.pdf-cover h1 { margin:0; color:#075985; font-size:26px; }
+.pdf-cover .author { margin-top:4px; font-weight:700; color:#444; }
+.pdf-cover .meta { margin-top:8px; font-size:12px; color:#666; }
+.pdf-page-title { color:#075985; font-size:18px; margin:18px 0 8px; border-right:4px solid #0284c7; padding-right:8px; }
+.pdf-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; margin-bottom:12px; }
+.pdf-summary-item { border:1px solid #d7dee5; border-radius:8px; padding:8px; text-align:center; background:#f8fafc; }
+.pdf-summary-item b { display:block; font-size:11px; color:#555; }
+.pdf-summary-item span { display:block; margin-top:3px; font-weight:800; font-size:14px; }
+.pdf-group-card,.pdf-person-card { border:1px solid #d7dee5; border-radius:9px; padding:10px; margin:8px 0; background:#fff; }
+.pdf-card-head { display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed #cbd5e1; padding-bottom:6px; margin-bottom:7px; }
+.pdf-card-head strong { color:#075985; }
+.pdf-muted { color:#666; font-size:11px; }
+.pdf-table { width:100%; border-collapse:collapse; font-size:11px; }
+.pdf-table th,.pdf-table td { border:1px solid #d7dee5; padding:5px 6px; text-align:right; vertical-align:top; }
+.pdf-table th { background:#eef6fb; font-weight:800; }
+.pdf-money { font-weight:800; }
+.pdf-status-paid { color:#15803d; font-weight:800; }
+.pdf-status-unpaid { color:#b91c1c; font-weight:800; }
+.pdf-note { margin-top:7px; padding:6px 8px; border:1px solid #e2e8f0; border-radius:6px; background:#f8fafc; font-size:11px; }
+.pdf-footer { margin-top:18px; padding-top:8px; border-top:1px solid #d7dee5; text-align:center; color:#777; font-size:10px; }
+@media (max-width:700px) { .pdf-summary { grid-template-columns:repeat(2,1fr); } }
+</style>
+<div id="pdfExportRoot" aria-hidden="true"></div>
+<script>
+function pdfEsc(value){
+    if (typeof escapeHtml === 'function') return escapeHtml(value == null ? '' : String(value));
+    return String(value == null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function pdfMoney(value){
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : 0;
+}
+function pdfStatus(paid){ return paid ? '<span class="pdf-status-paid">مسدد</span>' : '<span class="pdf-status-unpaid">غير مسدد</span>'; }
+function buildPDFExportReport(){
+    const root = document.getElementById('pdfExportRoot');
+    if (!root) return;
+    const now = new Date();
+    const dateText = (()=>{ try { return new Intl.DateTimeFormat('ar-EG-u-ca-gregory-nu-arab',{day:'numeric',month:'long',year:'numeric'}).format(now); } catch(e){ return now.toLocaleDateString('ar-EG'); } })();
+    const groupRows = [];
+    let groupsMonth = 0, groupsDebt = 0, groupsPaid = 0, groupsUnpaid = 0;
+    (Array.isArray(groups) ? groups : []).forEach(group => {
+        const sessions = typeof calculateGroupSessionCount === 'function' ? calculateGroupSessionCount(group) : 0;
+        const monthMoney = sessions * pdfMoney(group.price);
+        const debt = pdfMoney(group.previousDebt);
+        const required = (group.isMonthPaid ? 0 : monthMoney) + (group.isDebtPaid ? 0 : debt);
+        groupsMonth += group.isMonthPaid ? 0 : monthMoney;
+        groupsDebt += group.isDebtPaid ? 0 : debt;
+        if (group.isMonthPaid && (debt === 0 || group.isDebtPaid)) groupsPaid += 1; else groupsUnpaid += 1;
+        groupRows.push({group,sessions,monthMoney,debt,required});
+    });
+    const studentRows = [];
+    let studentsMonth = 0, studentsDebt = 0, studentsPaid = 0, studentsUnpaid = 0;
+    (Array.isArray(students) ? students : []).forEach(student => {
+        const metrics = typeof calculateStudentMetrics === 'function' ? calculateStudentMetrics(student) : {presentSessionsCount:0,totalHeldSessions:0,attendanceRate:0,hwRate:null,sessionRate:null,examRate:null,overallText:'',overallColor:''};
+        const sessions = typeof calculateStudentSessionCount === 'function' ? calculateStudentSessionCount(student) : 0;
+        const monthMoney = sessions * pdfMoney(student.price);
+        const debt = pdfMoney(student.previousDebt);
+        const required = (student.isPaid ? 0 : monthMoney) + (student.isDebtPaid ? 0 : debt);
+        studentsMonth += student.isPaid ? 0 : monthMoney;
+        studentsDebt += student.isDebtPaid ? 0 : debt;
+        if (student.isPaid && (debt === 0 || student.isDebtPaid)) studentsPaid += 1; else studentsUnpaid += 1;
+        studentRows.push({student,metrics,sessions,monthMoney,debt,required});
+    });
+    const totalRequired = groupsMonth + groupsDebt + studentsMonth + studentsDebt;
+    const totalPeople = groupRows.length + studentRows.length;
+    root.innerHTML = `
+      <div class="pdf-export-wrap">
+        <div class="pdf-cover">
+          <h1>نظم دروسك</h1>
+          <div class="author">تصميم وتنفيذ مستر حسام حَلّيص</div>
+          <div class="meta">تقرير شامل للبيانات المالية والتعليمية — ${pdfEsc(dateText)}</div>
+        </div>
+        <div class="pdf-page-title">الملخص العام</div>
+        <div class="pdf-summary">
+          <div class="pdf-summary-item"><b>إجمالي المطلوب</b><span>${totalRequired} جنيه</span></div>
+          <div class="pdf-summary-item"><b>مطلوب الشهر</b><span>${groupsMonth + studentsMonth} جنيه</span></div>
+          <div class="pdf-summary-item"><b>المتأخرات</b><span>${groupsDebt + studentsDebt} جنيه</span></div>
+          <div class="pdf-summary-item"><b>إجمالي السجلات</b><span>${totalPeople}</span></div>
+        </div>
+
+        <div class="pdf-page-title">المجموعات</div>
+        ${groupRows.length ? groupRows.map(({group,sessions,monthMoney,debt,required}) => `
+          <div class="pdf-group-card">
+            <div class="pdf-card-head"><strong>${pdfEsc(group.name || 'مجموعة بدون اسم')}</strong><span class="pdf-muted">${pdfEsc(getDaysDisplayString(group) || '')}${group.time ? ' — ' + pdfEsc(group.time) : ''}</span></div>
+            <table class="pdf-table"><tr><th>الحصص</th><th>سعر الحصة</th><th>حساب الشهر</th><th>المتأخرات</th><th>المطلوب</th><th>الحالة</th></tr>
+            <tr><td>${sessions}</td><td>${pdfMoney(group.price)} ج</td><td>${monthMoney} ج</td><td>${debt} ج</td><td class="pdf-money">${required} ج</td><td>${group.isMonthPaid && (debt === 0 || group.isDebtPaid) ? pdfStatus(true) : pdfStatus(false)}</td></tr></table>
+            ${group.phone ? `<div class="pdf-note">الهاتف: ${pdfEsc(group.phone)}</div>` : ''}
+            ${group.debtNote ? `<div class="pdf-note">ملاحظة المتأخرات: ${pdfEsc(group.debtNote)}</div>` : ''}
+          </div>`).join('') : '<div class="pdf-note">لا توجد مجموعات مسجلة.</div>'}
+
+        <div class="pdf-page-title">التلاميذ والتقارير الشهرية</div>
+        ${studentRows.length ? studentRows.map(({student,metrics,sessions,monthMoney,debt,required}) => {
+            const detailRows = (student.daysData || []).filter(d => d.status === 'present' || d.status === 'absent').map(d => {
+                const status = d.status === 'present' ? 'حاضر' : 'غائب';
+                const evals = [];
+                if (d.homeworkGrade !== undefined && d.homeworkGrade !== '') evals.push('الواجب: ' + pdfEsc(d.homeworkGrade) + '/10');
+                if (d.sessionGrade !== undefined && d.sessionGrade !== '') evals.push('التسميع: ' + pdfEsc(d.sessionGrade) + '/10');
+                if (d.examGrade !== undefined && d.examGrade !== '') evals.push('الاختبار: ' + pdfEsc(d.examGrade));
+                if (d.notes) evals.push('ملاحظة: ' + pdfEsc(d.notes));
+                return `<tr><td>${pdfEsc(d.label || '')}</td><td>${pdfEsc(d.dateStr || '')}</td><td>${status}</td><td>${evals.join(' | ') || '—'}</td></tr>`;
+            }).join('');
+            return `
+            <div class="pdf-person-card">
+              <div class="pdf-card-head"><strong>${pdfEsc(student.name || 'تلميذ بدون اسم')}</strong><span class="pdf-muted">${student.grade ? 'الصف: ' + pdfEsc(student.grade) : 'تلميذ فردي'}</span></div>
+              <table class="pdf-table"><tr><th>الحضور</th><th>الواجبات</th><th>التسميع</th><th>الاختبار</th><th>التقييم العام</th></tr>
+              <tr><td>${metrics.attendanceRate}% (${metrics.presentSessionsCount} من ${metrics.totalHeldSessions})</td><td>${metrics.hwRate !== null ? metrics.hwRate + '%' : 'غير مسجل'}</td><td>${metrics.sessionRate !== null ? metrics.sessionRate + '%' : 'غير مسجل'}</td><td>${metrics.examRate !== null ? metrics.examRate + '%' : 'غير مسجل'}</td><td>${pdfEsc(metrics.overallText || 'غير محدد')}</td></tr></table>
+              <table class="pdf-table" style="margin-top:7px"><tr><th>الحصص المحتسبة</th><th>سعر الحصة</th><th>حساب الشهر</th><th>المتأخرات</th><th>المطلوب</th><th>الحالة</th></tr>
+              <tr><td>${sessions}</td><td>${pdfMoney(student.price)} ج</td><td>${monthMoney} ج</td><td>${debt} ج</td><td class="pdf-money">${required} ج</td><td>${student.isPaid && (debt === 0 || student.isDebtPaid) ? pdfStatus(true) : pdfStatus(false)}</td></tr></table>
+              ${student.phone ? `<div class="pdf-note">الهاتف: ${pdfEsc(student.phone)}</div>` : ''}
+              ${student.debtNote ? `<div class="pdf-note">ملاحظة المتأخرات: ${pdfEsc(student.debtNote)}</div>` : ''}
+              <div class="pdf-page-title" style="font-size:13px;margin-top:12px">سجل الحضور والتقييم</div>
+              ${detailRows ? `<table class="pdf-table"><tr><th>اليوم</th><th>التاريخ</th><th>الحالة</th><th>التقييمات والملاحظات</th></tr>${detailRows}</table>` : '<div class="pdf-note">لا توجد حصص مسجلة.</div>'}
+            </div>`;
+        }).join('') : '<div class="pdf-note">لا توجد تلاميذ مسجلون.</div>'}
+
+        <div class="pdf-footer">تم إنشاء التقرير من بيانات التطبيق الحالية فقط — لا يتم تعديل أو حذف أي بيانات أثناء التصدير.</div>
+      </div>`;
+}
+function exportPDFReport(){
+    try {
+        buildPDFExportReport();
+        const root = document.getElementById('pdfExportRoot');
+        if (!root) throw new Error('PDF_EXPORT_ROOT_NOT_FOUND');
+        document.title = 'تقرير_نظم_دروسك_' + new Date().toISOString().slice(0,10);
+        document.body.classList.add('pdf-exporting');
+        root.setAttribute('aria-hidden','false');
+        setTimeout(() => {
+            window.print();
+            setTimeout(() => {
+                document.body.classList.remove('pdf-exporting');
+                root.setAttribute('aria-hidden','true');
+                document.title = 'نظم دروسك';
+            }, 700);
+        }, 120);
+    } catch (err) {
+        console.error('PDF export error:', err);
+        if (typeof showAppAlert === 'function') showAppAlert('تعذر إنشاء التقرير', 'حدث خطأ أثناء تجهيز تقرير PDF. بياناتك لم تتأثر.');
+    }
+}
+
+function recycleGet(){
+    return JSON.parse(localStorage.getItem(userStorageKey('recycle_bin')) || '[]');
+}
+function recycleSave(data){
+    localStorage.setItem(userStorageKey('recycle_bin'), JSON.stringify(data));
+}
+function recycleAdd(type,item){
+    let a=recycleGet();
+    a.push({type:type,item:item,date:new Date().toLocaleString('ar-EG')});
+    recycleSave(a);
+}
+
+function openRecycleBin(){
+    const old=document.getElementById('recycleBinModal');
+    if(old) old.remove();
+
+    let box=document.createElement('div');
+    box.id='recycleBinModal';
+    box.className='modal';
+    box.style.display='flex';
+
+    let list=recycleGet();
+    box.innerHTML =
+    '<div class="modal-content">'+
+    '<h3 style="text-align:center">سلة المحذوفات</h3>'+
+    (list.length ? list.map((x,i)=>
+        '<div style="padding:8px;border:1px solid #ccc;border-radius:8px;margin:6px 0">'+
+        (x.type==='student'?'تلميذ':'مجموعة')+'<br>'+
+        (x.item.name||'')+'<br>'+
+        '<button class="btn-3d" data-restore="'+i+'">استرجاع</button>'+
+        '<button class="btn-3d btn-red-3d" data-delete="'+i+'">حذف نهائي</button>'+
+        '</div>'
+    ).join('') : '<p style="text-align:center">السلة فارغة</p>')+
+    '<button class="btn-3d" data-close>إغلاق</button>'+
+    '</div>';
+
+    document.body.appendChild(box);
+
+    box.querySelectorAll('[data-restore]').forEach(btn=>{
+        btn.onclick=function(){ recycleRestore(Number(this.dataset.restore)); };
+    });
+    box.querySelectorAll('[data-delete]').forEach(btn=>{
+        btn.onclick=function(){ recycleDelete(Number(this.dataset.delete)); };
+    });
+    box.querySelector('[data-close]').onclick=function(){ box.remove(); };
+}
+
+function recycleRestore(i){
+    let a=recycleGet();
+    let x=a[i];
+    if(!x) return;
+
+    if(x.type==='student') students.push(x.item);
+    else groups.push(x.item);
+
+    a.splice(i,1);
+    recycleSave(a);
+    saveData();
+
+    let box=document.getElementById('recycleBinModal');
+    if(box) box.remove();
+
+    if(typeof renderAll==='function') renderAll();
+}
+
+function recycleDelete(i){
+    let a=recycleGet();
+    a.splice(i,1);
+    recycleSave(a);
+
+    let box=document.getElementById('recycleBinModal');
+    if(box) box.remove();
+
+    openRecycleBin();
+}
+
+// تسجيل خروج تلقائي بعد 50 ثانية بدون استخدام
+(function(){
+    let inactivityTimer;
+    const inactivityLimit = 50000;
+    function resetInactivityTimer(){
+        clearTimeout(inactivityTimer);
+        inactivityTimer=setTimeout(()=>{
+            const login=document.getElementById('loginScreen');
+            if(login && login.hidden && window.firebaseAuth){
+                signOut(window.firebaseAuth);
+            }
+        }, inactivityLimit);
+    }
+    ['click','touchstart','mousemove','keydown','scroll'].forEach(function(evt){
+        document.addEventListener(evt, resetInactivityTimer, {passive:true});
+    });
+    resetInactivityTimer();
+})();
 </script>
 </body>
 </html>
