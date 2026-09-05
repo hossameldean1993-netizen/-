@@ -1705,9 +1705,21 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const todayItems = [];
             const pendingItems = [];
             const addItem = (obj, idx, dayObj, dayIndex, isGroup) => {
+                const startMinutes = (obj.timeHour !== undefined && obj.timeMinute !== undefined && obj.timePeriod)
+                    ? scheduleTimeToMinutes(obj.timeHour, obj.timeMinute, obj.timePeriod)
+                    : parseScheduleTime(obj.time);
+                const startTime = startMinutes !== null
+                    ? formatScheduleTime(
+                        obj.timeHour !== undefined && obj.timeMinute !== undefined && obj.timePeriod ? obj.timeHour : parseStoredTime(obj.time).hour,
+                        obj.timeMinute !== undefined && obj.timeHour !== undefined && obj.timePeriod ? obj.timeMinute : parseStoredTime(obj.time).minute,
+                        obj.timePeriod || parseStoredTime(obj.time).period
+                    )
+                    : '';
+                const endTime = obj.timeEnd || '';
                 const item = {
                     name: obj.name,
-                    time: obj.time ? (obj.timeEnd ? `${obj.time} - ${obj.timeEnd}` : obj.time) : 'غير محدد',
+                    time: startTime ? (endTime ? `${startTime} - ${endTime}` : startTime) : 'غير محدد',
+                    startMinutes,
                     type: isGroup ? 'مجموعة' : `تلميذ - ${obj.grade || 'فردي'}`,
                     index: idx,
                     dayIndex,
@@ -1778,7 +1790,12 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             pendingContainer.innerHTML = '';
 
             const { todayItems, pendingItems } = collectSessionItems(now);
-            todayItems.sort((a,b) => { const getStartMinutes = item => parseScheduleTime(String(item.time || '').split(' - ')[0]); const aMinutes = getStartMinutes(a); const bMinutes = getStartMinutes(b); if (aMinutes === null && bMinutes === null) return 0; if (aMinutes === null) return 1; if (bMinutes === null) return -1; return aMinutes - bMinutes; });
+            todayItems.sort((a,b) => {
+                if (a.startMinutes === null && b.startMinutes === null) return 0;
+                if (a.startMinutes === null) return 1;
+                if (b.startMinutes === null) return -1;
+                return a.startMinutes - b.startMinutes;
+            });
             pendingItems.sort((a,b) => String(a.dateKey).localeCompare(String(b.dateKey)) || String(a.time).localeCompare(String(b.time)));
 
             if (!todayItems.length) {
