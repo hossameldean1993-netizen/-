@@ -1778,7 +1778,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             pendingContainer.innerHTML = '';
 
             const { todayItems, pendingItems } = collectSessionItems(now);
-            todayItems.sort((a,b) => String(a.time).localeCompare(String(b.time)));
+            todayItems.sort((a,b) => { const getStartMinutes = item => parseScheduleTime(String(item.time || '').split(' - ')[0]); const aMinutes = getStartMinutes(a); const bMinutes = getStartMinutes(b); if (aMinutes === null && bMinutes === null) return 0; if (aMinutes === null) return 1; if (bMinutes === null) return -1; return aMinutes - bMinutes; });
             pendingItems.sort((a,b) => String(a.dateKey).localeCompare(String(b.dateKey)) || String(a.time).localeCompare(String(b.time)));
 
             if (!todayItems.length) {
