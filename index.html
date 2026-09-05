@@ -1282,15 +1282,15 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                         <span class="time-range-label">من</span>
                         <input type="text" id="groupTimeMinute" inputmode="numeric" maxlength="2" pattern="\d{2}" value="" placeholder="د" aria-label="دقائق البداية">
                         <input type="text" id="groupTimeHour" inputmode="numeric" maxlength="2" pattern="\d{2}" value="" placeholder="س" aria-label="ساعة البداية">
-                        <button type="button" class="schedule-period-btn" id="groupTimeAM" onclick="setTimePeriod('group','AM',1)">ص</button>
-                        <button type="button" class="schedule-period-btn" id="groupTimePM" onclick="setTimePeriod('group','PM',1)">م</button>
+                        <button type="button" class="schedule-period-btn" id="groupTimeAM" onclick="TIME.setPeriod('group','AM',1)">ص</button>
+                        <button type="button" class="schedule-period-btn" id="groupTimePM" onclick="TIME.setPeriod('group','PM',1)">م</button>
                     </div>
                     <div class="schedule-time-row" id="groupTimeGrid2" dir="rtl">
                         <span class="time-range-label">إلى</span>
                         <input type="text" id="groupTime2Minute" inputmode="numeric" maxlength="2" pattern="\d{2}" value="" placeholder="د" aria-label="دقائق النهاية">
                         <input type="text" id="groupTime2Hour" inputmode="numeric" maxlength="2" pattern="\d{2}" value="" placeholder="س" aria-label="ساعة النهاية">
-                        <button type="button" class="schedule-period-btn" id="groupTime2AM" onclick="setTimePeriod('group','AM',2)">ص</button>
-                        <button type="button" class="schedule-period-btn" id="groupTime2PM" onclick="setTimePeriod('group','PM',2)">م</button>
+                        <button type="button" class="schedule-period-btn" id="groupTime2AM" onclick="TIME.setPeriod('group','AM',2)">ص</button>
+                        <button type="button" class="schedule-period-btn" id="groupTime2PM" onclick="TIME.setPeriod('group','PM',2)">م</button>
                     </div>
                 </div>
             </div>
@@ -1337,15 +1337,15 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                         <span class="time-range-label">من</span>
                         <input type="text" id="studentTimeMinute" inputmode="numeric" maxlength="2" pattern="\d{2}" value="" placeholder="د" aria-label="دقائق البداية">
                         <input type="text" id="studentTimeHour" inputmode="numeric" maxlength="2" pattern="\d{2}" value="" placeholder="س" aria-label="ساعة البداية">
-                        <button type="button" class="schedule-period-btn" id="studentTimeAM" onclick="setTimePeriod('student','AM',1)">ص</button>
-                        <button type="button" class="schedule-period-btn" id="studentTimePM" onclick="setTimePeriod('student','PM',1)">م</button>
+                        <button type="button" class="schedule-period-btn" id="studentTimeAM" onclick="TIME.setPeriod('student','AM',1)">ص</button>
+                        <button type="button" class="schedule-period-btn" id="studentTimePM" onclick="TIME.setPeriod('student','PM',1)">م</button>
                     </div>
                     <div class="schedule-time-row" id="studentTimeGrid2" dir="rtl">
                         <span class="time-range-label">إلى</span>
                         <input type="text" id="studentTime2Minute" inputmode="numeric" maxlength="2" pattern="\d{2}" value="" placeholder="د" aria-label="دقائق النهاية">
                         <input type="text" id="studentTime2Hour" inputmode="numeric" maxlength="2" pattern="\d{2}" value="" placeholder="س" aria-label="ساعة النهاية">
-                        <button type="button" class="schedule-period-btn" id="studentTime2AM" onclick="setTimePeriod('student','AM',2)">ص</button>
-                        <button type="button" class="schedule-period-btn" id="studentTime2PM" onclick="setTimePeriod('student','PM',2)">م</button>
+                        <button type="button" class="schedule-period-btn" id="studentTime2AM" onclick="TIME.setPeriod('student','AM',2)">ص</button>
+                        <button type="button" class="schedule-period-btn" id="studentTime2PM" onclick="TIME.setPeriod('student','PM',2)">م</button>
                     </div>
                 </div>
             </div>
@@ -1560,106 +1560,144 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             }
         }
 
-        function normalizeTimeParts(hour, minute, period) {
-            let h = parseInt(hour, 10);
-            let m = parseInt(minute, 10);
-            if (!Number.isFinite(h) || h < 1 || h > 12) h = 12;
-            if (!Number.isFinite(m) || m < 0 || m > 59) m = 0;
-            period = period === 'PM' ? 'PM' : 'AM';
-            return { hour: h, minute: m, period };
-        }
+        // ==================== نظام الوقت الموحد ====================
+        // كل التعامل مع الوقت في البرنامج يمر من خلال هذا الكائن فقط:
+        // ساعة + دقيقة + ص/م، مع تحويل موحد إلى دقائق للمقارنة والترتيب.
+        const TIME = {
+            normalize(hour, minute, period) {
+                const digits = value => String(value ?? '').replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+                let h = parseInt(digits(hour), 10);
+                let m = parseInt(digits(minute), 10);
+                if (!Number.isFinite(h) || h < 1 || h > 12) h = 12;
+                if (!Number.isFinite(m) || m < 0 || m > 59) m = 0;
+                const p = String(period || '').toUpperCase();
+                return { hour: h, minute: m, period: p === 'PM' ? 'PM' : 'AM' };
+            },
 
-        function formatScheduleTime(hour, minute, period) {
-            const t = normalizeTimeParts(hour, minute, period);
-            return `${String(t.hour).padStart(2,'0')}:${String(t.minute).padStart(2,'0')} ${t.period === 'PM' ? 'م' : 'ص'}`;
-        }
+            parse(value, fallbackPeriod = 'AM') {
+                const fallback = String(fallbackPeriod || '').toUpperCase() === 'PM' ? 'PM' : 'AM';
+                if (value && typeof value === 'object') {
+                    if (value.hour === '' || value.hour === null || value.hour === undefined) {
+                        return { hour: '', minute: '', period: fallback };
+                    }
+                    return this.normalize(value.hour, value.minute, value.period || fallback);
+                }
 
-        function scheduleTimeToMinutes(hour, minute, period) {
-            const t = normalizeTimeParts(hour, minute, period);
-            let h = t.hour % 12;
-            if (t.period === 'PM') h += 12;
-            return h * 60 + t.minute;
-        }
+                const raw = String(value ?? '').trim();
+                if (!raw) return { hour: '', minute: '', period: fallback };
+                const normalized = raw
+                    .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+                    .replace(/[٫]/g, ':');
+                const match = normalized.match(/(\d{1,2})\s*[:.]\s*(\d{1,2})/);
+                if (!match) return { hour: '', minute: '', period: fallback };
 
-        function parseStoredTime(value) {
-            const raw = String(value || '').trim();
-            if (!raw) return { hour: '', minute: '', period: 'AM' };
-            const match = raw.match(/(\d{1,2})\s*[:٫.]\s*(\d{1,2})/);
-            if (!match) return { hour: '', minute: '', period: 'AM' };
-            let h = parseInt(match[1], 10);
-            const m = Math.min(59, Math.max(0, parseInt(match[2], 10) || 0));
-            const isPM = /(?:م|مساء|مساءً|عصر|عصراً|عصرًا|pm)/i.test(raw);
-            if (h > 12) { h = ((h - 1) % 12) + 1; return { hour: h, minute: m, period: 'PM' }; }
-            return { hour: h, minute: m, period: isPM ? 'PM' : 'AM' };
-        }
+                let h = parseInt(match[1], 10);
+                const m = Math.min(59, Math.max(0, parseInt(match[2], 10) || 0));
+                const isPM = /(?:م|مساء|مساءً|عصر|عصراً|عصرًا|pm)/i.test(raw);
+                if (h > 12) {
+                    h = ((h - 1) % 12) + 1;
+                    return { hour: h, minute: m, period: 'PM' };
+                }
+                if (h < 1) return { hour: '', minute: '', period: fallback };
+                const isAM = /(?:ص|صباح|am)/i.test(raw);
+                return { hour: h, minute: m, period: isPM ? 'PM' : (isAM ? 'AM' : fallback) };
+            },
 
-        function attachTwoDigitTimeInputs() {
-            ['studentTimeHour','studentTimeMinute','studentTime2Hour','studentTime2Minute','groupTimeHour','groupTimeMinute','groupTime2Hour','groupTime2Minute'].forEach(id => {
-                const input = document.getElementById(id);
-                if (!input || input.dataset.twoDigitAttached) return;
-                input.dataset.twoDigitAttached = '1';
-                input.addEventListener('input', function() {
-                    this.value = String(this.value || '').replace(/\D/g, '').slice(0, 2);
-                    if (/Hour$/.test(this.id) && this.value && parseInt(this.value, 10) > 12) this.value = '12';
-                    if (/Minute$/.test(this.id) && this.value && parseInt(this.value, 10) > 59) this.value = '59';
+            format(hour, minute, period) {
+                const t = this.normalize(hour, minute, period);
+                return `${String(t.hour).padStart(2,'0')}:${String(t.minute).padStart(2,'0')} ${t.period === 'PM' ? 'م' : 'ص'}`;
+            },
+
+            minutes(value, minute, period) {
+                const t = arguments.length > 1 ? this.normalize(value, minute, period) : this.parse(value);
+                if (!t || t.hour === '') return null;
+                let h = t.hour % 12;
+                if (t.period === 'PM') h += 12;
+                return h * 60 + t.minute;
+            },
+
+            setPeriod(owner, period, row = 1) {
+                const suffix = row === 2 ? '2' : '';
+                const normalizedPeriod = String(period).toUpperCase() === 'PM' ? 'PM' : 'AM';
+                const am = document.getElementById(`${owner}Time${suffix}AM`);
+                const pm = document.getElementById(`${owner}Time${suffix}PM`);
+                if (am) am.classList.toggle('active', normalizedPeriod === 'AM');
+                if (pm) pm.classList.toggle('active', normalizedPeriod === 'PM');
+                const grid = document.getElementById(`${owner}TimeGrid${suffix}`);
+                if (grid) grid.dataset.period = normalizedPeriod;
+            },
+
+            writeUI(owner, value, endValue = '') {
+                const t = this.parse(value);
+                const e = this.parse(endValue);
+                const h = document.getElementById(`${owner}TimeHour`);
+                const m = document.getElementById(`${owner}TimeMinute`);
+                const h2 = document.getElementById(`${owner}Time2Hour`);
+                const m2 = document.getElementById(`${owner}Time2Minute`);
+                if (h) h.value = t.hour === '' ? '' : t.hour;
+                if (m) m.value = t.minute === '' ? '' : String(t.minute).padStart(2,'0');
+                if (h2) h2.value = e.hour === '' ? '' : e.hour;
+                if (m2) m2.value = e.minute === '' ? '' : String(e.minute).padStart(2,'0');
+                this.setPeriod(owner, t.period || 'AM', 1);
+                this.setPeriod(owner, e.period || 'AM', 2);
+            },
+
+            readUI(owner) {
+                const h = document.getElementById(`${owner}TimeHour`)?.value ?? '';
+                const m = document.getElementById(`${owner}TimeMinute`)?.value ?? '';
+                const h2 = document.getElementById(`${owner}Time2Hour`)?.value ?? '';
+                const m2 = document.getElementById(`${owner}Time2Minute`)?.value ?? '';
+                const period = document.getElementById(`${owner}TimeGrid`)?.dataset.period || 'AM';
+                const period2 = document.getElementById(`${owner}TimeGrid2`)?.dataset.period || 'AM';
+                const emptyStart = (h === '' && m === '') || (String(h).padStart(2,'0') === '00' && String(m).padStart(2,'0') === '00');
+                const emptyEnd = (h2 === '' && m2 === '') || (String(h2).padStart(2,'0') === '00' && String(m2).padStart(2,'0') === '00');
+                const t = emptyStart ? {hour:'', minute:'', period} : this.normalize(h, m, period);
+                const e = emptyEnd ? {hour:'', minute:'', period:period2} : this.normalize(h2, m2, period2);
+                return {
+                    time: emptyStart ? '' : this.format(t.hour, t.minute, t.period),
+                    hour: t.hour, minute: t.minute, period: t.period,
+                    timeEnd: emptyEnd ? '' : this.format(e.hour, e.minute, e.period),
+                    timeEndHour: e.hour, timeEndMinute: e.minute, timeEndPeriod: e.period
+                };
+            },
+
+            bindInputs() {
+                const ids = ['studentTimeHour','studentTimeMinute','studentTime2Hour','studentTime2Minute','groupTimeHour','groupTimeMinute','groupTime2Hour','groupTime2Minute'];
+                ids.forEach(id => {
+                    const input = document.getElementById(id);
+                    if (!input || input.dataset.twoDigitAttached) return;
+                    input.dataset.twoDigitAttached = '1';
+                    input.addEventListener('input', function() {
+                        this.value = String(this.value || '').replace(/[^\d٠-٩]/g, '').slice(0, 2);
+                        const numericValue = parseInt(this.value.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))), 10);
+                        if (/Hour$/.test(this.id) && this.value && numericValue > 12) this.value = '12';
+                        if (/Minute$/.test(this.id) && this.value && numericValue > 59) this.value = '59';
+                    });
+                    input.addEventListener('blur', function() {
+                        if (!this.value) return;
+                        this.value = String(this.value).replace(/[^\d٠-٩]/g, '').slice(0, 2);
+                    });
                 });
-                input.addEventListener('blur', function() {
-                    if (!this.value) return;
-                    this.value = String(this.value).replace(/\D/g, '').slice(0, 2);
-                });
-            });
-        }
+            },
 
-        function setTimePeriod(owner, period, row = 1) {
-            const suffix = row === 2 ? '2' : '';
-            const am = document.getElementById(`${owner}Time${suffix}AM`);
-            const pm = document.getElementById(`${owner}Time${suffix}PM`);
-            if (am) am.classList.toggle('active', period === 'AM');
-            if (pm) pm.classList.toggle('active', period === 'PM');
-            const grid = document.getElementById(`${owner}TimeGrid${suffix}`);
-            if (grid) grid.dataset.period = period;
-        }
-
-        function setScheduleTimeUI(owner, value, endValue = '') {
-            const t = typeof value === 'object' && value ? normalizeTimeParts(value.hour, value.minute, value.period) : parseStoredTime(value);
-            const e = typeof endValue === 'object' && endValue ? normalizeTimeParts(endValue.hour, endValue.minute, endValue.period) : parseStoredTime(endValue);
-            const h = document.getElementById(`${owner}TimeHour`);
-            const m = document.getElementById(`${owner}TimeMinute`);
-            const h2 = document.getElementById(`${owner}Time2Hour`);
-            const m2 = document.getElementById(`${owner}Time2Minute`);
-            if (h) h.value = t.hour === '' ? '' : t.hour;
-            if (m) m.value = t.minute === '' ? '' : String(t.minute).padStart(2,'0');
-            if (h2) h2.value = e.hour === '' ? '' : e.hour;
-            if (m2) m2.value = e.minute === '' ? '' : String(e.minute).padStart(2,'0');
-            setTimePeriod(owner, t.period || 'AM', 1);
-            setTimePeriod(owner, e.period || 'AM', 2);
-        }
-
-        function getScheduleTime(owner) {
-            const h = document.getElementById(`${owner}TimeHour`)?.value;
-            const m = document.getElementById(`${owner}TimeMinute`)?.value;
-            const h2 = document.getElementById(`${owner}Time2Hour`)?.value;
-            const m2 = document.getElementById(`${owner}Time2Minute`)?.value;
-            const period = document.getElementById(`${owner}TimeGrid`)?.dataset.period || 'AM';
-            const period2 = document.getElementById(`${owner}TimeGrid2`)?.dataset.period || 'AM';
-            const emptyStart = (h === '' && m === '') || (String(h).padStart(2,'0') === '00' && String(m).padStart(2,'0') === '00');
-            const emptyEnd = (h2 === '' && m2 === '') || (String(h2).padStart(2,'0') === '00' && String(m2).padStart(2,'0') === '00');
-            const t = emptyStart ? {hour:'',minute:'',period} : normalizeTimeParts(h, m, period);
-            const e = emptyEnd ? {hour:'',minute:'',period:period2} : normalizeTimeParts(h2, m2, period2);
-            return {
-                time: emptyStart ? '' : formatScheduleTime(t.hour, t.minute, t.period),
-                hour: t.hour, minute: t.minute, period: t.period,
-                timeEnd: emptyEnd ? '' : formatScheduleTime(e.hour, e.minute, e.period),
-                timeEndHour: e.hour, timeEndMinute: e.minute, timeEndPeriod: e.period
-            };
-        }
-
-        function parseScheduleTime(timeValue) {
-            if (!timeValue) return null;
-            const parsed = parseStoredTime(timeValue);
-            if (!parsed.hour) return null;
-            return scheduleTimeToMinutes(parsed.hour, parsed.minute, parsed.period);
-        }
+            migrateObject(obj) {
+                if (!obj) return;
+                const legacyStart = obj.time || (obj.timeHour !== undefined && obj.timeMinute !== undefined
+                    ? { hour: obj.timeHour, minute: obj.timeMinute, period: obj.timePeriod } : '');
+                const legacyEnd = obj.timeEnd || (obj.timeEndHour !== undefined && obj.timeEndMinute !== undefined
+                    ? { hour: obj.timeEndHour, minute: obj.timeEndMinute, period: obj.timeEndPeriod } : '');
+                const start = this.parse(legacyStart, obj.timePeriod || 'AM');
+                const end = this.parse(legacyEnd, obj.timeEndPeriod || 'AM');
+                obj.time = start.hour === '' ? '' : this.format(start.hour, start.minute, start.period);
+                obj.timeEnd = end.hour === '' ? '' : this.format(end.hour, end.minute, end.period);
+                delete obj.timeHour;
+                delete obj.timeMinute;
+                delete obj.timePeriod;
+                delete obj.timeEndHour;
+                delete obj.timeEndMinute;
+                delete obj.timeEndPeriod;
+            }
+        };
 
         function getDayDateKey(obj, dayObj) {
             if (!dayObj) return '';
@@ -1683,7 +1721,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
             if (dueStart < todayStart) return true;
             if (dueStart > todayStart) return false;
-            const scheduledMinutes = parseScheduleTime(obj.time);
+            const scheduledMinutes = TIME.minutes(obj.time);
             if (scheduledMinutes === null) return true;
             return (now.getHours() * 60 + now.getMinutes()) >= scheduledMinutes;
         }
@@ -1695,7 +1733,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const todayKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
             if (dateKey !== todayKey) return false;
             // تظل الحصة في "حصص اليوم" حتى وقت انتهاء الحصة، ثم تنتقل إلى "المعلقة" إذا لم تُسجل.
-            const endMinutes = parseScheduleTime(obj.timeEnd);
+            const endMinutes = TIME.minutes(obj.timeEnd);
             if (endMinutes === null) return true;
             const nowMinutes = now.getHours() * 60 + now.getMinutes();
             return nowMinutes < endMinutes;
@@ -1778,8 +1816,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             pendingContainer.innerHTML = '';
 
             const { todayItems, pendingItems } = collectSessionItems(now);
-            todayItems.sort((a,b) => String(a.time).localeCompare(String(b.time)));
-            pendingItems.sort((a,b) => String(a.dateKey).localeCompare(String(b.dateKey)) || String(a.time).localeCompare(String(b.time)));
+            todayItems.sort((a,b) => (TIME.minutes(a.time) ?? Number.MAX_SAFE_INTEGER) - (TIME.minutes(b.time) ?? Number.MAX_SAFE_INTEGER));
+            pendingItems.sort((a,b) => String(a.dateKey).localeCompare(String(b.dateKey)) || (TIME.minutes(a.time) ?? Number.MAX_SAFE_INTEGER) - (TIME.minutes(b.time) ?? Number.MAX_SAFE_INTEGER));
 
             if (!todayItems.length) {
                 todayContainer.innerHTML = `<div class="no-sessions">لا توجد حصص اليوم</div>`;
@@ -1856,23 +1894,12 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         } catch (err) {
             applyTheme(false);
         }
-        attachTwoDigitTimeInputs();
+        TIME.bindInputs();
         setInterval(() => { if (document.getElementById('page1')?.classList.contains('active')) renderTodaySessions(); }, 30000);
 
         function migrateScheduleTimes() {
-            const migrate = obj => {
-                if (!obj) return;
-                if (obj.timeHour && obj.timeMinute !== undefined && obj.timePeriod) return;
-                const t = parseStoredTime(obj.time || '');
-                if (t.hour !== '') {
-                    obj.timeHour = t.hour;
-                    obj.timeMinute = t.minute;
-                    obj.timePeriod = t.period;
-                    obj.time = formatScheduleTime(t.hour, t.minute, t.period);
-                }
-            };
-            groups.forEach(migrate);
-            students.forEach(migrate);
+            groups.forEach(TIME.migrateObject);
+            students.forEach(TIME.migrateObject);
         }
 
         function saveData() {
@@ -3232,7 +3259,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             document.getElementById('studentModalTitle').innerText = 'إضافة تلميذ جديد';
             document.getElementById('editStudentId').value = '';
             document.getElementById('studentName').value = ''; document.getElementById('studentPhone').value = ''; document.getElementById('studentGrade').value = ''; document.getElementById('studentPrice').value = ''; document.getElementById('studentDebtNote').value = ''; document.getElementById('studentPreviousDebt').value = '';
-            setScheduleTimeUI('student', '', '');
+            TIME.writeUI('student', '', '');
             buildDaySelector('studentDaySelector', []);
             document.getElementById('studentModal').style.display = 'flex';
             attachPhoneLengthWarning('studentPhone', 'التلميذ');
@@ -3243,7 +3270,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             document.getElementById('studentModalTitle').innerText = 'تعديل بيانات التلميذ';
             document.getElementById('editStudentId').value = idx; document.getElementById('studentName').value = s.name;
             document.getElementById('studentPhone').value = s.phone || ''; document.getElementById('studentGrade').value = s.grade || ''; document.getElementById('studentPrice').value = s.price || ''; document.getElementById('studentDebtNote').value = s.debtNote || ''; document.getElementById('studentPreviousDebt').value = s.previousDebt || 0;
-            setScheduleTimeUI('student', s.time || '', s.timeEnd || '');
+            TIME.writeUI('student', s.time || '', s.timeEnd || '');
             buildDaySelector('studentDaySelector', getStoredDays(s));
             document.getElementById('studentModal').style.display = 'flex';
             attachPhoneLengthWarning('studentPhone', 'التلميذ');
@@ -3256,7 +3283,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const name = document.getElementById('studentName').value.trim(); const phone = document.getElementById('studentPhone').value.trim(); const grade = document.getElementById('studentGrade').value.trim();
             const price = parseFloat(document.getElementById('studentPrice').value); const debtNote = document.getElementById('studentDebtNote').value.trim(); const previousDebt = Math.max(0, parseFloat(document.getElementById('studentPreviousDebt').value) || 0); const days = getSelectedDays('studentDaySelector');
             const day1 = days[0] || ''; const day2 = days[1] || ''; const day3 = days[2] || ''; const day4 = days[3] || '';
-            const timeData = getScheduleTime('student'); const time = timeData.time; const timeEnd = timeData.timeEnd;
+            const timeData = TIME.readUI('student'); const time = timeData.time; const timeEnd = timeData.timeEnd;
             warnIfPhoneLengthInvalid(phone, 'التلميذ');
             if (!name || !Number.isFinite(price) || price < 0) { showAppAlert('بيانات غير مكتملة', 'يرجى إدخال اسم التلميذ وثمن الحصة بشكل صحيح.'); return; }
             const studentEditIndex = editId !== '' ? parseInt(editId, 10) : -1;
@@ -3267,7 +3294,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const idx = parseInt(editId, 10); const student = students[idx]; if (!student) return;
                 const daysChanged = JSON.stringify(getStoredDays(student)) !== JSON.stringify(days);
                 const priceChanged = (parseFloat(student.price) || 0) !== price;
-                Object.assign(student, {name, phone, grade, price, debtNote, previousDebt, day1, day2, day3, day4, days, scheduleDays: [...days], time, timeHour: timeData.hour, timeMinute: timeData.minute, timePeriod: timeData.period, timeEnd, timeEndHour: timeData.timeEndHour, timeEndMinute: timeData.timeEndMinute, timeEndPeriod: timeData.timeEndPeriod});
+                Object.assign(student, {name, phone, grade, price, debtNote, previousDebt, day1, day2, day3, day4, days, scheduleDays: [...days], time, timeEnd});
                 // نحافظ على معرف التلميذ ثابتًا، ونصفر حالة دفع الشهر فقط إذا تغير سعر الحصة.
                 if (priceChanged) {
                     student.isPaid = false;
@@ -3281,7 +3308,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     student.monthKey = student.monthKey || newMonthKey;
                 }
             } else {
-                students.push({id: Date.now(), studentId: generateStudentId(name, phone), name, phone, grade, price, debtNote, previousDebt, day1, day2, day3, day4, days, scheduleDays: [...days], time, timeHour: timeData.hour, timeMinute: timeData.minute, timePeriod: timeData.period, timeEnd, timeEndHour: timeData.timeEndHour, timeEndMinute: timeData.timeEndMinute, timeEndPeriod: timeData.timeEndPeriod, daysData: generateDatesForGroup(days, '', defaultFirstDay, ''), monthKey: newMonthKey, isPaid: false, isDebtPaid: false});
+                students.push({id: Date.now(), studentId: generateStudentId(name, phone), name, phone, grade, price, debtNote, previousDebt, day1, day2, day3, day4, days, scheduleDays: [...days], time, timeEnd, daysData: generateDatesForGroup(days, '', defaultFirstDay, ''), monthKey: newMonthKey, isPaid: false, isDebtPaid: false});
             }
             saveData(); closeStudentModal(); if (editId !== '') renderStudentDetail(parseInt(editId, 10)); else navigateTo('page4');
         }
@@ -3342,8 +3369,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 // ===== المجموعات فقط =====
                 groups.forEach(group => {
                     const scheduleDays = getStableScheduleDays(group);
-                    const scheduleTime = group.time || formatScheduleTime(group.timeHour || '', group.timeMinute || '', group.timePeriod || '');
-                    const scheduleTimeEnd = group.timeEnd || formatScheduleTime(group.timeEndHour || '', group.timeEndMinute || '', group.timeEndPeriod || '');
+                    const scheduleTime = group.time || '';
+                    const scheduleTimeEnd = group.timeEnd || '';
 
                     ensureDebtHistory(group);
                     if (!group.isMonthPaid) {
@@ -3364,8 +3391,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 // ===== التلاميذ فقط =====
                 students.forEach(student => {
                     const scheduleDays = getStableScheduleDays(student);
-                    const scheduleTime = student.time || formatScheduleTime(student.timeHour || '', student.timeMinute || '', student.timePeriod || '');
-                    const scheduleTimeEnd = student.timeEnd || formatScheduleTime(student.timeEndHour || '', student.timeEndMinute || '', student.timeEndPeriod || '');
+                    const scheduleTime = student.time || '';
+                    const scheduleTimeEnd = student.timeEnd || '';
 
                     ensureDebtHistory(student);
                     if (!student.isPaid) {
@@ -3393,7 +3420,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             document.getElementById('editGroupId').value = '';
             document.getElementById('groupName').value = '';
             document.getElementById('groupPhone').value = '';
-            setScheduleTimeUI('group', '', '');
+            TIME.writeUI('group', '', '');
             document.getElementById('groupPrice').value = '';
             document.getElementById('groupDebtNote').value = ''; document.getElementById('groupPreviousDebt').value = '';
             buildDaySelector('groupDaySelector', []);
@@ -3407,7 +3434,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             document.getElementById('editGroupId').value = index;
             document.getElementById('groupName').value = g.name;
             document.getElementById('groupPhone').value = g.phone || '';
-            setScheduleTimeUI('group', g.time || '', g.timeEnd || '');
+            TIME.writeUI('group', g.time || '', g.timeEnd || '');
             document.getElementById('groupPrice').value = g.price || '';
             document.getElementById('groupDebtNote').value = g.debtNote || ''; document.getElementById('groupPreviousDebt').value = g.previousDebt || 0;
             buildDaySelector('groupDaySelector', getStoredDays(g));
@@ -3423,7 +3450,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const phone = document.getElementById('groupPhone').value.trim();
             const days = getSelectedDays('groupDaySelector');
             const day1 = days[0] || ''; const day2 = days[1] || ''; const day3 = days[2] || ''; const day4 = days[3] || '';
-            const timeData = getScheduleTime('group'); const time = timeData.time; const timeEnd = timeData.timeEnd;
+            const timeData = TIME.readUI('group'); const time = timeData.time; const timeEnd = timeData.timeEnd;
             const price = parseFloat(document.getElementById('groupPrice').value);
             const debtNote = document.getElementById('groupDebtNote').value.trim();
             const previousDebt = Math.max(0, parseFloat(document.getElementById('groupPreviousDebt').value) || 0);
@@ -3439,7 +3466,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const idx = parseInt(editId, 10); const group = groups[idx]; if (!group) return;
                 const oldDays = getStoredDays(group); const daysChanged = JSON.stringify(oldDays) !== JSON.stringify(days);
                 const priceChanged = (parseFloat(group.price) || 0) !== price;
-                Object.assign(group, {name, phone, day1, day2, day3, day4, days, scheduleDays: [...days], time, timeHour: timeData.hour, timeMinute: timeData.minute, timePeriod: timeData.period, timeEnd, timeEndHour: timeData.timeEndHour, timeEndMinute: timeData.timeEndMinute, timeEndPeriod: timeData.timeEndPeriod, price, debtNote, previousDebt});
+                Object.assign(group, {name, phone, day1, day2, day3, day4, days, scheduleDays: [...days], time, timeEnd, price, debtNote, previousDebt});
                 // نحافظ على حالة السداد عند تعديل البيانات العادية، ونلغيها فقط إذا تغير سعر الحصة.
                 if (priceChanged) {
                     group.isMonthPaid = false;
@@ -3453,7 +3480,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     group.monthKey = group.monthKey || newMonthKey;
                 }
             } else {
-                groups.push({id: Date.now(), name, phone, day1, day2, day3, day4, days, scheduleDays: [...days], time, timeHour: timeData.hour, timeMinute: timeData.minute, timePeriod: timeData.period, timeEnd, timeEndHour: timeData.timeEndHour, timeEndMinute: timeData.timeEndMinute, timeEndPeriod: timeData.timeEndPeriod, price, debtNote, previousDebt, debtHistory: previousDebt > 0 ? [{sessions: 0, price: 0, total: previousDebt, remaining: previousDebt, source: 'إدخال يدوي', note: debtNote || 'متأخرات سابقة', manual: true}] : [], daysData: generateDatesForGroup(days, '', defaultFirstDay, ''), monthKey: newMonthKey, isMonthPaid: false, isDebtPaid: false});
+                groups.push({id: Date.now(), name, phone, day1, day2, day3, day4, days, scheduleDays: [...days], time, timeEnd, price, debtNote, previousDebt, debtHistory: previousDebt > 0 ? [{sessions: 0, price: 0, total: previousDebt, remaining: previousDebt, source: 'إدخال يدوي', note: debtNote || 'متأخرات سابقة', manual: true}] : [], daysData: generateDatesForGroup(days, '', defaultFirstDay, ''), monthKey: newMonthKey, isMonthPaid: false, isDebtPaid: false});
             }
             saveData(); closeGroupModal(); if (editId !== '') renderGroupDetail(parseInt(editId, 10)); else navigateTo('page2');
         }
