@@ -1275,6 +1275,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
     }
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 <div id="loginScreen" hidden><div class="login-card"><h2 id="loginTitle">تسجيل الدخول إلى نظم دروسك</h2><p id="loginSubtitle">أدخل بياناتك للدخول إلى حسابك</p><form id="loginForm" autocomplete="on"><input id="loginUsername" type="text" inputmode="text" autocomplete="username" placeholder="اسم المستخدم" required><input id="loginPassword" type="password" autocomplete="current-password" placeholder="رقم السر" required><button class="login-primary" type="submit" id="loginSubmit">تسجيل الدخول</button></form><button class="login-secondary" type="button" id="registerToggle">إنشاء حساب جديد</button><button class="login-secondary" type="button" id="forgotPasswordButton">نسيت كلمة المرور؟</button><div class="login-divider">أو</div><button class="login-google" type="button" id="googleLoginButton">تسجيل الدخول بحساب Google</button><div id="loginMessage" role="alert"></div></div><div class="login-card" id="registerInfoPage" hidden><h2>إنشاء حساب جديد</h2><p>أنشئ حسابك للبدء باستخدام نظم دروسك</p><ul style="text-align:right;line-height:1.9;padding-right:20px"><li>اكتب اسم مستخدم جديد.</li><li>اختر رقم سر لا يقل عن 6 أحرف أو أرقام.</li><li>بعد إنشاء الحساب سيتم حفظ بياناتك بشكل مستقل.</li></ul><button class="login-primary" type="button" id="startRegister">متابعة إنشاء الحساب</button><button class="login-secondary" type="button" id="backLogin">العودة لتسجيل الدخول</button></div></div>
@@ -3971,118 +3973,158 @@ if(user){
 
 
 <script>
-function exportPDFReport(){
-    const printRoot = document.createElement('div');
-    printRoot.id = 'pdfPrintRoot';
-
-    const report = document.createElement('div');
-    report.className = 'pdf-report-document';
-    report.innerHTML = `
-        <div class="pdf-report-cover">
-            <h1>نظم دروسك</h1>
-            <div class="pdf-report-subtitle">تقرير شامل للبيانات</div>
-            <div class="pdf-report-date">${escapeHtml(new Date().toLocaleDateString('ar-EG'))}</div>
-        </div>
-    `;
-
-    const tempHost = document.createElement('div');
-    tempHost.style.display = 'none';
-    const tempGroupDetail = document.createElement('div');
-    tempGroupDetail.id = 'singleGroupDetail';
-    const tempStudentDetail = document.createElement('div');
-    tempStudentDetail.id = 'singleStudentDetail';
-    tempHost.appendChild(tempGroupDetail);
-    tempHost.appendChild(tempStudentDetail);
-    document.body.appendChild(tempHost);
+async function exportPDFReport(){
+    if (typeof html2canvas !== 'function' || !window.jspdf || !window.jspdf.jsPDF) {
+        showAppAlert('تعذر التصدير', 'تعذر تشغيل محرك إنشاء PDF. تأكد من اتصال الإنترنت ثم حاول مرة أخرى.');
+        return;
+    }
 
     const originalGroups = groups;
     const originalStudents = students;
     const originalSelectedGroupIndex = selectedGroupIndex;
     const originalSelectedStudentIndex = selectedStudentIndex;
 
-    try {
-        groups = JSON.parse(JSON.stringify(originalGroups || []));
-        students = JSON.parse(JSON.stringify(originalStudents || []));
+    const exportRoot = document.createElement('div');
+    exportRoot.id = 'pdfExportRenderRoot';
+    exportRoot.style.cssText = [
+        'position:fixed', 'left:-100000px', 'top:0', 'width:794px',
+        'background:#fff', 'color:#111', 'direction:rtl',
+        'font-family:Arial,"Noto Sans Arabic",sans-serif',
+        'z-index:-1', 'visibility:visible', 'display:block',
+        'box-sizing:border-box', 'padding:0', 'margin:0'
+    ].join(';');
+    document.body.appendChild(exportRoot);
 
-        groups.forEach((group, index) => {
-            tempGroupDetail.innerHTML = '';
-            renderGroupDetail(index);
+    const tempGroupDetail = document.createElement('div');
+    tempGroupDetail.id = 'singleGroupDetail';
+    const tempStudentDetail = document.createElement('div');
+    tempStudentDetail.id = 'singleStudentDetail';
+    tempGroupDetail.style.display = 'block';
+    tempStudentDetail.style.display = 'block';
 
-            const page = document.createElement('section');
-            page.className = 'pdf-entity-page pdf-group-page';
-            page.innerHTML = `
-                <div class="pdf-entity-heading">
-                    <div class="pdf-entity-type">المجموعة</div>
-                    <div class="pdf-entity-name">${escapeHtml(group.name || 'مجموعة بدون اسم')}</div>
-                </div>
-                ${tempGroupDetail.innerHTML}
-            `;
-            report.appendChild(page);
-        });
-
-        students.forEach((student, index) => {
-            tempStudentDetail.innerHTML = '';
-            renderStudentDetail(index);
-
-            const page = document.createElement('section');
-            page.className = 'pdf-entity-page pdf-student-page';
-            page.innerHTML = `
-                <div class="pdf-entity-heading">
-                    <div class="pdf-entity-type">التلميذ</div>
-                    <div class="pdf-entity-name">${escapeHtml(student.name || 'تلميذ بدون اسم')}</div>
-                </div>
-                ${tempStudentDetail.innerHTML}
-            `;
-            report.appendChild(page);
-        });
-
-        if (!groups.length && !students.length) {
-            const empty = document.createElement('div');
-            empty.className = 'pdf-empty-state';
-            empty.textContent = 'لا توجد بيانات لتصديرها.';
-            report.appendChild(empty);
-        }
-
-        printRoot.appendChild(report);
-        document.body.appendChild(printRoot);
-
-        printRoot.querySelectorAll('.detail-actions-card, .btn-3d, .status-btns, .sessions-buttons-grid, .financial-payment-actions, .section-collapse-icon, .report-collapse-icon').forEach(el => el.remove());
-
-        printRoot.querySelectorAll('input, select, textarea').forEach(field => {
+    const reportPages = [];
+    const makePage = (type, name, html) => {
+        const page = document.createElement('section');
+        page.className = 'pdf-direct-page';
+        page.style.cssText = [
+            'width:794px', 'min-height:1123px', 'box-sizing:border-box',
+            'background:#fff', 'padding:34px 36px', 'margin:0',
+            'direction:rtl', 'color:#111', 'overflow:hidden'
+        ].join(';');
+        page.innerHTML = `
+            <div class="pdf-direct-heading" style="border:2px solid #222;border-radius:12px;padding:12px 14px;margin:0 0 14px;text-align:center;background:#fff;">
+                <div style="font-size:13px;font-weight:800;margin-bottom:4px;">${escapeHtml(type)}</div>
+                <div style="font-size:24px;font-weight:900;">${escapeHtml(name || (type === 'المجموعة' ? 'مجموعة بدون اسم' : 'تلميذ بدون اسم'))}</div>
+            </div>
+            <div class="pdf-direct-content">${html}</div>
+        `;
+        page.querySelectorAll('.detail-actions-card, .btn-3d, .status-btns, .sessions-buttons-grid, .financial-payment-actions, .section-collapse-icon, .report-collapse-icon').forEach(el => el.remove());
+        page.querySelectorAll('input, select, textarea').forEach(field => {
             const value = field.tagName === 'SELECT'
                 ? (field.options[field.selectedIndex]?.textContent || '')
                 : (field.value || '');
             const text = document.createElement('span');
-            text.className = 'pdf-field-value';
             text.textContent = value || '—';
+            text.style.cssText = 'display:inline-block;min-width:20px;font-weight:700;white-space:pre-wrap;';
             field.replaceWith(text);
         });
-
-        printRoot.querySelectorAll('.detail-section-content, .report-section-content').forEach(el => {
+        page.querySelectorAll('.detail-section-content, .report-section-content').forEach(el => {
             el.style.display = 'block';
             el.style.height = 'auto';
             el.style.maxHeight = 'none';
             el.style.overflow = 'visible';
+            el.removeAttribute('onclick');
+            el.removeAttribute('onmousedown');
+            el.removeAttribute('ontouchstart');
         });
-
-        printRoot.querySelectorAll('.detail-section-card, .student-report-card').forEach(el => {
+        page.querySelectorAll('.detail-section-card, .student-report-card, .group-details').forEach(el => {
             el.style.display = 'block';
+            el.style.visibility = 'visible';
+            el.style.height = 'auto';
+            el.style.maxHeight = 'none';
+            el.style.overflow = 'visible';
+            el.style.background = '#fff';
+            el.style.boxShadow = 'none';
         });
+        page.querySelectorAll('.day-row').forEach(el => {
+            el.style.breakInside = 'avoid';
+            el.style.pageBreakInside = 'avoid';
+        });
+        return page;
+    };
 
-        const cleanup = () => {
-            printRoot.remove();
-            tempHost.remove();
-            window.removeEventListener('afterprint', cleanup);
-        };
-        window.addEventListener('afterprint', cleanup);
-        window.print();
+    try {
+        groups = JSON.parse(JSON.stringify(originalGroups || []));
+        students = JSON.parse(JSON.stringify(originalStudents || []));
+
+        for (let index = 0; index < groups.length; index++) {
+            tempGroupDetail.innerHTML = '';
+            tempStudentDetail.innerHTML = '';
+            exportRoot.appendChild(tempGroupDetail);
+            renderGroupDetail(index);
+            const page = makePage('المجموعة', groups[index].name, tempGroupDetail.innerHTML);
+            reportPages.push(page);
+            tempGroupDetail.remove();
+        }
+
+        for (let index = 0; index < students.length; index++) {
+            tempStudentDetail.innerHTML = '';
+            tempGroupDetail.innerHTML = '';
+            exportRoot.appendChild(tempStudentDetail);
+            renderStudentDetail(index);
+            const page = makePage('التلميذ', students[index].name, tempStudentDetail.innerHTML);
+            reportPages.push(page);
+            tempStudentDetail.remove();
+        }
+
+        if (!reportPages.length) {
+            const page = makePage('تقرير', 'لا توجد بيانات', '<div style="text-align:center;font-size:18px;font-weight:800;padding:50px 10px;">لا توجد بيانات لتصديرها.</div>');
+            reportPages.push(page);
+        }
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation:'p', unit:'mm', format:'a4', compress:true });
+        const pdfWidth = 210;
+        const pdfHeight = 297;
+
+        for (let i = 0; i < reportPages.length; i++) {
+            exportRoot.appendChild(reportPages[i]);
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            const canvas = await html2canvas(reportPages[i], {
+                scale: 2,
+                backgroundColor: '#ffffff',
+                useCORS: true,
+                logging: false,
+                width: 794,
+                height: Math.max(1123, reportPages[i].scrollHeight),
+                windowWidth: 794,
+                windowHeight: Math.max(1123, reportPages[i].scrollHeight)
+            });
+
+            if (i > 0) pdf.addPage();
+            const ratio = Math.min(pdfWidth / canvas.width, pdfHeight / canvas.height);
+            const imgWidth = canvas.width * ratio;
+            const imgHeight = canvas.height * ratio;
+            const x = (pdfWidth - imgWidth) / 2;
+            const y = (pdfHeight - imgHeight) / 2;
+            pdf.addImage(canvas.toDataURL('image/jpeg', 0.94), 'JPEG', x, y, imgWidth, imgHeight, undefined, 'FAST');
+            reportPages[i].remove();
+        }
+
+        pdf.save('تقرير_نظم_دروسك.pdf');
+        showAppAlert('تم التصدير', 'تم إنشاء ملف PDF وحفظه مباشرة باسم تقرير_نظم_دروسك.pdf.');
+    } catch (error) {
+        console.error('خطأ في تصدير PDF:', error);
+        showAppAlert('تعذر التصدير', 'حدث خطأ أثناء إنشاء ملف PDF. حاول مرة أخرى.');
     } finally {
         groups = originalGroups;
         students = originalStudents;
         selectedGroupIndex = originalSelectedGroupIndex;
         selectedStudentIndex = originalSelectedStudentIndex;
+        exportRoot.remove();
     }
 }
+
 function recycleGet(){
     return JSON.parse(localStorage.getItem(userStorageKey('recycle_bin')) || '[]');
 }
