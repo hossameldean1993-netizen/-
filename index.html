@@ -1628,6 +1628,13 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         function getStoredTimeMinutes(obj, end = false) {
             if (!obj) return null;
             const prefix = end ? 'timeEnd' : 'time';
+            // مصدر الوقت الموحد: القيمة النصية الكاملة (الساعة + الدقيقة + ص/م).
+            // الحقول المنفصلة تُستخدم فقط كحل احتياطي للبيانات القديمة.
+            const stored = String(obj[prefix] || '').trim();
+            if (stored) {
+                const parsed = parseStoredTime(stored);
+                return parsed.hour === '' ? null : scheduleTimeToMinutes(parsed.hour, parsed.minute, parsed.period);
+            }
             const hour = obj[`${prefix}Hour`];
             const minute = obj[`${prefix}Minute`];
             const period = obj[`${prefix}Period`];
@@ -1636,8 +1643,11 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 period) {
                 return scheduleTimeToMinutes(hour, minute, period);
             }
-            const parsed = parseStoredTime(obj[prefix] || '');
-            return parsed.hour === '' ? null : scheduleTimeToMinutes(parsed.hour, parsed.minute, parsed.period);
+            return null;
+        }
+
+        function getCurrentTimeMinutes(now = new Date()) {
+            return now.getHours() * 60 + now.getMinutes();
         }
 
         function getDayDateKey(obj, dayObj) {
@@ -1664,7 +1674,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             if (dueStart > todayStart) return false;
             const scheduledMinutes = getStoredTimeMinutes(obj);
             if (scheduledMinutes === null) return true;
-            return (now.getHours() * 60 + now.getMinutes()) >= scheduledMinutes;
+            return getCurrentTimeMinutes(now) >= scheduledMinutes;
         }
 
         function isTodaySession(obj, dayObj, now = new Date()) {
@@ -1676,7 +1686,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             // تظل الحصة في "حصص اليوم" حتى وقت انتهاء الحصة، ثم تنتقل إلى "المعلقة" إذا لم تُسجل.
             const endMinutes = getStoredTimeMinutes(obj, true);
             if (endMinutes === null) return true;
-            const nowMinutes = now.getHours() * 60 + now.getMinutes();
+            const nowMinutes = getCurrentTimeMinutes(now);
             return nowMinutes < endMinutes;
         }
 
