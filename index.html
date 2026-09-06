@@ -3292,7 +3292,12 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const idx = parseInt(editId, 10); const student = students[idx]; if (!student) return;
                 const daysChanged = JSON.stringify(getStoredDays(student)) !== JSON.stringify(days);
                 const priceChanged = (parseFloat(student.price) || 0) !== price;
+                const previousDebtChanged = (Math.max(0, parseFloat(student.previousDebt) || 0) !== previousDebt);
                 Object.assign(student, {name, phone, grade, price, debtNote, previousDebt, day1, day2, day3, day4, days, scheduleDays: [...days], time, timeHour: timeData.hour, timeMinute: timeData.minute, timePeriod: timeData.period, timeEnd, timeEndHour: timeData.timeEndHour, timeEndMinute: timeData.timeEndMinute, timeEndPeriod: timeData.timeEndPeriod});
+                if (previousDebtChanged) {
+                    student.isDebtPaid = previousDebt <= 0;
+                    student.debtHistory = previousDebt > 0 ? [{sessions: 0, price: 0, total: previousDebt, remaining: previousDebt, source: 'إدخال يدوي', note: debtNote || 'متأخرات سابقة', manual: true}] : [];
+                }
                 // نحافظ على معرف التلميذ ثابتًا، ونلغي تحصيل الشهر الحالي إذا تغير السعر أو أيام الجدول.
                 if (priceChanged || daysChanged) {
                     setMonthPaymentState(student, 'student', false);
@@ -3456,7 +3461,12 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const idx = parseInt(editId, 10); const group = groups[idx]; if (!group) return;
                 const oldDays = getStoredDays(group); const daysChanged = JSON.stringify(oldDays) !== JSON.stringify(days);
                 const priceChanged = (parseFloat(group.price) || 0) !== price;
+                const previousDebtChanged = (Math.max(0, parseFloat(group.previousDebt) || 0) !== previousDebt);
                 Object.assign(group, {name, phone, day1, day2, day3, day4, days, scheduleDays: [...days], time, timeHour: timeData.hour, timeMinute: timeData.minute, timePeriod: timeData.period, timeEnd, timeEndHour: timeData.timeEndHour, timeEndMinute: timeData.timeEndMinute, timeEndPeriod: timeData.timeEndPeriod, price, debtNote, previousDebt});
+                if (previousDebtChanged) {
+                    group.isDebtPaid = previousDebt <= 0;
+                    group.debtHistory = previousDebt > 0 ? [{sessions: 0, price: 0, total: previousDebt, remaining: previousDebt, source: 'إدخال يدوي', note: debtNote || 'متأخرات سابقة', manual: true}] : [];
+                }
                 // نحافظ على حالة السداد عند تعديل البيانات العادية، ونلغي تحصيل الشهر الحالي إذا تغير السعر أو أيام الجدول.
                 if (priceChanged || daysChanged) {
                     setMonthPaymentState(group, 'group', false);
