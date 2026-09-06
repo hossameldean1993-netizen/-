@@ -346,12 +346,12 @@ html, body, button, input, select, textarea, option {
         .no-sessions { text-align: center; font-size: 0.85rem; color: var(--text-muted); font-weight: 700; padding: 10px 0; }
 
         .summary-card { background: var(--summary-bg); color: #ffffff; padding: 14px 12px; border-radius: 16px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,.06); border: 2px solid var(--summary-border); margin-bottom: 16px; }
-        .summary-card h2 { font-size: 0.85rem; font-weight: 700; opacity: 0.95; margin-bottom: 4px; }
-        .summary-card .total-amount { font-size: 1.7rem; font-weight: 800; margin-bottom: 10px; line-height: 1.1; }
+        .summary-card h2 { font-size: .72rem; font-weight: 700; opacity: 0.95; margin-bottom: 2px; }
+        .summary-card .total-amount { font-size: 1.35rem; font-weight: 800; margin-bottom: 5px; line-height: 1.1; }
         
-        .stats-grid { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; border-top: 1px solid rgba(255, 255, 255, 0.2); padding-top: 8px; font-size: 0.78rem; }
-        .stats-item { background: var(--summary-stats-bg); padding: 6px 4px; border-radius: 10px; border: 1px solid var(--summary-stats-border); color: var(--summary-stats-text); display: flex; flex-direction: column; justify-content: center; }
-        .stats-item span { display: block; font-weight: 800; font-size: 0.95rem; margin-top: 2px; color: #ffffff; }
+        .stats-grid { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; border-top: 1px solid rgba(255, 255, 255, 0.2); padding-top: 5px; font-size: .66rem; }
+        .stats-item { background: var(--summary-stats-bg); padding: 4px 3px; border-radius: 7px; border: 1px solid var(--summary-stats-border); color: var(--summary-stats-text); display: flex; flex-direction: column; justify-content: center; min-height: 34px; }
+        .stats-item span { display: block; font-weight: 800; font-size: .78rem; margin-top: 1px; color: #ffffff; }
 
         .search-input { width: 100%; padding: 10px 14px; border-radius: 12px; border: 2px solid var(--border-color); background: var(--card-bg-light); color: var(--text-dark); font-size: 0.9rem; outline: none; text-align: center; }
         
@@ -415,30 +415,30 @@ html, body, button, input, select, textarea, option {
         .grid-2-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .add-btn { padding: 11px; font-size: 0.95rem; }
 
-        .groups-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-        .mini-card { 
+        .groups-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
+         .mini-card { 
             background: var(--group-card-bg); 
             color: #ffffff; 
-            border-radius: 14px; 
-            padding: 12px 10px; 
+            border-radius: 10px; 
+            padding: 7px 6px; 
             text-align: center; 
             cursor: pointer; 
-            border: 2px solid var(--group-card-border); 
-            box-shadow: 0 2px 5px rgba(0,0,0,.06); 
+            border: 1.5px solid var(--group-card-border); 
+            box-shadow: 0 1px 3px rgba(0,0,0,.05); 
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            min-height: 100px;
+            min-height: 74px;
         }
         .mini-card:active { transform: translateY(2px); box-shadow: 0 1px 0px var(--group-card-shadow); }
         .mini-card.paid { border-right: 5px solid #22c55e; }
         .mini-card.has-debt { border-left: 5px solid #ef4444; }
 
-        .mini-card-id { font-size: 11px; color: #ffffff; margin-top: 2px; direction: ltr; unicode-bidi: plaintext; font-weight: 700; }
+        .mini-card-id { font-size: 9px; color: #ffffff; margin-top: 1px; direction: ltr; unicode-bidi: plaintext; font-weight: 700; }
         .detail-id { color: #ffffff; margin: 2px 0 4px; }
-        .mini-card-title { font-size: 1rem; font-weight: 800; margin-bottom: 4px; }
-        .mini-card-sub { font-size: 0.75rem; color: var(--group-subtext); margin-bottom: 6px; font-weight: 600; }
-        .mini-card-badge { font-size: 0.75rem; font-weight: 800; background: var(--math-expr-bg); padding: 3px 6px; border-radius: 6px; }
+        .mini-card-title { font-size: .78rem; font-weight: 800; margin-bottom: 2px; line-height: 1.25; }
+        .mini-card-sub { font-size: .62rem; color: var(--group-subtext); margin-bottom: 3px; line-height: 1.25; font-weight: 600; }
+        .mini-card-badge { font-size: .62rem; font-weight: 800; background: var(--math-expr-bg); padding: 2px 5px; border-radius: 5px; }
 
         .group-card { border-radius: 16px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,.06); border: 2px solid var(--group-card-border); overflow: hidden; text-align: center; }
         .group-card.paid { border-right: 6px solid #22c55e; }
@@ -646,11 +646,11 @@ html, body, button, input, select, textarea, option {
         .form-group label { display: block; margin-bottom: 3px; font-size: 0.78rem; color: var(--text-muted); font-weight: 700; }
         .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px 10px; border: 2px solid var(--border-color); border-radius: 8px; background: var(--bg); color: var(--text-dark); font-size: 0.85rem; outline: none; font-weight: 600; }
         .modal-actions { display: flex; gap: 6px; margin-top: 10px; }
-        .financial-mini-card { width: 100%; box-sizing: border-box; background: var(--card-bg-light); border: 2px solid var(--border-color); border-radius: 10px; padding: 8px 10px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
-        .financial-mini-card.paid { border-color: #16a34a; }
-        .financial-mini-name { font-size: 0.85rem; font-weight: 800; color: var(--text-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .financial-mini-amount { font-size: 0.82rem; font-weight: 900; color: var(--card-blue); white-space: nowrap; }
-        .financial-list-full { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+        .financial-mini-card { width: 100%; box-sizing: border-box; background: var(--card-bg-light); border: 1.5px solid var(--border-color); border-radius: 9px; padding: 6px 7px; min-height: 58px; display: flex; align-items: center; justify-content: center; flex-direction: column; text-align: center; gap: 3px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.045); }
+        .financial-mini-card.paid { border-color: #16a34a; border-right: 3px solid #16a34a; }
+        .financial-mini-name { width: 100%; font-size: .76rem; font-weight: 800; color: var(--text-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .financial-mini-amount { font-size: .72rem; font-weight: 900; color: var(--card-blue); white-space: nowrap; }
+        .financial-list-full { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
         .financial-list-full .financial-mini-card { width: 100%; }
         .empty-state .empty-add-link { display: flex; width: 100%; box-sizing: border-box; flex-direction: row; align-items: center; justify-content: center; gap: 8px; background: transparent; border: 0; box-shadow: none; padding: 10px 14px; color: var(--text-muted); opacity: .72; font-size: .95rem; font-weight: 800; white-space: nowrap; }
         .empty-state .empty-add-plus { display: inline-block; font-size: 1.1rem; font-weight: 900; line-height: 1; flex: 0 0 auto; }
@@ -821,7 +821,7 @@ html, body, button, input, select, textarea, option {
             width: 0;
             height: 0;
         }
-        /* تعديل واجهة الوقت فقط: صف واحد متكامل، ومستطيل واحد يضم (من/إلى) وكل خانات الوقت. */
+        
         .schedule-time-rows {
             width: 100%;
             display: flex;
@@ -891,116 +891,6 @@ html, body, button, input, select, textarea, option {
         }
 
 
-        /* ===== تحسينات واجهة الحسابات والقوائم - واجهة مضغوطة فقط ===== */
-        .financial-sticky-head {
-            padding: 3px 0 2px;
-        }
-        .financial-sticky-head .summary-card {
-            padding: 9px 9px;
-            border-radius: 13px;
-            margin-bottom: 5px;
-        }
-        .financial-sticky-head .summary-card h2 {
-            font-size: .72rem;
-            margin-bottom: 2px;
-        }
-        .financial-sticky-head .summary-card .total-amount {
-            font-size: 1.35rem;
-            margin-bottom: 5px;
-        }
-        .financial-sticky-head .stats-grid {
-            gap: 4px;
-            padding-top: 5px;
-            font-size: .66rem;
-        }
-        .financial-sticky-head .stats-item {
-            padding: 4px 3px;
-            border-radius: 7px;
-            min-height: 34px;
-        }
-        .financial-sticky-head .stats-item span {
-            font-size: .78rem;
-            margin-top: 1px;
-        }
-        .financial-sticky-head .financial-filter-container {
-            padding: 4px 6px;
-            margin-bottom: 5px;
-            gap: 5px;
-            border-radius: 8px;
-        }
-        .financial-filter-container label {
-            font-size: .68rem;
-        }
-        .financial-filter-select {
-            height: 29px;
-            padding: 3px 25px 3px 7px;
-            border-radius: 7px;
-            font-size: .72rem;
-        }
-        .financial-list-full {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 6px;
-        }
-        .financial-mini-card {
-            min-height: 58px;
-            padding: 6px 7px;
-            border-width: 1.5px;
-            border-radius: 9px;
-            flex-direction: column;
-            justify-content: center;
-            text-align: center;
-            gap: 3px;
-            box-shadow: 0 1px 3px rgba(0,0,0,.045);
-        }
-        .financial-mini-name {
-            width: 100%;
-            font-size: .76rem;
-        }
-        .financial-mini-amount {
-            font-size: .72rem;
-        }
-        .financial-mini-card.paid {
-            border-right: 3px solid #16a34a;
-        }
-        .section-separator {
-            margin: 9px 0 6px;
-            font-size: .72rem;
-        }
-
-        /* مجموعات وتلاميذ: بطاقات أصغر لعرض عدد أكبر في الشاشة */
-        .groups-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 6px;
-            margin-top: 6px;
-        }
-        .mini-card {
-            min-height: 74px;
-            padding: 7px 6px;
-            border-radius: 10px;
-            border-width: 1.5px;
-            box-shadow: 0 1px 3px rgba(0,0,0,.05);
-        }
-        .mini-card-title {
-            font-size: .78rem;
-            margin-bottom: 2px;
-            line-height: 1.25;
-        }
-        .mini-card-id {
-            font-size: 9px;
-            margin-top: 1px;
-        }
-        .mini-card-sub {
-            font-size: .62rem;
-            margin-bottom: 3px;
-            line-height: 1.25;
-        }
-        .mini-card-badge {
-            font-size: .62rem;
-            padding: 2px 5px;
-            border-radius: 5px;
-        }
-
         @media (min-width: 520px) {
             .financial-list-full {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1009,7 +899,6 @@ html, body, button, input, select, textarea, option {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
             }
         }
-
 
         .financial-section { margin-top: 14px; padding: 14px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--day-row-bg); }
         .financial-main-title { font-size: 1rem; font-weight: 800; text-align: center; margin-bottom: 8px; }
@@ -2538,36 +2427,53 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             }, 0);
         }
 
+        // مصدر موحد للحسابات المالية: كل الواجهات تعتمد على نفس القيم بدل إعادة حسابها كل مرة.
+        function getFinancialMetrics(obj, type) {
+            if (!obj) return { sessions: 0, monthMoney: 0, previousDebt: 0, totalRequired: 0, monthPaid: false, debtPaid: false, isFullyPaid: true, hasDebt: false, isUnpaid: false };
+            const isGroup = type === 'group';
+            const sessions = isGroup ? calculateGroupSessionCount(obj) : calculateStudentSessionCount(obj);
+            const monthMoney = sessions * (parseFloat(obj.price) || 0);
+            const previousDebt = Math.max(0, parseFloat(obj.previousDebt) || 0);
+            const monthPaidFlag = isGroup ? !!obj.isMonthPaid : !!obj.isPaid;
+            const debtPaidFlag = !!obj.isDebtPaid;
+            const monthPaid = monthPaidFlag || monthMoney === 0;
+            const debtPaid = debtPaidFlag || previousDebt === 0;
+            const unpaidMonth = monthPaid ? 0 : monthMoney;
+            const unpaidDebt = debtPaid ? 0 : previousDebt;
+            const totalRequired = unpaidMonth + unpaidDebt;
+            return {
+                sessions,
+                monthMoney,
+                previousDebt,
+                totalRequired,
+                monthPaid,
+                debtPaid,
+                isFullyPaid: totalRequired === 0,
+                hasDebt: previousDebt > 0 && !debtPaid,
+                isUnpaid: totalRequired > 0
+            };
+        }
+
         function calculateSummaryTotals() {
             let totalCurrentMonthSum = 0;
             let totalOldDebtsSum = 0;
             let totalPaidSum = 0;
             let totalUnpaidSum = 0;
 
-            // ===== المجموعات فقط =====
             groups.forEach(group => {
-                const totalGroupSessions = calculateGroupSessionCount(group);
-                const groupMonthMoney = totalGroupSessions * (parseFloat(group.price) || 0);
-                const previousDebt = parseFloat(group.previousDebt) || 0;
-
-                totalCurrentMonthSum += groupMonthMoney;
-                totalOldDebtsSum += previousDebt;
+                const metrics = getFinancialMetrics(group, 'group');
+                totalCurrentMonthSum += metrics.monthMoney;
+                totalOldDebtsSum += metrics.previousDebt;
                 totalPaidSum += getCollectedPaymentsTotal(group);
-                totalUnpaidSum += Math.max(0, groupMonthMoney - (parseFloat(group.paidAmount) || 0));
-                totalUnpaidSum += Math.max(0, previousDebt - (parseFloat(group.paidDebtAmount) || 0));
+                totalUnpaidSum += metrics.totalRequired;
             });
 
-            // ===== التلاميذ فقط =====
             students.forEach(student => {
-                const totalStudentSessions = calculateStudentSessionCount(student);
-                const studentMonthMoney = totalStudentSessions * (parseFloat(student.price) || 0);
-                const previousDebt = parseFloat(student.previousDebt) || 0;
-
-                totalCurrentMonthSum += studentMonthMoney;
-                totalOldDebtsSum += previousDebt;
+                const metrics = getFinancialMetrics(student, 'student');
+                totalCurrentMonthSum += metrics.monthMoney;
+                totalOldDebtsSum += metrics.previousDebt;
                 totalPaidSum += getCollectedPaymentsTotal(student);
-                totalUnpaidSum += Math.max(0, studentMonthMoney - (parseFloat(student.paidAmount) || 0));
-                totalUnpaidSum += Math.max(0, previousDebt - (parseFloat(student.paidDebtAmount) || 0));
+                totalUnpaidSum += metrics.totalRequired;
             });
 
             document.getElementById('grandTotal').innerText = (totalCurrentMonthSum + totalOldDebtsSum) + ' جنيه';
@@ -2591,12 +2497,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             let matchedStudentsCount = 0;
 
             groups.forEach((group, index) => {
-                const totalSessions = calculateGroupSessionCount(group);
-                const monthMoney = totalSessions * (parseFloat(group.price) || 0);
-                const previousDebt = parseFloat(group.previousDebt) || 0;
-                const totalRequired = (group.isMonthPaid ? 0 : monthMoney) + (group.isDebtPaid ? 0 : previousDebt);
-                const isFullyPaid = (group.isMonthPaid || monthMoney === 0) && (group.isDebtPaid || previousDebt === 0);
-                const hasDebt = previousDebt > 0 && !group.isDebtPaid;
+                const metrics = getFinancialMetrics(group, 'group');
+                const { sessions: totalSessions, monthMoney, previousDebt, totalRequired, isFullyPaid, hasDebt } = metrics;
                 const isUnpaid = totalRequired > 0;
 
                 const show = filterValue === 'all' ||
@@ -2654,12 +2556,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             if (groups.length === 0) { grid.innerHTML = '<div class="empty-state"><span class="empty-add-link">أضف مجموعتك الأولى <b class="empty-add-plus">+</b></span></div>'; return; }
 
             groups.map((group, originalIndex) => {
-                const totalSessions = calculateGroupSessionCount(group);
-                const monthMoney = totalSessions * (parseFloat(group.price) || 0);
-                const previousDebt = parseFloat(group.previousDebt) || 0;
-                const totalRequired = (group.isMonthPaid ? 0 : monthMoney) + (group.isDebtPaid ? 0 : previousDebt);
-                const isFullyPaid = (group.isMonthPaid || monthMoney === 0) && (group.isDebtPaid || previousDebt === 0);
-                const hasDebt = previousDebt > 0 && !group.isDebtPaid;
+                const metrics = getFinancialMetrics(group, 'group');
+                const { sessions: totalSessions, monthMoney, previousDebt, totalRequired, isFullyPaid, hasDebt } = metrics;
                 return { group, originalIndex, totalRequired, isFullyPaid, hasDebt };
             }).filter(item => {
                 const group = item.group;
@@ -2697,10 +2595,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     sessionDetails.push(`• ${day.label} (${day.dateStr}): ${count} حصة`);
                 }
             });
-            const groupMonthMoney = totalGroupSessions * (parseFloat(group.price) || 0);
-            const previousDebt = parseFloat(group.previousDebt) || 0;
+            const financial = getFinancialMetrics(group, 'group');
+            const { monthMoney: groupMonthMoney, previousDebt, totalRequired } = financial;
             const debtNote = group.debtNote || '';
-            const totalRequired = (group.isMonthPaid ? 0 : groupMonthMoney) + (group.isDebtPaid ? 0 : previousDebt);
 
             let reportText = `\u{1F4CC} *اسم المجموعة:* ${group.name}\n`;
             reportText += `\u{1F5D3}️ *الأيام:* ${getDaysDisplayString(group)}\n`;
@@ -2767,13 +2664,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const group = groups[groupIndex];
             if (!group) return;
 
-            const totalGroupSessions = calculateGroupSessionCount(group);
-            const groupMonthMoney = totalGroupSessions * (parseFloat(group.price) || 0);
-            const previousDebt = parseFloat(group.previousDebt) || 0;
+            const financial = getFinancialMetrics(group, 'group');
+            const { sessions: totalGroupSessions, monthMoney: groupMonthMoney, previousDebt, totalRequired: totalRequiredForGroup, isFullyPaid, hasDebt } = financial;
             const debtNote = group.debtNote || '';
-            const totalRequiredForGroup = (group.isMonthPaid ? 0 : groupMonthMoney) + (group.isDebtPaid ? 0 : previousDebt);
-            const isFullyPaid = (group.isMonthPaid || groupMonthMoney === 0) && (group.isDebtPaid || previousDebt === 0);
-            const hasDebt = previousDebt > 0 && !group.isDebtPaid;
 
             let daysHTML = '';
             (group.daysData || []).forEach((dayObj, i) => {
@@ -2869,12 +2762,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             if (students.length === 0) { grid.innerHTML = '<div class="empty-state"><span class="empty-add-link">أضف تلميذك الأول <b class="empty-add-plus">+</b></span></div>'; return; }
 
             students.map((student, originalIndex) => {
-                const totalSessions = calculateStudentSessionCount(student);
-                const totalMoney = totalSessions * (parseFloat(student.price) || 0);
-                const previousDebt = parseFloat(student.previousDebt) || 0;
-                const totalRequired = (student.isPaid ? 0 : totalMoney) + (student.isDebtPaid ? 0 : previousDebt);
-                const isFullyPaid = (student.isPaid || totalMoney === 0) && (student.isDebtPaid || previousDebt === 0);
-                const hasDebt = previousDebt > 0 && !student.isDebtPaid;
+                const financial = getFinancialMetrics(student, 'student');
+                const { sessions: totalSessions, monthMoney: totalMoney, previousDebt, totalRequired, isFullyPaid, hasDebt } = financial;
                 return { student, originalIndex, totalRequired, isFullyPaid, hasDebt };
             }).filter(item => {
                 const student = item.student;
@@ -3020,15 +2909,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 
             const metrics = calculateStudentMetrics(student);
 
-            const monthMoney = calculateStudentSessionCount(student) * (parseFloat(student.price) || 0);
-            const previousDebt = student.previousDebt || 0;
-            
-            let totalRequired = 0;
-            if (!student.isPaid) totalRequired += monthMoney;
-            if (!student.isDebtPaid) totalRequired += previousDebt;
-
-            const isFullyPaid = student.isPaid && (previousDebt === 0 || student.isDebtPaid);
-            const hasDebt = previousDebt > 0 && !student.isDebtPaid;
+            const financial = getFinancialMetrics(student, 'student');
+            const { monthMoney, previousDebt, totalRequired, isFullyPaid, hasDebt } = financial;
 
             let daysHTML = '';
             student.daysData.forEach((dayObj, i) => {
@@ -3199,11 +3081,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const student = students[studentIndex];
             if (!student) return;
             const metrics = calculateStudentMetrics(student);
-            const monthMoney = calculateStudentSessionCount(student) * (parseFloat(student.price) || 0);
-            const previousDebt = student.previousDebt || 0;
-            let totalRequired = 0;
-            if (!student.isPaid) totalRequired += monthMoney;
-            if (!student.isDebtPaid) totalRequired += previousDebt;
+            const financial = getFinancialMetrics(student, 'student');
+            const { monthMoney, previousDebt, totalRequired } = financial;
 
             let text = `\u{1F4B0} *حسابات التلميذ: ${student.name}*\n`;
             text += `• حساب الشهر (${metrics.presentSessionsCount} حصة × ${parseFloat(student.price) || 0} ج): ${monthMoney} ج\n`;
@@ -3256,12 +3135,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 }
             });
 
-            const monthMoney = calculateStudentSessionCount(student) * (parseFloat(student.price) || 0);
-            const previousDebt = student.previousDebt || 0;
-            
-            let totalRequired = 0;
-            if (!student.isPaid) totalRequired += monthMoney;
-            if (!student.isDebtPaid) totalRequired += previousDebt;
+            const financial = getFinancialMetrics(student, 'student');
+            const { monthMoney, previousDebt, totalRequired } = financial;
 
             let reportText = `\u{1F4CC} *تقرير التلميذ الشهري: ${escapeHtml(student.name)}*\n`;
             if (student.grade) {
@@ -3992,26 +3867,28 @@ function buildPDFExportReport(){
     const groupRows = [];
     let groupsMonth = 0, groupsDebt = 0, groupsPaid = 0, groupsUnpaid = 0;
     (Array.isArray(groups) ? groups : []).forEach(group => {
-        const sessions = typeof calculateGroupSessionCount === 'function' ? calculateGroupSessionCount(group) : 0;
-        const monthMoney = sessions * pdfMoney(group.price);
-        const debt = pdfMoney(group.previousDebt);
-        const required = (group.isMonthPaid ? 0 : monthMoney) + (group.isDebtPaid ? 0 : debt);
-        groupsMonth += group.isMonthPaid ? 0 : monthMoney;
-        groupsDebt += group.isDebtPaid ? 0 : debt;
-        if (group.isMonthPaid && (debt === 0 || group.isDebtPaid)) groupsPaid += 1; else groupsUnpaid += 1;
+        const metrics = getFinancialMetrics(group, 'group');
+        const sessions = metrics.sessions;
+        const monthMoney = pdfMoney(metrics.monthMoney);
+        const debt = pdfMoney(metrics.previousDebt);
+        const required = metrics.totalRequired;
+        groupsMonth += metrics.monthPaid ? 0 : monthMoney;
+        groupsDebt += metrics.debtPaid ? 0 : debt;
+        if (metrics.isFullyPaid) groupsPaid += 1; else groupsUnpaid += 1;
         groupRows.push({group,sessions,monthMoney,debt,required});
     });
     const studentRows = [];
     let studentsMonth = 0, studentsDebt = 0, studentsPaid = 0, studentsUnpaid = 0;
     (Array.isArray(students) ? students : []).forEach(student => {
+        const financial = getFinancialMetrics(student, 'student');
         const metrics = typeof calculateStudentMetrics === 'function' ? calculateStudentMetrics(student) : {presentSessionsCount:0,totalHeldSessions:0,attendanceRate:0,hwRate:null,sessionRate:null,examRate:null,overallText:'',overallColor:''};
-        const sessions = typeof calculateStudentSessionCount === 'function' ? calculateStudentSessionCount(student) : 0;
-        const monthMoney = sessions * pdfMoney(student.price);
-        const debt = pdfMoney(student.previousDebt);
-        const required = (student.isPaid ? 0 : monthMoney) + (student.isDebtPaid ? 0 : debt);
-        studentsMonth += student.isPaid ? 0 : monthMoney;
-        studentsDebt += student.isDebtPaid ? 0 : debt;
-        if (student.isPaid && (debt === 0 || student.isDebtPaid)) studentsPaid += 1; else studentsUnpaid += 1;
+        const sessions = financial.sessions;
+        const monthMoney = pdfMoney(financial.monthMoney);
+        const debt = pdfMoney(financial.previousDebt);
+        const required = financial.totalRequired;
+        studentsMonth += financial.monthPaid ? 0 : monthMoney;
+        studentsDebt += financial.debtPaid ? 0 : debt;
+        if (financial.isFullyPaid) studentsPaid += 1; else studentsUnpaid += 1;
         studentRows.push({student,metrics,sessions,monthMoney,debt,required});
     });
     const totalRequired = groupsMonth + groupsDebt + studentsMonth + studentsDebt;
@@ -4036,7 +3913,7 @@ function buildPDFExportReport(){
           <div class="pdf-group-card">
             <div class="pdf-card-head"><strong>${pdfEsc(group.name || 'مجموعة بدون اسم')}</strong><span class="pdf-muted">${pdfEsc(getDaysDisplayString(group) || '')}${group.time ? ' — ' + pdfEsc(group.time) : ''}</span></div>
             <table class="pdf-table"><tr><th>الحصص</th><th>سعر الحصة</th><th>حساب الشهر</th><th>المتأخرات</th><th>المطلوب</th><th>الحالة</th></tr>
-            <tr><td>${sessions}</td><td>${pdfMoney(group.price)} ج</td><td>${monthMoney} ج</td><td>${debt} ج</td><td class="pdf-money">${required} ج</td><td>${group.isMonthPaid && (debt === 0 || group.isDebtPaid) ? pdfStatus(true) : pdfStatus(false)}</td></tr></table>
+            <tr><td>${sessions}</td><td>${pdfMoney(group.price)} ج</td><td>${monthMoney} ج</td><td>${debt} ج</td><td class="pdf-money">${required} ج</td><td>${required === 0 ? pdfStatus(true) : pdfStatus(false)}</td></tr></table>
             ${group.phone ? `<div class="pdf-note">الهاتف: ${pdfEsc(group.phone)}</div>` : ''}
             ${group.debtNote ? `<div class="pdf-note">ملاحظة المتأخرات: ${pdfEsc(group.debtNote)}</div>` : ''}
           </div>`).join('') : '<div class="pdf-note">لا توجد مجموعات مسجلة.</div>'}
@@ -4058,7 +3935,7 @@ function buildPDFExportReport(){
               <table class="pdf-table"><tr><th>الحضور</th><th>الواجبات</th><th>التسميع</th><th>الاختبار</th><th>التقييم العام</th></tr>
               <tr><td>${metrics.attendanceRate}% (${metrics.presentSessionsCount} من ${metrics.totalHeldSessions})</td><td>${metrics.hwRate !== null ? metrics.hwRate + '%' : 'غير مسجل'}</td><td>${metrics.sessionRate !== null ? metrics.sessionRate + '%' : 'غير مسجل'}</td><td>${metrics.examRate !== null ? metrics.examRate + '%' : 'غير مسجل'}</td><td>${pdfEsc(metrics.overallText || 'غير محدد')}</td></tr></table>
               <table class="pdf-table" style="margin-top:7px"><tr><th>الحصص المحتسبة</th><th>سعر الحصة</th><th>حساب الشهر</th><th>المتأخرات</th><th>المطلوب</th><th>الحالة</th></tr>
-              <tr><td>${sessions}</td><td>${pdfMoney(student.price)} ج</td><td>${monthMoney} ج</td><td>${debt} ج</td><td class="pdf-money">${required} ج</td><td>${student.isPaid && (debt === 0 || student.isDebtPaid) ? pdfStatus(true) : pdfStatus(false)}</td></tr></table>
+              <tr><td>${sessions}</td><td>${pdfMoney(student.price)} ج</td><td>${monthMoney} ج</td><td>${debt} ج</td><td class="pdf-money">${required} ج</td><td>${required === 0 ? pdfStatus(true) : pdfStatus(false)}</td></tr></table>
               ${student.phone ? `<div class="pdf-note">الهاتف: ${pdfEsc(student.phone)}</div>` : ''}
               ${student.debtNote ? `<div class="pdf-note">ملاحظة المتأخرات: ${pdfEsc(student.debtNote)}</div>` : ''}
               <div class="pdf-page-title" style="font-size:13px;margin-top:12px">سجل الحضور والتقييم</div>
