@@ -2438,21 +2438,26 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             return false;
         }
 
-        function getCollectedPaymentsTotal(obj) {
+        function getCollectedPaymentsTotal(obj, type) {
             const currentMonthKey = getCollectionMonthKey();
             return getPaymentHistory(obj).reduce((sum, item) => {
-                if (item && item.monthKey === currentMonthKey) {
+                if (item && item.monthKey === currentMonthKey && (!type || item.type === type)) {
                     return sum + Math.max(0, parseFloat(item.amount) || 0);
                 }
                 return sum;
             }, 0);
         }
 
+        // المبلغ المحصل من الشهر الحالي فقط، مستقل تمامًا عن تحصيل المتأخرات.
+        function getCurrentMonthPaymentAmount(obj) {
+            return getCollectedPaymentsTotal(obj, 'month');
+        }
+
         // مصدر موحد للحسابات المالية: كل الواجهات تعتمد على نفس القيم بدل إعادة حسابها كل مرة.
         function getFinancialMetrics(obj, type) {
             const empty = {
                 sessions: 0, monthMoney: 0, previousDebt: 0, totalRequired: 0,
-                monthPaid: false, debtPaid: false, collectedAmount: 0,
+                monthPaid: false, debtPaid: false, collectedAmount: 0, monthPaidAmount: 0,
                 unpaidMonth: 0, unpaidDebt: 0, isFullyPaid: true, hasDebt: false, isUnpaid: false
             };
             if (!obj) return empty;
@@ -2461,21 +2466,35 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const price = Math.max(0, parseFloat(obj.price) || 0);
             const monthMoney = sessions * price;
             const previousDebt = Math.max(0, parseFloat(obj.previousDebt) || 0);
-            const monthPaidFlag = isGroup ? !!obj.isMonthPaid : !!obj.isPaid;
-            const debtPaidFlag = !!obj.isDebtPaid;
-            const monthPaid = monthPaidFlag || monthMoney === 0;
-            const debtPaid = debtPaidFlag || previousDebt === 0;
-            const unpaidMonth = monthPaid ? 0 : monthMoney;
+            const monthPaidAmount = Math.min(monthMoney, getCurrentMonthPaymentAmount(obj));
+            const monthPaid = monthMoney === 0 || monthPaidAmount >= monthMoney;
+            const debtPaid = !!obj.isDebtPaid || previousDebt === 0;
+            const unpaidMonth = Math.max(0, monthMoney - monthPaidAmount);
             const unpaidDebt = debtPaid ? 0 : previousDebt;
             const totalRequired = unpaidMonth + unpaidDebt;
             const collectedAmount = getCollectedPaymentsTotal(obj);
             return {
                 sessions, monthMoney, previousDebt, totalRequired,
-                monthPaid, debtPaid, collectedAmount, unpaidMonth, unpaidDebt,
+                monthPaid, debtPaid, collectedAmount, monthPaidAmount, unpaidMonth, unpaidDebt,
                 isFullyPaid: totalRequired === 0,
                 hasDebt: unpaidDebt > 0,
                 isUnpaid: totalRequired > 0
             };
+        }
+
+        // تسجيل دفعة للشهر الحالي، كاملة أو جزئية، مع منع تجاوز المبلغ المستحق.
+        function recordMonthPayment(obj, amount, type) {
+            if (!obj) return false;
+            const metrics = getFinancialMetrics(obj, type);
+            const remaining = Math.max(0, metrics.monthMoney - metrics.monthPaidAmount);
+            const payment = Math.max(0, parseFloat(amount) || 0);
+            if (payment <= 0 || remaining <= 0) return false;
+            const actualPayment = Math.min(payment, remaining);
+            addCollectedPayment(obj, actualPayment, 'month');
+            const paidNow = metrics.monthPaidAmount + actualPayment >= metrics.monthMoney;
+            if (type === 'group') obj.isMonthPaid = paidNow;
+            else obj.isPaid = paidNow;
+            return true;
         }
 
         function calculateSummaryTotals() {
@@ -2673,7 +2692,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <div class="financial-divider"></div>
                 <div class="financial-total-required">إجمالي المطلوب في الشهر: <strong>${totalRequired} ج</strong></div>
                 <div class="financial-payment-actions">
-                    <div class="payment-toggle"><span>حساب الشهر الحالي (${monthMoney} ج):</span><button class="pay-btn ${monthPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentMonthFn}">${monthPaid ? 'تم دفع الشهر' : 'دفع الشهر الحالي'}</button></div>
+                    <div class="payment-toggle"><span>حساب الشهر الحالي (${monthMoney} ج) — المتبقي ${financial.unpaidMonth} ج:</span><button class="pay-btn ${monthPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentMonthFn}">${monthPaid ? 'تم دفع الشهر بالكامل' : (financial.monthPaidAmount > 0 ? 'استكمال دفع الشهر' : 'دفع الشهر الحالي')}</button></div>
                     ${hasDebt ? `<div class="payment-toggle"><span>تسوية المتأخرات (${previousDebt} ج):</span><button class="pay-btn ${debtPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentDebtFn}">${debtPaid ? 'تم دفع المتأخرات' : 'دفع المتأخرات'}</button></div>` : ''}
                 </div>
             </div>`;
@@ -3209,29 +3228,127 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         function setMonthPaymentState(obj, type, paid) {
             if (!obj) return;
             const metrics = getFinancialMetrics(obj, type);
-            const currentPaid = metrics.monthPaid;
-            if (paid === currentPaid) return;
-
             if (paid) {
-                if (metrics.monthMoney > 0) {
-                    // منع وجود أكثر من عملية تحصيل للشهر الحالي عند إعادة التسجيل.
-                    removeCurrentMonthPayment(obj, 'month');
-                    addCollectedPayment(obj, metrics.monthMoney, 'month');
-                }
+                recordMonthPayment(obj, metrics.monthMoney - metrics.monthPaidAmount, type);
             } else {
-                // الإلغاء لا يعتمد على مبلغ قديم؛ هذا يمنع انفصال السجل عن الحساب بعد تعديل السعر/الحصص.
-                removeCurrentMonthPayment(obj, 'month');
+                // لا نحذف أي تحصيل سابق؛ الدفع الجزئي يجب أن يبقى محفوظًا كسجل مالي صحيح.
+                const currentAmount = getCurrentMonthPaymentAmount(obj);
+                if (currentAmount > 0) {
+                    const history = getPaymentHistoryForWrite(obj);
+                    const currentMonthKey = getCollectionMonthKey();
+                    for (let i = history.length - 1; i >= 0; i--) {
+                        const item = history[i];
+                        if (item && item.monthKey === currentMonthKey && item.type === 'month') history.splice(i, 1);
+                    }
+                }
+                if (type === 'group') obj.isMonthPaid = false;
+                else obj.isPaid = false;
             }
+        }
 
-            if (type === 'group') obj.isMonthPaid = paid;
-            else obj.isPaid = paid;
+        function openMonthPaymentDialog(type, index, event) {
+            if (event) event.stopPropagation();
+            const obj = type === 'group' ? groups[index] : students[index];
+            if (!obj) return;
+            const metrics = getFinancialMetrics(obj, type);
+            const remaining = metrics.unpaidMonth;
+            if (remaining <= 0) return;
+
+            window.pendingMonthPayment = { type, index };
+            document.getElementById('appDialogTitle').innerText = 'دفع حساب الشهر';
+            document.getElementById('appDialogMsg').innerText =
+                `المتبقي من حساب الشهر: ${remaining} ج. اختر طريقة السداد: دفع الشهر بالكامل أو دفع جزء منه.`;
+            document.getElementById('appDialogActions').innerHTML = `
+                <button type="button" class="btn-3d btn-red-3d" onclick="confirmFullMonthPayment()">دفع الشهر بالكامل</button>
+                <button type="button" class="btn-3d" onclick="openPartialMonthPayment()">دفع جزئي</button>
+                <button type="button" class="btn-3d" onclick="closeAppDialog()">إلغاء</button>
+            `;
+            document.getElementById('appDialogModal').style.display = 'flex';
+        }
+
+        function confirmFullMonthPayment() {
+            const pending = window.pendingMonthPayment;
+            if (!pending) return;
+            const obj = pending.type === 'group' ? groups[pending.index] : students[pending.index];
+            if (!obj) return;
+            const metrics = getFinancialMetrics(obj, pending.type);
+            const remaining = metrics.unpaidMonth;
+            document.getElementById('appDialogTitle').innerText = 'تأكيد دفع الشهر بالكامل';
+            document.getElementById('appDialogMsg').innerText =
+                `سيتم تسجيل سداد المتبقي من حساب الشهر بالكامل (${remaining} ج). هل تريد الاستمرار؟`;
+            document.getElementById('appDialogActions').innerHTML = `
+                <button type="button" class="btn-3d btn-red-3d" onclick="executeFullMonthPayment()">نعم، دفع بالكامل</button>
+                <button type="button" class="btn-3d" onclick="openMonthPaymentDialog('${pending.type}', ${pending.index})">رجوع</button>
+            `;
+        }
+
+        function executeFullMonthPayment() {
+            const pending = window.pendingMonthPayment;
+            if (!pending) return;
+            const obj = pending.type === 'group' ? groups[pending.index] : students[pending.index];
+            if (!obj) return;
+            const metrics = getFinancialMetrics(obj, pending.type);
+            const amount = metrics.unpaidMonth;
+            if (amount <= 0 || !recordMonthPayment(obj, amount, pending.type)) return;
+            window.pendingMonthPayment = null;
+            saveData();
+            closeAppDialog();
+            if (pending.type === 'group') renderGroupDetail(pending.index);
+            else renderStudentDetail(pending.index);
+            renderFinancialLists();
+            showAppAlert('تم سداد الشهر', 'تم دفع حساب الشهر بالكامل.');
+        }
+
+        function openPartialMonthPayment() {
+            const pending = window.pendingMonthPayment;
+            if (!pending) return;
+            const obj = pending.type === 'group' ? groups[pending.index] : students[pending.index];
+            if (!obj) return;
+            const remaining = getFinancialMetrics(obj, pending.type).unpaidMonth;
+            document.getElementById('appDialogTitle').innerText = 'دفع جزئي للشهر';
+            document.getElementById('appDialogMsg').innerHTML = `
+                <div>المبلغ المتبقي من حساب الشهر: <strong>${remaining} ج</strong></div>
+                <div style="margin-top:8px;">أدخل الجزء المراد دفعه فقط:</div>
+                <input id="partialMonthPaymentAmount" class="debt-payment-input" type="number" min="0.01" max="${remaining}" step="0.01" inputmode="decimal" placeholder="المبلغ المدفوع">
+            `;
+            document.getElementById('appDialogActions').innerHTML = `
+                <button type="button" class="btn-3d btn-red-3d" onclick="executePartialMonthPayment()">دفع الجزء</button>
+                <button type="button" class="btn-3d" onclick="openMonthPaymentDialog('${pending.type}', ${pending.index})">رجوع</button>
+            `;
+            const input = document.getElementById('partialMonthPaymentAmount');
+            if (input) input.focus();
+        }
+
+        function executePartialMonthPayment() {
+            const pending = window.pendingMonthPayment;
+            const input = document.getElementById('partialMonthPaymentAmount');
+            if (!pending || !input) return;
+            const obj = pending.type === 'group' ? groups[pending.index] : students[pending.index];
+            if (!obj) return;
+            const remaining = getFinancialMetrics(obj, pending.type).unpaidMonth;
+            const amount = parseFloat(input.value);
+            if (!Number.isFinite(amount) || amount <= 0) {
+                showAppAlert('مبلغ غير صحيح', 'أدخل مبلغًا أكبر من صفر.');
+                return;
+            }
+            if (amount >= remaining) {
+                showAppAlert('استخدم الدفع الكامل', 'هذا المبلغ يساوي أو يتجاوز المتبقي من الشهر. اختر «دفع الشهر بالكامل».');
+                return;
+            }
+            if (!recordMonthPayment(obj, amount, pending.type)) return;
+            window.pendingMonthPayment = null;
+            saveData();
+            closeAppDialog();
+            if (pending.type === 'group') renderGroupDetail(pending.index);
+            else renderStudentDetail(pending.index);
+            renderFinancialLists();
+            showAppAlert('تم الدفع الجزئي', `تم تسجيل دفع ${amount} ج، والمتبقي من حساب الشهر ${Math.max(0, getFinancialMetrics(obj, pending.type).unpaidMonth)} ج.`);
         }
 
         function toggleStudentPayment(idx) {
             const student = students[idx];
             if (!student) return;
-            setMonthPaymentState(student, 'student', !getFinancialMetrics(student, 'student').monthPaid);
-            saveData();
+            openMonthPaymentDialog('student', idx);
         }
 
         // التحقق من طول رقم الهاتف: التنبيه فقط، بدون منع الحفظ أو تعديل الرقم.
@@ -3327,11 +3444,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function toggleMonthPayment(index, event) {
-            if (event) event.stopPropagation();
-            const group = groups[index];
-            if (!group) return;
-            setMonthPaymentState(group, 'group', !getFinancialMetrics(group, 'group').monthPaid);
-            saveData();
+            openMonthPaymentDialog('group', index, event);
         }
 
         function openStartMonthModal() {
@@ -3367,9 +3480,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 
                     ensureDebtHistory(group);
                     const groupFinancial = getFinancialMetrics(group, 'group');
-                    if (!groupFinancial.monthPaid) {
-                        const totalSessions = groupFinancial.sessions;
-                        addPreviousDebtEntry(group, totalSessions, group.price, `متأخرات ${group.monthKey || 'الشهر السابق'}`);
+                    if (groupFinancial.unpaidMonth > 0) {
+                        addPreviousDebtEntry(group, 1, groupFinancial.unpaidMonth, `متأخرات ${group.monthKey || 'الشهر السابق'}`);
                     }
 
                     // تثبيت الأيام والوقت، ثم توليد تواريخ الشهر الجديد على نفس أيام الأسبوع.
@@ -3390,9 +3502,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 
                     ensureDebtHistory(student);
                     const studentFinancial = getFinancialMetrics(student, 'student');
-                    if (!studentFinancial.monthPaid) {
-                        const totalSessions = studentFinancial.sessions;
-                        addPreviousDebtEntry(student, totalSessions, student.price, `متأخرات ${student.monthKey || 'الشهر السابق'}`);
+                    if (studentFinancial.unpaidMonth > 0) {
+                        addPreviousDebtEntry(student, 1, studentFinancial.unpaidMonth, `متأخرات ${student.monthKey || 'الشهر السابق'}`);
                     }
 
                     student.scheduleDays = [...scheduleDays];
@@ -3913,7 +4024,7 @@ function buildPDFExportReport(){
         const monthMoney = pdfMoney(metrics.monthMoney);
         const debt = pdfMoney(metrics.previousDebt);
         const required = metrics.totalRequired;
-        groupsMonth += metrics.monthPaid ? 0 : monthMoney;
+        groupsMonth += metrics.unpaidMonth;
         groupsDebt += metrics.debtPaid ? 0 : debt;
         if (metrics.isFullyPaid) groupsPaid += 1; else groupsUnpaid += 1;
         groupRows.push({group,sessions,monthMoney,debt,required});
@@ -3927,7 +4038,7 @@ function buildPDFExportReport(){
         const monthMoney = pdfMoney(financial.monthMoney);
         const debt = pdfMoney(financial.previousDebt);
         const required = financial.totalRequired;
-        studentsMonth += financial.monthPaid ? 0 : monthMoney;
+        studentsMonth += financial.unpaidMonth;
         studentsDebt += financial.debtPaid ? 0 : debt;
         if (financial.isFullyPaid) studentsPaid += 1; else studentsUnpaid += 1;
         studentRows.push({student,metrics,sessions,monthMoney,debt,required});
