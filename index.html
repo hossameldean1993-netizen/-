@@ -2119,6 +2119,17 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             syncDebtTotalFromHistory(obj);
         }
 
+        function recordDebtPayment(obj, amount) {
+            if (!obj) return false;
+            const debt = Math.max(0, parseFloat(obj.previousDebt) || 0);
+            const payment = Math.max(0, parseFloat(amount) || 0);
+            if (payment <= 0 || debt <= 0) return false;
+            const actualPayment = Math.min(payment, debt);
+            addCollectedPayment(obj, actualPayment, 'debt');
+            applyDebtPayment(obj, actualPayment);
+            return true;
+        }
+
         function openDebtPaymentDialog(type, index, event) {
             if (event) event.stopPropagation();
             const obj = type === 'group' ? groups[index] : students[index];
@@ -2158,11 +2169,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const obj = pending.type === 'group' ? groups[pending.index] : students[pending.index];
             if (!obj) return;
             const paidDebtAmount = Math.max(0, parseFloat(obj.previousDebt) || 0);
-            addCollectedPayment(obj, paidDebtAmount, 'debt');
-            obj.previousDebt = 0;
-            obj.debtHistory = [];
-            obj.debtNote = '';
-            obj.isDebtPaid = true;
+            if (!recordDebtPayment(obj, paidDebtAmount)) return;
             window.pendingDebtPayment = null;
             saveData();
             closeAppDialog();
@@ -2208,8 +2215,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 showAppAlert('استخدم الدفع الكامل', 'هذا المبلغ يساوي أو يتجاوز كامل المتأخرات. اختر «دفع المتأخرات بالكامل».');
                 return;
             }
-            addCollectedPayment(obj, amount, 'debt');
-            applyDebtPayment(obj, amount);
+            if (!recordDebtPayment(obj, amount)) return;
             window.pendingDebtPayment = null;
             saveData();
             closeAppDialog();
@@ -2429,10 +2435,16 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 
         // مصدر موحد للحسابات المالية: كل الواجهات تعتمد على نفس القيم بدل إعادة حسابها كل مرة.
         function getFinancialMetrics(obj, type) {
-            if (!obj) return { sessions: 0, monthMoney: 0, previousDebt: 0, totalRequired: 0, monthPaid: false, debtPaid: false, isFullyPaid: true, hasDebt: false, isUnpaid: false };
+            const empty = {
+                sessions: 0, monthMoney: 0, previousDebt: 0, totalRequired: 0,
+                monthPaid: false, debtPaid: false, collectedAmount: 0,
+                unpaidMonth: 0, unpaidDebt: 0, isFullyPaid: true, hasDebt: false, isUnpaid: false
+            };
+            if (!obj) return empty;
             const isGroup = type === 'group';
             const sessions = isGroup ? calculateGroupSessionCount(obj) : calculateStudentSessionCount(obj);
-            const monthMoney = sessions * (parseFloat(obj.price) || 0);
+            const price = Math.max(0, parseFloat(obj.price) || 0);
+            const monthMoney = sessions * price;
             const previousDebt = Math.max(0, parseFloat(obj.previousDebt) || 0);
             const monthPaidFlag = isGroup ? !!obj.isMonthPaid : !!obj.isPaid;
             const debtPaidFlag = !!obj.isDebtPaid;
@@ -2441,15 +2453,12 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const unpaidMonth = monthPaid ? 0 : monthMoney;
             const unpaidDebt = debtPaid ? 0 : previousDebt;
             const totalRequired = unpaidMonth + unpaidDebt;
+            const collectedAmount = getCollectedPaymentsTotal(obj);
             return {
-                sessions,
-                monthMoney,
-                previousDebt,
-                totalRequired,
-                monthPaid,
-                debtPaid,
+                sessions, monthMoney, previousDebt, totalRequired,
+                monthPaid, debtPaid, collectedAmount, unpaidMonth, unpaidDebt,
                 isFullyPaid: totalRequired === 0,
-                hasDebt: previousDebt > 0 && !debtPaid,
+                hasDebt: unpaidDebt > 0,
                 isUnpaid: totalRequired > 0
             };
         }
@@ -2464,7 +2473,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const metrics = getFinancialMetrics(group, 'group');
                 totalCurrentMonthSum += metrics.monthMoney;
                 totalOldDebtsSum += metrics.previousDebt;
-                totalPaidSum += getCollectedPaymentsTotal(group);
+                totalPaidSum += metrics.collectedAmount;
                 totalUnpaidSum += metrics.totalRequired;
             });
 
@@ -2472,7 +2481,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const metrics = getFinancialMetrics(student, 'student');
                 totalCurrentMonthSum += metrics.monthMoney;
                 totalOldDebtsSum += metrics.previousDebt;
-                totalPaidSum += getCollectedPaymentsTotal(student);
+                totalPaidSum += metrics.collectedAmount;
                 totalUnpaidSum += metrics.totalRequired;
             });
 
@@ -2516,13 +2525,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             });
 
             students.forEach((student, index) => {
-                const totalSessions = calculateStudentSessionCount(student);
-                const monthMoney = totalSessions * (parseFloat(student.price) || 0);
-                const previousDebt = parseFloat(student.previousDebt) || 0;
-                const totalRequired = (student.isPaid ? 0 : monthMoney) + (student.isDebtPaid ? 0 : previousDebt);
-                const isFullyPaid = (student.isPaid || monthMoney === 0) && (student.isDebtPaid || previousDebt === 0);
-                const hasDebt = previousDebt > 0 && !student.isDebtPaid;
-                const isUnpaid = totalRequired > 0;
+                const financial = getFinancialMetrics(student, 'student');
+                const { totalRequired, isFullyPaid, hasDebt, isUnpaid } = financial;
 
                 const show = filterValue === 'all' ||
                     (filterValue === 'paid' && isFullyPaid) ||
@@ -2639,9 +2643,10 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             return `<div class="debt-item"><div class="debt-item-title">${escapeHtml((obj && obj.debtNote) || 'متأخرات سابقة')}</div><div class="debt-item-math">المبلغ المتبقي = <strong>${debt} ج</strong></div></div>`;
         }
 
-        function getFinancialSectionHTML(obj, monthSessions, monthMoney, previousDebt, totalRequired, paidMonth, paidDebt, paymentMonthFn, paymentDebtFn, editContext) {
+        function getFinancialSectionHTML(obj, type, paymentMonthFn, paymentDebtFn, editContext) {
+            const financial = getFinancialMetrics(obj, type);
+            const { sessions: monthSessions, monthMoney, previousDebt, totalRequired, monthPaid, debtPaid, hasDebt } = financial;
             const debtItems = getDebtItemsHTML(obj, editContext);
-            const hasDebt = previousDebt > 0;
             return `<div class="financial-section">
                 <div class="financial-main-title">المتأخرات</div>
                 <div class="financial-total-debt">إجمالي المتأخرات المطلوبة: <strong>${previousDebt} ج</strong></div>
@@ -2720,7 +2725,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                         <div class="detail-section-card accounts-section-card">
                             <div class="detail-section-title" onclick="toggleDetailSection(this)" style="cursor:pointer;"><span class="emoji-text" aria-hidden="true">&#x1F4B0;&#xFE0F;</span> الحسابات <span class="section-collapse-icon">⌄</span></div>
                             <div class="detail-section-content" style="display:none;" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
-                            ${getFinancialSectionHTML(group, totalGroupSessions, groupMonthMoney, previousDebt, totalRequiredForGroup, group.isMonthPaid, group.isDebtPaid, `toggleMonthPayment(${groupIndex}, event)`, `openDebtPaymentDialog('group', ${groupIndex}, event)`, {type:'group', index:groupIndex, fn:''})}
+                            ${getFinancialSectionHTML(group, 'group', `toggleMonthPayment(${groupIndex}, event)`, `openDebtPaymentDialog('group', ${groupIndex}, event)`, {type:'group', index:groupIndex, fn:''})}
                             <button class="btn-3d" style="width:100%; background:#25d366; box-shadow:0 2px 4px rgba(0,0,0,.08); margin-top:10px;" onclick="sendGroupWhatsappFinancials(${groupIndex})">إرسال الحساب واتساب \u{1F4AC}</button>
                             </div></div>
                         </div>
@@ -2994,7 +2999,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                         <div class="detail-section-card accounts-section-card">
                             <div class="detail-section-title" onclick="toggleDetailSection(this)" style="cursor:pointer;"><span class="emoji-text" aria-hidden="true">&#x1F4B0;&#xFE0F;</span> الحسابات <span class="section-collapse-icon">⌄</span></div>
                             <div class="detail-section-content" style="display:none;" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
-                            ${getFinancialSectionHTML(student, metrics.presentSessionsCount, monthMoney, previousDebt, totalRequired, student.isPaid, student.isDebtPaid, `toggleStudentPayment(${studentIndex})`, `openDebtPaymentDialog('student', ${studentIndex}, event)`, {type:'student', index:studentIndex, fn:''})}
+                            ${getFinancialSectionHTML(student, 'student', `toggleStudentPayment(${studentIndex})`, `openDebtPaymentDialog('student', ${studentIndex}, event)`, {type:'student', index:studentIndex, fn:''})}
                             <button class="btn-3d" style="width:100%; background:#25d366; box-shadow:0 2px 4px rgba(0,0,0,.08); margin-top:10px;" onclick="event.stopPropagation(); sendStudentWhatsappFinancials(${studentIndex})">إرسال الحساب واتساب \u{1F4AC}</button>
                             </div></div>
                         </div>
@@ -3034,7 +3039,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     <div style="background:var(--day-row-bg); padding:8px; border-radius:10px; border:1px solid var(--day-row-border); font-size:0.8rem; font-weight:700; margin-top:10px; text-align:center;">
                         \u{1F4B0} المستحقات: (${metrics.presentSessionsCount} حصة × ${student.price || 0} ج) = ${monthMoney} ج 
                         ${previousDebt > 0 ? ` + ${previousDebt} ج متأخرات` : ''} 
-                        | الحساب: <span style="color:${student.isPaid ? '#16a34a' : '#dc2626'};">${student.isPaid ? 'مسدد بالكامل' : 'غير مسدد'}</span>
+                        | الحساب: <span style="color:${financial.monthPaid ? '#16a34a' : '#dc2626'};">${financial.monthPaid ? 'مسدد بالكامل' : 'غير مسدد'}</span>
                     </div>
 
                     <button class="btn-3d" style="width:100%; background:#25d366; box-shadow:0 2px 4px rgba(0,0,0,.08); margin-top:10px;" onclick="event.stopPropagation(); sendStudentWhatsappReport(${studentIndex})">إرسال التقرير واتساب \u{1F4AC}</button>
@@ -3088,8 +3093,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             text += `• حساب الشهر (${metrics.presentSessionsCount} حصة × ${parseFloat(student.price) || 0} ج): ${monthMoney} ج\n`;
             if (previousDebt > 0) text += `• المتأخرات السابقة: ${previousDebt} ج\n`;
             text += `• إجمالي المطلوب: ${totalRequired} ج\n`;
-            text += `• حالة سداد الشهر: ${student.isPaid ? 'تم الدفع بنجاح' : 'لم يتم الدفع بعد'}\n`;
-            if (previousDebt > 0) text += `• حالة سداد المتأخرات: ${student.isDebtPaid ? 'تم الدفع بنجاح' : 'لم يتم الدفع بعد'}\n`;
+            text += `• حالة سداد الشهر: ${financial.monthPaid ? 'تم الدفع بنجاح' : 'لم يتم الدفع بعد'}\n`;
+            if (previousDebt > 0) text += `• حالة سداد المتأخرات: ${financial.debtPaid ? 'تم الدفع بنجاح' : 'لم يتم الدفع بعد'}\n`;
 
             const encodedText = encodeURIComponent(text);
             const phoneStr = formatPhoneForWhatsapp(student.phone);
@@ -3165,7 +3170,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 reportText += `• حساب الشهر (${metrics.presentSessionsCount} حصة): ${monthMoney} ج\n`;
                 if (previousDebt > 0) reportText += `• متأخرات سابقة: ${previousDebt} ج\n`;
                 reportText += `• إجمالي المطلوب: ${totalRequired} ج\n`;
-                reportText += `• حالة السداد: ${student.isPaid ? 'تم الدفع بنجاح' : 'لم يتم الدفع بعد'}\n`;
+                reportText += `• حالة السداد: ${financial.monthPaid ? 'تم الدفع بنجاح' : 'لم يتم الدفع بعد'}\n`;
             }
 
             const encodedText = encodeURIComponent(reportText);
@@ -3186,16 +3191,22 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             saveData();
         }
 
+        function setMonthPaymentState(obj, type, paid) {
+            if (!obj) return;
+            const metrics = getFinancialMetrics(obj, type);
+            const amount = metrics.monthMoney;
+            const currentPaid = metrics.monthPaid;
+            if (paid === currentPaid) return;
+            if (paid) addCollectedPayment(obj, amount, 'month');
+            else removeCollectedPayment(obj, amount, 'month');
+            if (type === 'group') obj.isMonthPaid = paid;
+            else obj.isPaid = paid;
+        }
+
         function toggleStudentPayment(idx) {
             const student = students[idx];
             if (!student) return;
-            const amount = calculateStudentSessionCount(student) * (parseFloat(student.price) || 0);
-            if (student.isPaid) {
-                removeCollectedPayment(student, amount, 'month');
-            } else {
-                addCollectedPayment(student, amount, 'month');
-            }
-            student.isPaid = !student.isPaid;
+            setMonthPaymentState(student, 'student', !getFinancialMetrics(student, 'student').monthPaid);
             saveData();
         }
 
@@ -3287,16 +3298,10 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function toggleMonthPayment(index, event) {
-            if(event) event.stopPropagation();
+            if (event) event.stopPropagation();
             const group = groups[index];
             if (!group) return;
-            const amount = calculateGroupSessionCount(group) * (parseFloat(group.price) || 0);
-            if (group.isMonthPaid) {
-                removeCollectedPayment(group, amount, 'month');
-            } else {
-                addCollectedPayment(group, amount, 'month');
-            }
-            group.isMonthPaid = !group.isMonthPaid;
+            setMonthPaymentState(group, 'group', !getFinancialMetrics(group, 'group').monthPaid);
             saveData();
         }
 
