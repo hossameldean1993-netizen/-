@@ -1354,6 +1354,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             localStorage.setItem('app_user_key', appUserKey);
             groups = loadStoredArray('teacher_groups_local');
             students = loadStoredArray('teacher_students_local');
+            groups.forEach(migratePaymentHistory);
+            students.forEach(migratePaymentHistory);
+            dataNormalizationDone = false;
             selectedGroupIndex = null;
             selectedStudentIndex = null;
             renderTodaySessions();
@@ -1880,6 +1883,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             if (!dataNormalizationDone) {
                 ensureStudentIds();
                 migrateScheduleTimes();
+                groups.forEach(migratePaymentHistory);
+                students.forEach(migratePaymentHistory);
                 // ترقية بسيطة للبيانات القديمة: إضافة مفتاح الشهر دون إعادة بناء الأيام أو تغييرها.
                 groups.forEach(group => {
                     ensureDebtHistory(group);
@@ -2367,42 +2372,51 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         }
 
-        function ensurePaymentHistory(obj) {
-            if (!obj) return [];
-            if (!Array.isArray(obj.paymentHistory)) {
-                obj.paymentHistory = [];
-                // توافق مع البيانات القديمة: الحالات المدفوعة سابقًا تمثل مبالغ محصلة بالفعل.
-                // تُنسب للشهر المسجل على العنصر حتى لا تُخلط مع تحصيل شهر آخر.
-                const legacyMonthKey = obj.monthKey || getCollectionMonthKey();
-                if (obj.isMonthPaid) {
-                    const sessions = obj.daysData ? (Array.isArray(obj.daysData) ? obj.daysData.reduce((n, d) => {
-                        if (d.status === 'present') return n + Math.max(1, parseInt(d.sessionsCount, 10) || 1);
-                        if (!d.status && (d.count || 0) > 0) return n + 1;
-                        return n;
-                    }, 0) : 0) : 0;
-                    const amount = sessions * (parseFloat(obj.price) || 0);
-                    if (amount > 0) obj.paymentHistory.push({type: 'month', amount, monthKey: legacyMonthKey});
-                }
-                if (obj.isPaid) {
-                    const sessions = Array.isArray(obj.daysData) ? obj.daysData.reduce((n, d) => {
-                        if (d.status === 'present') return n + 1;
-                        if (!d.status && (d.count || 0) > 0) return n + 1;
-                        return n;
-                    }, 0) : (parseInt(obj.sessionsCount, 10) || 0);
-                    const amount = sessions * (parseFloat(obj.price) || 0);
-                    if (amount > 0) obj.paymentHistory.push({type: 'month', amount, monthKey: legacyMonthKey});
-                }
-                if (obj.isDebtPaid && (parseFloat(obj.previousDebt) || 0) > 0) {
-                    obj.paymentHistory.push({type: 'debt', amount: parseFloat(obj.previousDebt) || 0, monthKey: legacyMonthKey});
-                }
+        // ===== سجل التحصيل الفعلي فقط =====
+        // لا يُستخدم هذا السجل لتحديد حالة المطلوب؛ حالتا السداد محفوظتان في الكيان نفسه.
+        function migratePaymentHistory(obj) {
+            if (!obj || typeof obj !== 'object' || Array.isArray(obj.paymentHistory)) return;
+            const history = [];
+            const legacyMonthKey = obj.monthKey || getCollectionMonthKey();
+
+            if (obj.isMonthPaid) {
+                const sessions = Array.isArray(obj.daysData) ? obj.daysData.reduce((n, d) => {
+                    if (d.status === 'present') return n + Math.max(1, parseInt(d.sessionsCount, 10) || 1);
+                    if (!d.status && (d.count || 0) > 0) return n + 1;
+                    return n;
+                }, 0) : 0;
+                const amount = sessions * (parseFloat(obj.price) || 0);
+                if (amount > 0) history.push({type: 'month', amount, monthKey: legacyMonthKey});
+            } else if (obj.isPaid) {
+                const sessions = Array.isArray(obj.daysData) ? obj.daysData.reduce((n, d) => {
+                    if (d.status === 'present') return n + 1;
+                    if (!d.status && (d.count || 0) > 0) return n + 1;
+                    return n;
+                }, 0) : (parseInt(obj.sessionsCount, 10) || 0);
+                const amount = sessions * (parseFloat(obj.price) || 0);
+                if (amount > 0) history.push({type: 'month', amount, monthKey: legacyMonthKey});
             }
+
+            if (obj.isDebtPaid && (parseFloat(obj.previousDebt) || 0) > 0) {
+                history.push({type: 'debt', amount: parseFloat(obj.previousDebt) || 0, monthKey: legacyMonthKey});
+            }
+            obj.paymentHistory = history;
+        }
+
+        function getPaymentHistory(obj) {
+            return obj && Array.isArray(obj.paymentHistory) ? obj.paymentHistory : [];
+        }
+
+        function getPaymentHistoryForWrite(obj) {
+            if (!obj) return [];
+            if (!Array.isArray(obj.paymentHistory)) obj.paymentHistory = [];
             return obj.paymentHistory;
         }
 
         function addCollectedPayment(obj, amount, type) {
             amount = Math.max(0, parseFloat(amount) || 0);
             if (!obj || amount <= 0) return;
-            ensurePaymentHistory(obj).push({
+            getPaymentHistoryForWrite(obj).push({
                 type: type || 'other',
                 amount,
                 monthKey: getCollectionMonthKey(),
@@ -2410,22 +2424,23 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             });
         }
 
-        function removeCollectedPayment(obj, amount, type) {
-            amount = Math.max(0, parseFloat(amount) || 0);
-            if (!obj || amount <= 0) return;
-            const history = ensurePaymentHistory(obj);
+        function removeCurrentMonthPayment(obj, type) {
+            if (!obj) return false;
+            const history = getPaymentHistoryForWrite(obj);
             const currentMonthKey = getCollectionMonthKey();
             for (let i = history.length - 1; i >= 0; i--) {
-                if (history[i].monthKey === currentMonthKey && (!type || history[i].type === type) && Math.abs((parseFloat(history[i].amount) || 0) - amount) < 0.000001) {
+                const item = history[i];
+                if (item && item.monthKey === currentMonthKey && item.type === (type || 'month')) {
                     history.splice(i, 1);
-                    return;
+                    return true;
                 }
             }
+            return false;
         }
 
         function getCollectedPaymentsTotal(obj) {
             const currentMonthKey = getCollectionMonthKey();
-            return ensurePaymentHistory(obj).reduce((sum, item) => {
+            return getPaymentHistory(obj).reduce((sum, item) => {
                 if (item && item.monthKey === currentMonthKey) {
                     return sum + Math.max(0, parseFloat(item.amount) || 0);
                 }
@@ -2658,8 +2673,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <div class="financial-divider"></div>
                 <div class="financial-total-required">إجمالي المطلوب في الشهر: <strong>${totalRequired} ج</strong></div>
                 <div class="financial-payment-actions">
-                    <div class="payment-toggle"><span>حساب الشهر الحالي (${monthMoney} ج):</span><button class="pay-btn ${paidMonth ? 'is-paid' : 'not-paid'}" onclick="${paymentMonthFn}">${paidMonth ? 'تم دفع الشهر' : 'دفع الشهر الحالي'}</button></div>
-                    ${hasDebt ? `<div class="payment-toggle"><span>تسوية المتأخرات (${previousDebt} ج):</span><button class="pay-btn ${paidDebt ? 'is-paid' : 'not-paid'}" onclick="${paymentDebtFn}">${paidDebt ? 'تم دفع المتأخرات' : 'دفع المتأخرات'}</button></div>` : ''}
+                    <div class="payment-toggle"><span>حساب الشهر الحالي (${monthMoney} ج):</span><button class="pay-btn ${monthPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentMonthFn}">${monthPaid ? 'تم دفع الشهر' : 'دفع الشهر الحالي'}</button></div>
+                    ${hasDebt ? `<div class="payment-toggle"><span>تسوية المتأخرات (${previousDebt} ج):</span><button class="pay-btn ${debtPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentDebtFn}">${debtPaid ? 'تم دفع المتأخرات' : 'دفع المتأخرات'}</button></div>` : ''}
                 </div>
             </div>`;
         }
@@ -3194,11 +3209,20 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         function setMonthPaymentState(obj, type, paid) {
             if (!obj) return;
             const metrics = getFinancialMetrics(obj, type);
-            const amount = metrics.monthMoney;
             const currentPaid = metrics.monthPaid;
             if (paid === currentPaid) return;
-            if (paid) addCollectedPayment(obj, amount, 'month');
-            else removeCollectedPayment(obj, amount, 'month');
+
+            if (paid) {
+                if (metrics.monthMoney > 0) {
+                    // منع وجود أكثر من عملية تحصيل للشهر الحالي عند إعادة التسجيل.
+                    removeCurrentMonthPayment(obj, 'month');
+                    addCollectedPayment(obj, metrics.monthMoney, 'month');
+                }
+            } else {
+                // الإلغاء لا يعتمد على مبلغ قديم؛ هذا يمنع انفصال السجل عن الحساب بعد تعديل السعر/الحصص.
+                removeCurrentMonthPayment(obj, 'month');
+            }
+
             if (type === 'group') obj.isMonthPaid = paid;
             else obj.isPaid = paid;
         }
@@ -3269,9 +3293,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const daysChanged = JSON.stringify(getStoredDays(student)) !== JSON.stringify(days);
                 const priceChanged = (parseFloat(student.price) || 0) !== price;
                 Object.assign(student, {name, phone, grade, price, debtNote, previousDebt, day1, day2, day3, day4, days, scheduleDays: [...days], time, timeHour: timeData.hour, timeMinute: timeData.minute, timePeriod: timeData.period, timeEnd, timeEndHour: timeData.timeEndHour, timeEndMinute: timeData.timeEndMinute, timeEndPeriod: timeData.timeEndPeriod});
-                // نحافظ على معرف التلميذ ثابتًا، ونصفر حالة دفع الشهر فقط إذا تغير سعر الحصة.
-                if (priceChanged) {
-                    student.isPaid = false;
+                // نحافظ على معرف التلميذ ثابتًا، ونلغي تحصيل الشهر الحالي إذا تغير السعر أو أيام الجدول.
+                if (priceChanged || daysChanged) {
+                    setMonthPaymentState(student, 'student', false);
                 }
                 if (daysChanged) {
                     const studentMonthFirstDay = student.monthKey ? `${student.monthKey}-01` : defaultFirstDay;
@@ -3337,8 +3361,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     const scheduleTimeEnd = formatScheduleTime(group.timeEndHour || '', group.timeEndMinute || '', group.timeEndPeriod || '');
 
                     ensureDebtHistory(group);
-                    if (!group.isMonthPaid) {
-                        const totalSessions = calculateGroupSessionCount(group);
+                    const groupFinancial = getFinancialMetrics(group, 'group');
+                    if (!groupFinancial.monthPaid) {
+                        const totalSessions = groupFinancial.sessions;
                         addPreviousDebtEntry(group, totalSessions, group.price, `متأخرات ${group.monthKey || 'الشهر السابق'}`);
                     }
 
@@ -3359,8 +3384,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     const scheduleTimeEnd = formatScheduleTime(student.timeEndHour || '', student.timeEndMinute || '', student.timeEndPeriod || '');
 
                     ensureDebtHistory(student);
-                    if (!student.isPaid) {
-                        const totalSessions = calculateStudentSessionCount(student);
+                    const studentFinancial = getFinancialMetrics(student, 'student');
+                    if (!studentFinancial.monthPaid) {
+                        const totalSessions = studentFinancial.sessions;
                         addPreviousDebtEntry(student, totalSessions, student.price, `متأخرات ${student.monthKey || 'الشهر السابق'}`);
                     }
 
@@ -3431,9 +3457,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const oldDays = getStoredDays(group); const daysChanged = JSON.stringify(oldDays) !== JSON.stringify(days);
                 const priceChanged = (parseFloat(group.price) || 0) !== price;
                 Object.assign(group, {name, phone, day1, day2, day3, day4, days, scheduleDays: [...days], time, timeHour: timeData.hour, timeMinute: timeData.minute, timePeriod: timeData.period, timeEnd, timeEndHour: timeData.timeEndHour, timeEndMinute: timeData.timeEndMinute, timeEndPeriod: timeData.timeEndPeriod, price, debtNote, previousDebt});
-                // نحافظ على حالة السداد عند تعديل البيانات العادية، ونلغيها فقط إذا تغير سعر الحصة.
-                if (priceChanged) {
-                    group.isMonthPaid = false;
+                // نحافظ على حالة السداد عند تعديل البيانات العادية، ونلغي تحصيل الشهر الحالي إذا تغير السعر أو أيام الجدول.
+                if (priceChanged || daysChanged) {
+                    setMonthPaymentState(group, 'group', false);
                 }
                 if (daysChanged) {
                     const groupMonthFirstDay = group.monthKey ? `${group.monthKey}-01` : defaultFirstDay;
