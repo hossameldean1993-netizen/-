@@ -2793,7 +2793,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const currentSessionsCount = Math.max(1, parseInt(dayObj.sessionsCount, 10) || 1);
                 let sessionCountBtns = '';
                 for (let opt = 1; opt <= 6; opt++) {
-                    sessionCountBtns += `<button class="session-num-btn ${currentSessionsCount === opt ? 'active' : ''}"${futureDisabled} onclick="updateGroupDaySessionsCount(${groupIndex}, ${i}, ${opt})">${opt}</button>`;
+                    sessionCountBtns += `<button class="session-num-btn ${currentSessionsCount === opt ? 'active' : ''}"${futureDisabled} onclick="updateGroupDaySessionsCount(${groupIndex}, ${i}, ${opt}, event)" type="button">${opt}</button>`;
                 }
                 daysHTML += `
                     <div class="day-row${isFutureDay ? ' future-day' : ''}">
@@ -2802,9 +2802,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                             <span>${currentStatus === 'present' ? 'حصة فعلية' : (currentStatus === 'absent' ? 'غائب' : (currentStatus === 'canceled' ? 'ملغية' : 'غير محدد'))}</span>
                         </div>
                         <div class="status-btns">
-                            <button class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'present')">حاضر</button>
-                            <button class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'absent')">غائب</button>
-                            <button class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'canceled')">ملغي</button>
+                            <button class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'present', event)" type="button">حاضر</button>
+                            <button class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'absent', event)" type="button">غائب</button>
+                            <button class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'canceled', event)" type="button">ملغي</button>
                         </div>
                         ${currentStatus === 'present' ? `
                         <div class="sessions-count-container">
@@ -2845,30 +2845,35 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 </div>`;
         }
 
-        function setGroupDayStatus(gIdx, dIdx, status) {
-            const day = groups[gIdx].daysData[dIdx];
+        function setGroupDayStatus(gIdx, dIdx, status, event) {
+            if (event) { event.preventDefault(); event.stopPropagation(); }
+            const group = groups[gIdx];
+            if (!group) return;
+            if (!Array.isArray(group.daysData)) group.daysData = [];
+            const day = group.daysData[dIdx];
             if (!day) return;
             if (isFutureDateKey(day.dateKey)) {
                 showFutureDayWarning(day);
                 return;
             }
             day.status = (day.status === status) ? '' : status;
-            if(day.status !== 'present') {
-                day.sessionsCount = 0;
-            } else {
-                if(!day.sessionsCount) day.sessionsCount = 1;
-            }
+            day.sessionsCount = day.status === 'present' ? Math.max(1, parseInt(day.sessionsCount, 10) || 1) : 0;
             saveData();
         }
 
-        function updateGroupDaySessionsCount(gIdx, dIdx, val) {
-            const day = groups[gIdx].daysData[dIdx];
+        function updateGroupDaySessionsCount(gIdx, dIdx, val, event) {
+            if (event) { event.preventDefault(); event.stopPropagation(); }
+            const group = groups[gIdx];
+            if (!group) return;
+            if (!Array.isArray(group.daysData)) group.daysData = [];
+            const day = group.daysData[dIdx];
             if (!day) return;
             if (isFutureDateKey(day.dateKey)) {
                 showFutureDayWarning(day);
                 return;
             }
-            day.sessionsCount = parseInt(val) || 1;
+            if (day.status !== 'present') day.status = 'present';
+            day.sessionsCount = Math.min(6, Math.max(1, parseInt(val, 10) || 1));
             saveData();
         }
 
@@ -3051,9 +3056,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                         </div>
                         
                         <div class="status-btns">
-                            <button class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'present')">حاضر</button>
-                            <button class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'absent')">غائب</button>
-                            <button class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'canceled')">ملغي</button>
+                            <button class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'present', event)" type="button">حاضر</button>
+                            <button class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'absent', event)" type="button">غائب</button>
+                            <button class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'canceled', event)" type="button">ملغي</button>
                         </div>
 
                         ${currentStatus === 'present' ? `
@@ -3291,15 +3296,20 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             window.open(targetUrl, '_blank');
         }
 
-        function setStudentDayStatus(sIdx, dIdx, status) {
-            const day = students[sIdx].daysData[dIdx];
+        function setStudentDayStatus(sIdx, dIdx, status, event) {
+            if (event) { event.preventDefault(); event.stopPropagation(); }
+            const student = students[sIdx];
+            if (!student) return;
+            if (!Array.isArray(student.daysData)) student.daysData = [];
+            const day = student.daysData[dIdx];
             if (!day) return;
             if (isFutureDateKey(day.dateKey)) {
                 showFutureDayWarning(day);
                 return;
             }
             day.status = (day.status === status) ? '' : status;
-            if(day.status !== 'present') day.sessionsCount = 0;
+            if (day.status !== 'present') day.sessionsCount = 0;
+            else day.sessionsCount = 1;
             saveData();
         }
 
