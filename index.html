@@ -1082,14 +1082,12 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             <div class="settings-page-title">الإعدادات</div>
                 <div id="driveBackupStatus" class="drive-backup-status" aria-live="polite">
                     <span class="drive-backup-status-icon">☁️</span>
-                    <span><b>آخر نسخ احتياطي:</b> <span id="lastDriveBackupTime">لم يتم التحقق بعد</span></span>
+                    <span><b>حالة المزامنة:</b> <span id="lastDriveBackupTime">لم تتم المزامنة بعد</span></span>
                 </div>
             <div class="control-buttons-wrapper">
                 <button class="btn-3d btn-red-3d settings-btn" onclick="openStartMonthModal()">بدء شهر جديد</button>
                 <button class="btn-3d btn-red-3d settings-btn" onclick="deleteAllData()">حذف جميع البيانات</button>
-                <button class="btn-3d settings-btn" onclick="startGoogleDriveBackup()">النسخ الاحتياطي إلى Google Drive</button>
-                
-                <button class="btn-3d settings-btn" onclick="triggerRestoreFileInput()">استعادة النسخة الاحتياطية</button>
+                <button class="btn-3d settings-btn" onclick="startGoogleDriveBackup()">مزامنة البيانات تلقائيًا مع Google Drive</button>
                 <button class="btn-3d settings-btn" onclick="exportPDFReport()">تصدير PDF</button>
                 <button class="btn-3d settings-btn" onclick="openRecycleBin()">سلة المحذوفات</button>
                 <button class="btn-3d btn-full" onclick="toggleTheme()" id="themeToggleText">
@@ -1878,7 +1876,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             students.forEach(migrate);
         }
 
-        function saveData() {
+        function saveData(markAsChanged = true) {
             // التطبيع/ترقية البيانات يتم مرة واحدة فقط بدل إعادة المرور على كل السجلات عند كل نقرة.
             if (!dataNormalizationDone) {
                 ensureStudentIds();
@@ -1912,9 +1910,14 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const studentsJson = JSON.stringify(students);
                 localStorage.setItem(userStorageKey('teacher_groups_local'), groupsJson);
                 localStorage.setItem(userStorageKey('teacher_students_local'), studentsJson);
+                if (markAsChanged) {
+                    const changedAt = new Date().toISOString();
+                    localStorage.setItem(userStorageKey('data_updated_at'), changedAt);
+                    window.localDataUpdatedAt = changedAt;
+                }
             } catch (err) {
                 console.error('Save data error:', err);
-                showAppAlert('تعذر حفظ البيانات', 'مساحة التخزين في الهاتف ممتلئة أو غير متاحة. بياناتك الحالية لم تُحذف من الذاكرة. يُفضّل عمل نسخة احتياطية ثم تحرير مساحة.');
+                showAppAlert('تعذر حفظ البيانات', 'مساحة التخزين في الهاتف ممتلئة أو غير متاحة. بياناتك الحالية لم تُحذف من الذاكرة. حرّر مساحة ثم حاول مرة أخرى.');
                 return false;
             }
             calculateSummaryTotals();
@@ -1975,8 +1978,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             }
             if (document.getElementById('page6').classList.contains('active')) renderFinancialLists();
 
-            // نسخ احتياطي تلقائي بعد أي عملية حفظ ناجحة
-            scheduleAutoDriveBackup();
+            // بعد أي تعديل حقيقي: جدولة مزامنة، وليس إنشاء نسخة احتياطية.
+            if (markAsChanged && typeof scheduleAutoDriveBackup === 'function') scheduleAutoDriveBackup();
             return true;
         }
 
@@ -1986,21 +1989,12 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             if (autoDriveBackupTimer) clearTimeout(autoDriveBackupTimer);
             autoDriveBackupTimer = setTimeout(async () => {
                 try {
-                    if (typeof uploadBackupToDrive !== 'function') return;
-                    if (typeof accessToken !== 'undefined' && accessToken) {
-                        await uploadBackupToDrive();
-                        return;
-                    }
-                    // إذا كانت صلاحية Drive ممنوحة سابقًا، جدّد الرمز بصمت عند الحاجة
-                    // حتى يستمر النسخ التلقائي بعد انتهاء صلاحية الرمز الحالي.
-                    if (drivePermissionGranted && typeof initGoogleDriveAuth === 'function') {
-                        initGoogleDriveAuth();
-                        if (tokenClient) tokenClient.requestAccessToken({ prompt: '' });
-                    }
+                    if (typeof syncWithDrive !== 'function') return;
+                    await syncWithDrive();
                 } catch (err) {
-                    console.warn('Auto backup skipped:', err);
+                    console.warn('Auto sync skipped:', err);
                 }
-            }, 3000);
+            }, 1500);
         }
 
         function generateDatesForGroup(day1Name, day2Name, startDateStr, defaultStatus = 'present', day3Name = '', day4Name = '', ...extraDayNames) {
@@ -3596,14 +3590,20 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             saveData(); closeGroupModal(); if (editId !== '') renderGroupDetail(parseInt(editId, 10)); else navigateTo('page2');
         }
 
-        // ==================== النسخ الاحتياطي إلى Google Drive ====================
-        // Google Identity Services - مناسب للـ PWA/المتصفح
+        // ==================== المزامنة التلقائية مع Google Drive ====================
+        // لا توجد "نسخ احتياطية" متعددة هنا: يوجد ملف مزامنة واحد لكل مستخدم.
+        // قاعدة الحسم: أحدث updatedAt هو المصدر المعتمد دائمًا.
         const CLIENT_ID = '310650752416-dskh559v6u5vjbc2jih585o35ola5a2p.apps.googleusercontent.com';
         const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+        const DRIVE_SYNC_PREFIX = 'drosak_sync_';
+        const DRIVE_SYNC_VERSION = 1;
         let tokenClient = null;
         let accessToken = null;
-        let backupInProgress = false;
+        let backupInProgress = false; // الاسم محفوظ للتوافق مع بقية البرنامج، والمقصود به عملية المزامنة.
         let drivePermissionGranted = false;
+        let syncInProgress = false;
+        let syncQueued = false;
+        window.localDataUpdatedAt = localStorage.getItem(userStorageKey('data_updated_at')) || '';
 
         function getDrivePermissionKey(uid) {
             return 'drive_permission_granted_' + (uid || 'guest');
@@ -3619,6 +3619,25 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             if (uid) localStorage.setItem(getDrivePermissionKey(uid), 'true');
         }
 
+        function getDriveSyncFileName() {
+            return `${DRIVE_SYNC_PREFIX}${String(appUserKey || 'guest').replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
+        }
+
+        function getLocalSyncUpdatedAt() {
+            const saved = localStorage.getItem(userStorageKey('data_updated_at')) || window.localDataUpdatedAt || '';
+            window.localDataUpdatedAt = saved;
+            return saved;
+        }
+
+        function parseSyncDate(value) {
+            const time = Date.parse(value || '');
+            return Number.isFinite(time) ? time : 0;
+        }
+
+        function compareSyncDates(a, b) {
+            return parseSyncDate(a) - parseSyncDate(b);
+        }
+
         function initGoogleDriveAuth() {
             if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
                 throw new Error('GOOGLE_IDENTITY_SERVICES_UNAVAILABLE');
@@ -3630,48 +3649,33 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 callback: async (response) => {
                     if (response.error || !response.access_token) {
                         console.error('Google OAuth error:', response);
-                        showAppAlert('خطأ في صلاحية Google', 'لم يتم منح صلاحية Google Drive. تأكد من السماح للتطبيق بالوصول إلى Drive ثم حاول مرة أخرى.');
+                        showAppAlert('خطأ في صلاحية Google', 'لم يتم منح صلاحية Google Drive. اسمح للتطبيق بالوصول إلى Drive لتفعيل المزامنة التلقائية.');
                         return;
                     }
                     accessToken = response.access_token;
                     markDrivePermissionGranted(appUserKey);
-                    await uploadBackupToDrive();
+                    await syncWithDrive();
                 }
             });
         }
 
         async function startGoogleDriveBackup() {
-            if (backupInProgress) return;
+            // اسم الدالة محفوظ حتى لا تتعطل أزرار/استدعاءات قديمة، لكن وظيفتها الآن هي المزامنة.
+            if (syncInProgress) return;
             try {
                 initGoogleDriveAuth();
                 if (accessToken) {
-                    await uploadBackupToDrive();
+                    await syncWithDrive();
                     return;
                 }
-                // Google يرفض الطلب قبل ظهور نافذة الاختيار إذا كان Origin غير مسجل.
-                // في هذه الحالة نستخدم حساب Google المرتبط بـ Firebase كمسار احتياطي للـPWA.
-                try {
-                    // طلب الإذن مرة واحدة فقط طوال استخدام البرنامج
                 tokenClient.requestAccessToken({ prompt: drivePermissionGranted ? '' : 'consent' });
-                } catch (err) {
-                    console.error('Google GIS request error:', err);
-                    if (window.firebaseDriveAuth) {
-                        const fallbackToken = await window.firebaseDriveAuth();
-                        if (fallbackToken) {
-                            accessToken = fallbackToken;
-                            await uploadBackupToDrive();
-                            return;
-                        }
-                    }
-                    throw err;
-                }
             } catch (err) {
-                console.error('Google Drive auth init error:', err);
+                console.error('Google Drive sync auth error:', err);
                 const origin = location.origin || (location.protocol + '//' + location.host);
                 if (String(err?.message || '').toLowerCase().includes('origin') || String(err?.error || '').toLowerCase().includes('origin')) {
                     showAppAlert('Google رفض الاتصال', 'خطأ 400: origin_mismatch\n\nأصل التطبيق الحالي هو:\n' + origin + '\n\nأضف هذا العنوان في Google Cloud ضمن Authorized JavaScript origins لنفس Client ID.');
                 } else {
-                    showAppAlert('تعذر تشغيل Google Drive', 'تعذر الحصول على صلاحية Google Drive. تأكد من اتصال الإنترنت وإعداد OAuth ثم حاول مرة أخرى.');
+                    showAppAlert('تعذر تشغيل المزامنة', 'تعذر الحصول على صلاحية Google Drive. تأكد من اتصال الإنترنت وإعداد OAuth ثم حاول مرة أخرى.');
                 }
             }
         }
@@ -3700,178 +3704,230 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             return `HTTP ${response.status}${message ? `: ${message}` : ''}`;
         }
 
-        async function findDriveBackupFile(fileName = null) {
-            const q = fileName
-                ? `name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`
-                : "name contains 'backup_drosak_' and trashed = false";
+        async function findDriveSyncFile(fileName = getDriveSyncFileName()) {
+            const q = `name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`;
             const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
-                '&spaces=drive&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime desc&pageSize=100';
+                '&spaces=drive&fields=files(id,name,mimeType,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=10';
             const response = await driveFetch(url);
             if (!response.ok) throw new Error('DRIVE_LIST_FAILED: ' + await getDriveError(response));
             const data = await response.json();
             const files = Array.isArray(data.files) ? data.files : [];
-            if (fileName) return files.find(f => f.name === fileName) || null;
-            return files.find(f => /^backup_drosak_\d{4}-\d{2}-\d{2}\.json$/i.test(f.name)) || null;
+            return files.find(f => f.name === fileName) || null;
         }
 
         function formatDriveBackupTime(dateValue) {
-            if (!dateValue) return 'لم يتم العثور على نسخة احتياطية';
+            if (!dateValue) return 'لم تتم المزامنة بعد';
             const d = new Date(dateValue);
             if (Number.isNaN(d.getTime())) return 'غير معروف';
             return d.toLocaleString('ar-EG', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', hour12: true
             });
         }
 
         function setLastDriveBackupTime(dateValue) {
             const el = document.getElementById('lastDriveBackupTime');
             if (el) el.textContent = formatDriveBackupTime(dateValue);
-            if (dateValue) localStorage.setItem('last_drive_backup_time', dateValue);
+            if (dateValue) localStorage.setItem(userStorageKey('last_drive_sync_time'), dateValue);
         }
 
         function loadSavedDriveBackupTime() {
-            const saved = localStorage.getItem('last_drive_backup_time');
+            const saved = localStorage.getItem(userStorageKey('last_drive_sync_time'));
             const el = document.getElementById('lastDriveBackupTime');
-            if (el && saved) el.textContent = formatDriveBackupTime(saved);
+            if (el) el.textContent = saved ? formatDriveBackupTime(saved) : 'لم تتم المزامنة بعد';
         }
 
-        async function refreshDriveBackupStatus() {
-            loadSavedDriveBackupTime();
-            if (!accessToken || typeof findDriveBackupFile !== 'function') return;
-            try {
-                const existing = await findDriveBackupFile();
-                if (existing?.modifiedTime) {
-                    setLastDriveBackupTime(existing.modifiedTime);
-                } else {
-                    const el = document.getElementById('lastDriveBackupTime');
-                    if (el && !localStorage.getItem('last_drive_backup_time')) {
-                        el.textContent = 'لا توجد نسخة احتياطية';
-                    }
-                }
-            } catch (err) {
-                console.warn('Could not refresh Drive backup status:', err);
+        function buildLocalSyncPayload() {
+            let updatedAt = getLocalSyncUpdatedAt();
+            if (!updatedAt) {
+                // البيانات القديمة التي لم يكن لها تاريخ: نعتبرها تاريخية فقط، ولا ننشئ تعديلًا جديدًا تلقائيًا.
+                updatedAt = '1970-01-01T00:00:00.000Z';
             }
+            return {
+                syncVersion: DRIVE_SYNC_VERSION,
+                ownerKey: String(appUserKey || 'guest'),
+                updatedAt,
+                groups: Array.isArray(groups) ? groups : [],
+                students: Array.isArray(students) ? students : []
+            };
         }
 
-        async function uploadBackupToDrive() {
-            if (!accessToken || backupInProgress) return false;
+        async function readDriveSyncFile(fileId) {
+            const response = await driveFetch(
+                'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '?alt=media'
+            );
+            if (!response.ok) throw new Error('DRIVE_DOWNLOAD_FAILED: ' + await getDriveError(response));
+            const raw = await response.text();
+            let data;
+            try { data = JSON.parse(raw); } catch (_) { throw new Error('DRIVE_SYNC_INVALID_JSON'); }
+            if (!data || typeof data !== 'object' || !Array.isArray(data.groups) || !Array.isArray(data.students)) {
+                throw new Error('DRIVE_SYNC_INVALID_DATA');
+            }
+            if (data.ownerKey && String(data.ownerKey) !== String(appUserKey || 'guest')) {
+                throw new Error('DRIVE_SYNC_WRONG_USER');
+            }
+            if (!parseSyncDate(data.updatedAt)) data.updatedAt = '1970-01-01T00:00:00.000Z';
+            return data;
+        }
+
+        async function createDriveSyncFile(payload, fileName) {
+            const fileContent = JSON.stringify(payload, null, 2);
+            const form = new FormData();
+            form.append('metadata', new Blob([
+                JSON.stringify({name: fileName, mimeType: 'application/json'})
+            ], {type: 'application/json'}));
+            form.append('file', new Blob([fileContent], {type: 'application/json'}));
+            return driveFetch(
+                'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime',
+                {method: 'POST', body: form}
+            );
+        }
+
+        async function updateDriveSyncFile(fileId, payload) {
+            return driveFetch(
+                'https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(fileId) + '?uploadType=media',
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload, null, 2)
+                }
+            );
+        }
+
+        async function applyRemoteSyncData(remote) {
+            const normalized = normalizeImportedData(remote);
+            if (!normalized) throw new Error('DRIVE_SYNC_INVALID_DATA');
+            groups = normalized.groups;
+            students = normalized.students;
+            selectedGroupIndex = null;
+            selectedStudentIndex = null;
+            dataNormalizationDone = false;
+            try {
+                localStorage.setItem(userStorageKey('teacher_groups_local'), JSON.stringify(groups));
+                localStorage.setItem(userStorageKey('teacher_students_local'), JSON.stringify(students));
+                localStorage.setItem(userStorageKey('data_updated_at'), remote.updatedAt);
+                window.localDataUpdatedAt = remote.updatedAt;
+            } catch (err) {
+                console.error('Apply remote sync data error:', err);
+                throw new Error('LOCAL_STORAGE_SYNC_FAILED');
+            }
+            renderTodaySessions();
+            renderMiniCards();
+            renderStudentMiniCards();
+            calculateSummaryTotals();
+        }
+
+        async function syncWithDrive() {
+            if (!accessToken) return false;
+            if (syncInProgress) {
+                syncQueued = true;
+                return false;
+            }
+            syncInProgress = true;
             backupInProgress = true;
             try {
-                const backupData = {
-                    teacher_groups_local: JSON.parse(localStorage.getItem(userStorageKey('teacher_groups_local')) || '[]'),
-                    teacher_students_local: JSON.parse(localStorage.getItem(userStorageKey('teacher_students_local')) || '[]')
-                };
-                const fileName = `backup_drosak_${new Date().toISOString().slice(0,10)}.json`;
-                const fileContent = JSON.stringify(backupData, null, 2);
-                const existing = await findDriveBackupFile(fileName);
-                let response;
+                const fileName = getDriveSyncFileName();
+                const localPayload = buildLocalSyncPayload();
+                let remoteFile = await findDriveSyncFile(fileName);
 
-                if (existing?.id) {
-                    // تحديث محتوى النسخة الموجودة اليوم فقط.
-                    response = await driveFetch(
-                        'https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(existing.id) + '?uploadType=media',
-                        {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: fileContent
-                        }
-                    );
-                } else {
-                    // إنشاء الملف كملف JSON في Drive.
-                    const form = new FormData();
-                    form.append('metadata', new Blob([
-                        JSON.stringify({name: fileName, mimeType: 'application/json'})
-                    ], {type: 'application/json'}));
-                    form.append('file', new Blob([fileContent], {type: 'application/json'}));
-                    response = await driveFetch(
-                        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
-                        {method: 'POST', body: form}
-                    );
+                if (!remoteFile?.id) {
+                    // إنشاء أول ملف مزامنة فقط. لا توجد ملفات يومية ولا نسخ متعددة.
+                    const response = await createDriveSyncFile(localPayload, fileName);
+                    if (!response.ok) throw new Error('DRIVE_CREATE_FAILED: ' + await getDriveError(response));
+                    const created = await response.json().catch(() => ({}));
+                    setLastDriveBackupTime(new Date().toISOString());
+                    return !!created?.id;
                 }
 
-                if (!response.ok) {
-                    const detail = await getDriveError(response);
-                    console.error('Google Drive upload error:', detail);
-                    showAppAlert('فشل النسخ الاحتياطي',
-                        response.status === 403
-                            ? 'Google رفض العملية (403). غالبًا Google Drive API غير مفعّل أو صلاحية Drive غير مضافة لهذا العميل.'
-                            : `تعذر رفع النسخة إلى Google Drive. ${detail}`
-                    );
-                    return false;
+                // نقرأ المحتوى الفعلي قبل أي كتابة حتى لا يستبدل جهاز قديم جهازًا أحدث.
+                const remotePayload = await readDriveSyncFile(remoteFile.id);
+                const comparison = compareSyncDates(localPayload.updatedAt, remotePayload.updatedAt);
+
+                if (comparison < 0) {
+                    // السحابة أحدث: السحابة هي النسخة المعتمدة، ونستبدل المحلي بها بدون إنشاء تعديل جديد.
+                    await applyRemoteSyncData(remotePayload);
+                    setLastDriveBackupTime(new Date().toISOString());
+                    return true;
                 }
 
-                const backupCompletedAt = new Date().toISOString();
-                setLastDriveBackupTime(backupCompletedAt);
-                showAppAlert('تم النسخ الاحتياطي', 'تم حفظ النسخة الاحتياطية بنجاح داخل Google Drive.');
+                if (comparison === 0) {
+                    setLastDriveBackupTime(new Date().toISOString());
+                    return true;
+                }
+
+                // المحلي أحدث. نعيد القراءة مباشرة قبل الكتابة لتقليل احتمال أن يكتب
+                // جهازان في نفس اللحظة فوق بعضهما. إذا ظهر تعديل أحدث أثناء الفحص، نحتكم للتاريخ من جديد.
+                const latestRemote = await readDriveSyncFile(remoteFile.id);
+                const latestComparison = compareSyncDates(localPayload.updatedAt, latestRemote.updatedAt);
+                if (latestComparison < 0) {
+                    await applyRemoteSyncData(latestRemote);
+                    setLastDriveBackupTime(new Date().toISOString());
+                    return true;
+                }
+                if (latestComparison === 0) {
+                    setLastDriveBackupTime(new Date().toISOString());
+                    return true;
+                }
+
+                const response = await updateDriveSyncFile(remoteFile.id, localPayload);
+                if (!response.ok) throw new Error('DRIVE_UPDATE_FAILED: ' + await getDriveError(response));
+
+                // تحقق بعد الكتابة: إذا وصل تعديل أحدث من جهاز آخر، لا نعتمد نسختنا القديمة.
+                const verifiedRemote = await readDriveSyncFile(remoteFile.id);
+                if (compareSyncDates(localPayload.updatedAt, verifiedRemote.updatedAt) < 0) {
+                    await applyRemoteSyncData(verifiedRemote);
+                }
+                setLastDriveBackupTime(new Date().toISOString());
                 return true;
             } catch (err) {
-                console.error('Google Drive backup error:', err);
+                console.error('Google Drive sync error:', err);
                 const msg = String(err?.message || err);
                 if (msg.includes('DRIVE_UNAUTHORIZED')) {
-                    showAppAlert('انتهت صلاحية Google Drive', 'اضغط النسخ الاحتياطي مرة أخرى لمنح الصلاحية من جديد.');
-                } else if (msg.includes('DRIVE_LIST_FAILED')) {
-                    showAppAlert('تعذر الوصول إلى Google Drive', 'تعذر قراءة ملفات Drive. تأكد من تفعيل Google Drive API ومنح التطبيق صلاحية Drive.');
+                    accessToken = null;
+                } else if (msg.includes('DRIVE_SYNC_WRONG_USER')) {
+                    showAppAlert('خطأ في حساب المزامنة', 'ملف المزامنة الموجود في Google Drive مرتبط بحساب مستخدم مختلف. لم يتم تغيير بياناتك المحلية.');
+                } else if (msg.includes('LOCAL_STORAGE_SYNC_FAILED')) {
+                    showAppAlert('تعذر تطبيق المزامنة', 'البيانات الموجودة على Google Drive أحدث، لكن تعذر حفظها على الجهاز. لم يتم حذف بياناتك الحالية.');
+                } else if (msg.includes('DRIVE_SYNC_INVALID')) {
+                    showAppAlert('ملف المزامنة غير صالح', 'ملف المزامنة في Google Drive غير صالح، لذلك لم يتم تغيير بياناتك المحلية.');
                 } else {
-                    showAppAlert('خطأ أثناء الرفع', 'حدث خطأ أثناء رفع النسخة الاحتياطية إلى Google Drive. افتح التطبيق من HTTPS وتأكد من اتصال الإنترنت.');
+                    console.warn('Auto sync failed:', err);
                 }
                 return false;
             } finally {
                 backupInProgress = false;
+                syncInProgress = false;
+                if (syncQueued) {
+                    syncQueued = false;
+                    setTimeout(() => syncWithDrive(), 0);
+                }
             }
         }
 
-        async function triggerRestoreFileInput() {
-            if (backupInProgress) return;
+        async function refreshDriveBackupStatus() {
+            loadSavedDriveBackupTime();
+            if (!accessToken) return;
             try {
-                initGoogleDriveAuth();
-                if (!accessToken) {
-                    // طلب الإذن مرة واحدة فقط طوال استخدام البرنامج
-                tokenClient.requestAccessToken({ prompt: drivePermissionGranted ? '' : 'consent' });
-                    showAppAlert('السماح بالوصول', 'اسمح للتطبيق بالوصول إلى Google Drive، ثم اضغط استعادة النسخة الاحتياطية مرة أخرى.');
-                    return;
-                }
-                backupInProgress = true;
-                const existing = await findDriveBackupFile();
+                const existing = await findDriveSyncFile();
                 if (!existing?.id) {
-                    showAppAlert('لا توجد نسخة احتياطية', 'لم يتم العثور على نسخة احتياطية للتطبيق على Google Drive.');
+                    const el = document.getElementById('lastDriveBackupTime');
+                    if (el) el.textContent = 'لم تتم المزامنة بعد';
                     return;
                 }
-                const response = await driveFetch(
-                    'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(existing.id) + '?alt=media'
-                );
-                if (!response.ok) throw new Error('DRIVE_DOWNLOAD_FAILED: ' + await getDriveError(response));
-                const importedData = normalizeImportedData(JSON.parse(await response.text()));
-                if (!importedData) {
-                    showAppAlert('خطأ', 'النسخة الاحتياطية الموجودة على Google Drive غير صالحة.');
-                    return;
-                }
-                showAppConfirm('استعادة النسخة الاحتياطية', 'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية بالبيانات الموجودة في النسخة الاحتياطية.', function () {
-                    groups = importedData.groups;
-                    students = importedData.students;
-                    selectedGroupIndex = null;
-                    selectedStudentIndex = null;
-                    dataNormalizationDone = false;
-                    saveData();
-                    showAppAlert('تم بنجاح', 'تمت استعادة النسخة الاحتياطية من Google Drive بنجاح!');
-                    navigateTo('page1');
-                });
+                const remote = await readDriveSyncFile(existing.id);
+                setLastDriveBackupTime(remote.updatedAt);
             } catch (err) {
-                console.error('Google Drive restore error:', err);
-                showAppAlert('تعذر الاستعادة', 'تعذر قراءة النسخة الاحتياطية من Google Drive. تأكد من الصلاحيات واتصال الإنترنت ثم حاول مرة أخرى.');
-            } finally {
-                backupInProgress = false;
+                console.warn('Could not refresh Drive sync status:', err);
             }
         }
+
+        // استعادة النسخ الاحتياطية القديمة لم تعد جزءًا من النظام الجديد.
+        // المزامنة تعتمد على ملف واحد فقط وأحدث updatedAt هو المصدر المعتمد.
 
         // إعداد التشغيل الأولي والتنقل عند تحميل الصفحة
         document.addEventListener('DOMContentLoaded', () => {
             ensureStudentIds();
-            saveData();
+            saveData(false);
             buildDaySelector('groupDaySelector', []);
             buildDaySelector('studentDaySelector', []);
             renderTodaySessions();
@@ -3881,6 +3937,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         });
             window.addEventListener('resize', syncFixedContentOffsets);
         window.addEventListener('load', syncFixedContentOffsets);
+        window.addEventListener('online', () => { if (accessToken) syncWithDrive(); });
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && accessToken) syncWithDrive(); });
+        setInterval(() => { if (document.visibilityState === 'visible' && navigator.onLine && accessToken) syncWithDrive(); }, 30000);
 
 </script>
 
@@ -3927,30 +3986,38 @@ const loginScreen=document.getElementById('loginScreen'),googleLoginButton=docum
 function msg(x){if(loginMessage) loginMessage.textContent=x||''}
 function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')} function hide(){loginScreen.hidden=true;document.body.classList.remove('login-locked')}
 function friendly(e){const m={'auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google؛ سيتم فتح تسجيل الدخول بالطريقة البديلة.','auth/account-exists-with-different-credential':'هذا الحساب مرتبط بطريقة تسجيل دخول مختلفة.','auth/operation-not-allowed':'يجب تفعيل تسجيل الدخول بحساب Google من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول بحساب Google. تأكد من الإنترنت وإعدادات Firebase.'}
-async function loginWithGoogle(){try{const r=await signInWithPopup(auth,provider);return{user:r.user}}catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null}throw e}}
+async function loginWithGoogle(){try{const r=await signInWithPopup(auth,provider);const c=GoogleAuthProvider.credentialFromResult(r);if(c?.accessToken){window.pendingDriveAccessToken=c.accessToken;window.dispatchEvent(new CustomEvent('drive-auth-ready'));}return{user:r.user}}catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null}throw e}}
 googleLoginButton.addEventListener('click',async()=>{msg('جارٍ فتح تسجيل الدخول بحساب Google...');googleLoginButton.disabled=true;try{await loginWithGoogle()}catch(e){console.error('خطأ في Google:',e);msg(friendly(e))}finally{googleLoginButton.disabled=false}});
-getRedirectResult(auth).then(r=>{if(r){const c=GoogleAuthProvider.credentialFromResult(r);if(c?.accessToken){window.pendingDriveAccessToken=c.accessToken;window.dispatchEvent(new CustomEvent('drive-auth-ready'));}if(sessionStorage.getItem('drive_auth_pending')==='1'){sessionStorage.removeItem('drive_auth_pending');setTimeout(()=>{if(window.pendingDriveAccessToken){window.dispatchEvent(new CustomEvent('drive-auth-ready'));}},150);}}return r}).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
+getRedirectResult(auth).then(r=>{if(r){const c=GoogleAuthProvider.credentialFromResult(r);if(c?.accessToken){accessToken=c.accessToken;window.pendingDriveAccessToken=c.accessToken;window.dispatchEvent(new CustomEvent('drive-auth-ready'));setTimeout(()=>syncWithDrive(),0);}if(sessionStorage.getItem('drive_auth_pending')==='1'){sessionStorage.removeItem('drive_auth_pending');setTimeout(()=>{if(window.pendingDriveAccessToken){window.dispatchEvent(new CustomEvent('drive-auth-ready'));}},150);}}return r}).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
 const authLoading=document.getElementById('authLoading');
 onAuthStateChanged(auth,user=>{
 if(user){ 
+  // كل مستخدم له جلسة مزامنة مستقلة؛ لا نسمح بإعادة استخدام token من مستخدم سابق.
+  const pendingToken = window.pendingDriveAccessToken || null;
+  accessToken = pendingToken;
+  window.pendingDriveAccessToken = null;
   switchAppUser(user.uid);
   if(typeof loadDrivePermissionState==='function') loadDrivePermissionState(user.uid);
   if(authLoading) authLoading.hidden=true;
   document.body.classList.remove('firebase-auth-pending');
   document.documentElement.classList.remove('firebase-startup-pending');
   hide();
-  // عند تسجيل الدخول بالبريد الإلكتروني: اطلب صلاحية Google Drive مرة واحدة فقط.
-  if(user.providerData?.some(p=>p.providerId==='password') && !drivePermissionGranted){
-    setTimeout(()=>{
-      try{
-        initGoogleDriveAuth();
-        if(tokenClient) tokenClient.requestAccessToken({prompt:'consent'});
-      }catch(err){
-        console.warn('Drive permission request skipped:', err);
+  // بعد تحديد المستخدم، فعّل المزامنة تلقائيًا. إذا كان الدخول بالبريد الإلكتروني
+  // فسيُطلب إذن Drive مرة واحدة فقط عند الحاجة.
+  setTimeout(()=>{
+    try{
+      if(accessToken){ syncWithDrive(); return; }
+      initGoogleDriveAuth();
+      if(tokenClient){
+        tokenClient.requestAccessToken({prompt: drivePermissionGranted ? '' : 'consent'});
       }
-    }, 500);
-  }
+    }catch(err){
+      console.warn('Drive auto-sync permission skipped:', err);
+    }
+  }, 500);
 }else{
+  accessToken = null;
+  window.pendingDriveAccessToken = null;
   switchAppUser('guest');
   loadDrivePermissionState(null);
   if(authLoading) authLoading.hidden=true;
