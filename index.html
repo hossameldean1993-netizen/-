@@ -1912,8 +1912,15 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 localStorage.setItem(userStorageKey('teacher_students_local'), studentsJson);
                 if (markAsChanged) {
                     const changedAt = new Date().toISOString();
+                    const changedRevision = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+                        ? crypto.randomUUID()
+                        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                    const previousRevision = localStorage.getItem(userStorageKey('data_revision')) || window.localDataRevision || '';
                     localStorage.setItem(userStorageKey('data_updated_at'), changedAt);
+                    localStorage.setItem(userStorageKey('data_revision'), changedRevision);
+                    localStorage.setItem(userStorageKey('data_base_revision'), previousRevision);
                     window.localDataUpdatedAt = changedAt;
+                    window.localDataRevision = changedRevision;
                 }
             } catch (err) {
                 console.error('Save data error:', err);
@@ -3596,7 +3603,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         const CLIENT_ID = '310650752416-dskh559v6u5vjbc2jih585o35ola5a2p.apps.googleusercontent.com';
         const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
         const DRIVE_SYNC_PREFIX = 'drosak_sync_';
-        const DRIVE_SYNC_VERSION = 1;
+        const DRIVE_SYNC_VERSION = 2;
         let tokenClient = null;
         let accessToken = null;
         let backupInProgress = false; // الاسم محفوظ للتوافق مع بقية البرنامج، والمقصود به عملية المزامنة.
@@ -3604,6 +3611,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         let syncInProgress = false;
         let syncQueued = false;
         window.localDataUpdatedAt = localStorage.getItem(userStorageKey('data_updated_at')) || '';
+        window.localDataRevision = localStorage.getItem(userStorageKey('data_revision')) || '';
 
         function getDrivePermissionKey(uid) {
             return 'drive_permission_granted_' + (uid || 'guest');
@@ -3626,6 +3634,18 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         function getLocalSyncUpdatedAt() {
             const saved = localStorage.getItem(userStorageKey('data_updated_at')) || window.localDataUpdatedAt || '';
             window.localDataUpdatedAt = saved;
+            return saved;
+        }
+
+        function getLocalSyncRevision() {
+            let saved = localStorage.getItem(userStorageKey('data_revision')) || window.localDataRevision || '';
+            if (!saved) {
+                saved = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+                    ? crypto.randomUUID()
+                    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                localStorage.setItem(userStorageKey('data_revision'), saved);
+            }
+            window.localDataRevision = saved;
             return saved;
         }
 
@@ -3707,12 +3727,25 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         async function findDriveSyncFile(fileName = getDriveSyncFileName()) {
             const q = `name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`;
             const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
-                '&spaces=drive&fields=files(id,name,mimeType,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=10';
+                '&spaces=drive&fields=files(id,name,mimeType,modifiedTime,size,version,headRevisionId)&orderBy=modifiedTime desc&pageSize=10';
             const response = await driveFetch(url);
             if (!response.ok) throw new Error('DRIVE_LIST_FAILED: ' + await getDriveError(response));
             const data = await response.json();
             const files = Array.isArray(data.files) ? data.files : [];
-            return files.find(f => f.name === fileName) || null;
+            const found = files.find(f => f.name === fileName) || null;
+            if (found?.id) {
+                try {
+                    const metaResponse = await driveFetch(
+                        'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(found.id) + '?fields=id,name,version,headRevisionId'
+                    );
+                    if (metaResponse.ok) {
+                        const meta = await metaResponse.json();
+                        Object.assign(found, meta);
+                        found._etag = metaResponse.headers.get('ETag') || metaResponse.headers.get('etag') || '';
+                    }
+                } catch (_) {}
+            }
+            return found;
         }
 
         function formatDriveBackupTime(dateValue) {
@@ -3747,6 +3780,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 syncVersion: DRIVE_SYNC_VERSION,
                 ownerKey: String(appUserKey || 'guest'),
                 updatedAt,
+                revision: getLocalSyncRevision(),
+                baseRevision: localStorage.getItem(userStorageKey('data_base_revision')) || '',
                 groups: Array.isArray(groups) ? groups : [],
                 students: Array.isArray(students) ? students : []
             };
@@ -3767,6 +3802,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 throw new Error('DRIVE_SYNC_WRONG_USER');
             }
             if (!parseSyncDate(data.updatedAt)) data.updatedAt = '1970-01-01T00:00:00.000Z';
+            if (!data.revision || typeof data.revision !== 'string') data.revision = '';
+            if (!data.baseRevision || typeof data.baseRevision !== 'string') data.baseRevision = '';
             return data;
         }
 
@@ -3783,12 +3820,14 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             );
         }
 
-        async function updateDriveSyncFile(fileId, payload) {
+        async function updateDriveSyncFile(fileId, payload, expectedEtag = '') {
+            const headers = { 'Content-Type': 'application/json' };
+            if (expectedEtag) headers['If-Match'] = expectedEtag;
             return driveFetch(
                 'https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(fileId) + '?uploadType=media',
                 {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers,
                     body: JSON.stringify(payload, null, 2)
                 }
             );
@@ -3806,7 +3845,10 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 localStorage.setItem(userStorageKey('teacher_groups_local'), JSON.stringify(groups));
                 localStorage.setItem(userStorageKey('teacher_students_local'), JSON.stringify(students));
                 localStorage.setItem(userStorageKey('data_updated_at'), remote.updatedAt);
+                localStorage.setItem(userStorageKey('data_revision'), remote.revision || '');
+                localStorage.setItem(userStorageKey('data_base_revision'), remote.revision || '');
                 window.localDataUpdatedAt = remote.updatedAt;
+                window.localDataRevision = remote.revision || '';
             } catch (err) {
                 console.error('Apply remote sync data error:', err);
                 throw new Error('LOCAL_STORAGE_SYNC_FAILED');
@@ -3859,6 +3901,15 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 // جهازان في نفس اللحظة فوق بعضهما. إذا ظهر تعديل أحدث أثناء الفحص، نحتكم للتاريخ من جديد.
                 const latestRemote = await readDriveSyncFile(remoteFile.id);
                 const latestComparison = compareSyncDates(localPayload.updatedAt, latestRemote.updatedAt);
+                // لا نسمح لجهاز أن يكتب فوق إصدار سحابي تغيّر بعد آخر إصدار كان الجهاز يعرفه.
+                // updatedAt يحسم أي نسخة أحدث، بينما revision/baseRevision يثبتان سلسلة الإصدار نفسها.
+                const knownRemoteRevision = localPayload.baseRevision || '';
+                const remoteRevisionChanged = knownRemoteRevision && latestRemote.revision && knownRemoteRevision !== latestRemote.revision;
+                if (remoteRevisionChanged && latestComparison <= 0) {
+                    await applyRemoteSyncData(latestRemote);
+                    setLastDriveBackupTime(new Date().toISOString());
+                    return true;
+                }
                 if (latestComparison < 0) {
                     await applyRemoteSyncData(latestRemote);
                     setLastDriveBackupTime(new Date().toISOString());
@@ -3869,11 +3920,39 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     return true;
                 }
 
-                const response = await updateDriveSyncFile(remoteFile.id, localPayload);
-                if (!response.ok) throw new Error('DRIVE_UPDATE_FAILED: ' + await getDriveError(response));
+                // نستخدم ETag الخاص بآخر قراءة كشرط ذري للكتابة: إذا غيّر جهاز آخر الملف
+                // بعد آخر قراءة، يرفض Google الكتابة بدل السماح بالكتابة فوق التعديل الجديد.
+                // لا تتم الكتابة إلا على نفس Revision الذي تمت قراءته، مع ETag كحاجز ذري إضافي.
+                if (knownRemoteRevision && latestRemote.revision && knownRemoteRevision !== latestRemote.revision) {
+                    const conflictRemote = await readDriveSyncFile(latestRemote.id);
+                    const conflictComparison = compareSyncDates(localPayload.updatedAt, conflictRemote.updatedAt);
+                    if (conflictComparison < 0 || conflictComparison === 0) {
+                        await applyRemoteSyncData(conflictRemote);
+                        setLastDriveBackupTime(new Date().toISOString());
+                        return true;
+                    }
+                    setTimeout(() => syncWithDrive(), 0);
+                    return false;
+                }
+                const response = await updateDriveSyncFile(latestRemote.id, localPayload, latestRemote._etag || '');
+                if (!response.ok) {
+                    if (response.status === 412) {
+                        const conflictRemote = await readDriveSyncFile(latestRemote.id);
+                        if (compareSyncDates(localPayload.updatedAt, conflictRemote.updatedAt) < 0) {
+                            await applyRemoteSyncData(conflictRemote);
+                            setLastDriveBackupTime(new Date().toISOString());
+                            return true;
+                        }
+                        // لو كان تعديل الجهاز ما زال أحدث، نعيد دورة المزامنة بقراءة جديدة فقط؛
+                        // لا نكتب فوق أي إصدار ظهر بعد آخر قراءة.
+                        setTimeout(() => syncWithDrive(), 0);
+                        return false;
+                    }
+                    throw new Error('DRIVE_UPDATE_FAILED: ' + await getDriveError(response));
+                }
 
                 // تحقق بعد الكتابة: إذا وصل تعديل أحدث من جهاز آخر، لا نعتمد نسختنا القديمة.
-                const verifiedRemote = await readDriveSyncFile(remoteFile.id);
+                const verifiedRemote = await readDriveSyncFile(latestRemote.id);
                 if (compareSyncDates(localPayload.updatedAt, verifiedRemote.updatedAt) < 0) {
                     await applyRemoteSyncData(verifiedRemote);
                 }
@@ -3927,6 +4006,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         // إعداد التشغيل الأولي والتنقل عند تحميل الصفحة
         document.addEventListener('DOMContentLoaded', () => {
             ensureStudentIds();
+            getLocalSyncRevision();
             saveData(false);
             buildDaySelector('groupDaySelector', []);
             buildDaySelector('studentDaySelector', []);
