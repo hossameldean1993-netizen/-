@@ -1082,15 +1082,14 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             <div class="settings-page-title">الإعدادات</div>
                 <div id="driveBackupStatus" class="drive-backup-status" aria-live="polite">
                     <span class="drive-backup-status-icon">☁️</span>
-                    <span><b>حالة المزامنة السحابية:</b> <span id="lastDriveBackupTime">لم يتم التحقق بعد</span></span>
+                    <span><b>آخر نسخ احتياطي:</b> <span id="lastDriveBackupTime">لم يتم التحقق بعد</span></span>
                 </div>
             <div class="control-buttons-wrapper">
                 <button class="btn-3d btn-red-3d settings-btn" onclick="openStartMonthModal()">بدء شهر جديد</button>
                 <button class="btn-3d btn-red-3d settings-btn" onclick="deleteAllData()">حذف جميع البيانات</button>
-                <button class="btn-3d settings-btn" onclick="startCloudSyncNow()">مزامنة البيانات سحابيًا</button>
-                <button class="btn-3d settings-btn" onclick="createCloudSafetyBackup()">إنشاء نسخة أمان</button>
-                <button class="btn-3d settings-btn" onclick="openCloudSafetyBackups()">سجل نسخ الأمان</button>
+                <button class="btn-3d settings-btn" onclick="startGoogleDriveBackup()">النسخ الاحتياطي إلى Google Drive</button>
                 
+                <button class="btn-3d settings-btn" onclick="triggerRestoreFileInput()">استعادة النسخة الاحتياطية</button>
                 <button class="btn-3d settings-btn" onclick="exportPDFReport()">تصدير PDF</button>
                 <button class="btn-3d settings-btn" onclick="openRecycleBin()">سلة المحذوفات</button>
                 <button class="btn-3d btn-full" onclick="toggleTheme()" id="themeToggleText">
@@ -1430,7 +1429,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             } else if (pageId === 'page6') {
                 document.getElementById('navAccounts').classList.add('active');
             } else if (pageId === 'page7') {
-                loadCloudSyncState();
+                loadSavedDriveBackupTime();
                 refreshDriveBackupStatus();
                 document.getElementById('navSettings').classList.add('active');
             }
@@ -1915,7 +1914,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 localStorage.setItem(userStorageKey('teacher_students_local'), studentsJson);
             } catch (err) {
                 console.error('Save data error:', err);
-                showAppAlert('تعذر حفظ البيانات', 'مساحة التخزين في الهاتف ممتلئة أو غير متاحة. بياناتك الحالية لم تُحذف من الذاكرة. يُفضّل الاتصال بالسحابة عند عودة الإنترنت ثم إعادة المزامنة.');
+                showAppAlert('تعذر حفظ البيانات', 'مساحة التخزين في الهاتف ممتلئة أو غير متاحة. بياناتك الحالية لم تُحذف من الذاكرة. يُفضّل عمل نسخة احتياطية ثم تحرير مساحة.');
                 return false;
             }
             calculateSummaryTotals();
@@ -1976,17 +1975,32 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             }
             if (document.getElementById('page6').classList.contains('active')) renderFinancialLists();
 
-            // مزامنة سحابية تلقائية بعد أي عملية حفظ ناجحة. localStorage يبقى ذاكرة مؤقتة فقط للعمل دون إنترنت.
-            if (typeof scheduleCloudSync === 'function') scheduleCloudSync();
+            // نسخ احتياطي تلقائي بعد أي عملية حفظ ناجحة
+            scheduleAutoDriveBackup();
             return true;
         }
 
-        let cloudSyncTimer = null;
-        function scheduleCloudSync() {
-            if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
-            cloudSyncTimer = setTimeout(() => {
-                if (typeof window.startCloudSync === 'function') window.startCloudSync({silent:true});
-            }, 1200);
+        let autoDriveBackupTimer = null;
+
+        function scheduleAutoDriveBackup() {
+            if (autoDriveBackupTimer) clearTimeout(autoDriveBackupTimer);
+            autoDriveBackupTimer = setTimeout(async () => {
+                try {
+                    if (typeof uploadBackupToDrive !== 'function') return;
+                    if (typeof accessToken !== 'undefined' && accessToken) {
+                        await uploadBackupToDrive();
+                        return;
+                    }
+                    // إذا كانت صلاحية Drive ممنوحة سابقًا، جدّد الرمز بصمت عند الحاجة
+                    // حتى يستمر النسخ التلقائي بعد انتهاء صلاحية الرمز الحالي.
+                    if (drivePermissionGranted && typeof initGoogleDriveAuth === 'function') {
+                        initGoogleDriveAuth();
+                        if (tokenClient) tokenClient.requestAccessToken({ prompt: '' });
+                    }
+                } catch (err) {
+                    console.warn('Auto backup skipped:', err);
+                }
+            }, 3000);
         }
 
         function generateDatesForGroup(day1Name, day2Name, startDateStr, defaultStatus = 'present', day3Name = '', day4Name = '', ...extraDayNames) {
@@ -2033,158 +2047,91 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             return getStoredDays(obj).filter(Boolean);
         }
 
-        // ==================== المحاسبة المالية الموحدة ====================
-        // paymentHistory = سجل التحصيل الفعلي (مصدر الحقيقة للتحصيل).
-        // debtHistory    = سجل الالتزامات/المتأخرات (مصدر الحقيقة للمتبقي).
-        // previousDebt / isPaid / isMonthPaid / isDebtPaid = قيم توافقية قديمة،
-        // ولا تُستخدم كمصدر مستقل للحسابات بعد التطبيع.
-        function money(value) {
-            const n = Number.parseFloat(value);
-            return Number.isFinite(n) ? Math.round(Math.max(0, n) * 100) / 100 : 0;
-        }
-
-        function getEntityMonthKey(obj) {
-            return obj && /^\d{4}-\d{2}$/.test(String(obj.monthKey || ''))
-                ? String(obj.monthKey)
-                : getCollectionMonthKey();
-        }
-
-        function addPreviousDebtEntry(obj, sessions, price, sourceLabel, amountOverride) {
-            if (!obj) return 0;
+        // ترحيل المتأخرات كبيانات كاملة: كل متأخر يحتفظ بسجله ومبلغه بشكل مستقل.
+        function addPreviousDebtEntry(obj, sessions, price, sourceLabel) {
             const count = Math.max(0, parseInt(sessions, 10) || 0);
-            const rate = money(price);
-            const calculatedTotal = money(count * rate);
-            const total = amountOverride !== undefined ? money(amountOverride) : calculatedTotal;
-            if (total <= 0) return 0;
+            const rate = Math.max(0, parseFloat(price) || 0);
+            const total = count * rate;
+            if (total <= 0) return;
             if (!Array.isArray(obj.debtHistory)) obj.debtHistory = [];
             obj.debtHistory.push({
                 sessions: count,
                 price: rate,
-                total,
+                total: total,
                 remaining: total,
-                source: sourceLabel || 'متأخرات شهر سابق',
-                monthKey: getEntityMonthKey(obj),
-                id: `debt_${Date.now()}_${Math.random().toString(36).slice(2,8)}`
+                source: sourceLabel || 'متأخرات شهر سابق'
             });
-            syncDebtTotalFromHistory(obj);
-            obj.debtNote = sourceLabel || obj.debtNote || 'متأخرات سابقة';
-            return total;
+            obj.previousDebt = (parseFloat(obj.previousDebt) || 0) + total;
+            obj.debtNote = 'متأخرات شهر سابق';
+            obj.isDebtPaid = false;
         }
 
-        // يضمن أن debtHistory هو المصدر الوحيد للمتأخرات الحالية.
+        // يضمن وجود سجل مستقل للمتأخرات القديمة التي أُدخلت قبل نظام سجل المتأخرات.
         function ensureDebtHistory(obj) {
             if (!obj || typeof obj !== 'object') return;
+            const debt = Math.max(0, parseFloat(obj.previousDebt) || 0);
             if (!Array.isArray(obj.debtHistory)) obj.debtHistory = [];
-
-            // البيانات القديمة التي كانت تحتوي previousDebt فقط تُحوّل مرة واحدة إلى سجل مستقل.
-            const hasAnyDebtRecord = obj.debtHistory.some(item => money(item && item.total) > 0);
-            const legacyDebt = money(obj.previousDebt);
-            if (!hasAnyDebtRecord && legacyDebt > 0) {
+            if (debt > 0 && obj.debtHistory.length === 0) {
                 obj.debtHistory.push({
                     sessions: 0,
                     price: 0,
-                    total: legacyDebt,
-                    remaining: legacyDebt,
+                    total: debt,
+                    remaining: debt,
                     source: 'إدخال يدوي',
                     note: obj.debtNote || 'متأخرات سابقة',
-                    manual: true,
-                    monthKey: obj.monthKey || getCollectionMonthKey(),
-                    id: `legacy_debt_balance_${obj.id || obj.studentId || 'entity'}_${legacyDebt}`
+                    manual: true
                 });
             }
-
-            obj.debtHistory.forEach(item => {
-                if (!item || typeof item !== 'object') return;
-                item.total = money(item.total);
-                const rawRemaining = Number.parseFloat(item.remaining);
-                item.remaining = Number.isFinite(rawRemaining)
-                    ? Math.min(item.total, Math.max(0, Math.round(rawRemaining * 100) / 100))
-                    : item.total;
-                if (!item.monthKey) item.monthKey = obj.monthKey || getCollectionMonthKey();
-            });
         }
 
         function getDebtHistoryRemaining(item) {
-            const total = money(item && item.total);
-            const remaining = Number.parseFloat(item && item.remaining);
-            return Number.isFinite(remaining) ? Math.min(total, Math.max(0, Math.round(remaining * 100) / 100)) : total;
+            const total = Math.max(0, parseFloat(item && item.total) || 0);
+            const remaining = parseFloat(item && item.remaining);
+            return Number.isFinite(remaining) ? Math.max(0, Math.min(total, remaining)) : total;
         }
 
         function syncDebtTotalFromHistory(obj) {
             if (!obj) return 0;
             ensureDebtHistory(obj);
-            const total = money((obj.debtHistory || []).reduce((sum, item) => sum + getDebtHistoryRemaining(item), 0));
-            obj.previousDebt = total;
+            const total = (obj.debtHistory || []).reduce((sum, item) => sum + getDebtHistoryRemaining(item), 0);
+            obj.previousDebt = Math.round(total * 100) / 100;
             obj.isDebtPaid = total <= 0;
-            // لا نحذف السجل عند السداد الكامل؛ الاحتفاظ به يمنع فقدان التاريخ ويجعل المراجعة المالية ممكنة.
-            if (total <= 0) obj.debtNote = '';
-            return total;
+            if (obj.isDebtPaid) {
+                obj.previousDebt = 0;
+                obj.debtHistory = [];
+                obj.debtNote = '';
+            }
+            return obj.previousDebt;
         }
 
-        // تعديل المتأخرات يدويًا: يحافظ على التاريخ القديم ويضيف تصحيحًا محاسبيًا واضحًا.
-        function setManualDebtBalance(obj, targetAmount, note) {
+        // دفع المتأخرات: الدفع الجزئي يخصم من أقدم متأخر أولاً ويحافظ على باقي المتأخرات منفصلة.
+        function applyDebtPayment(obj, amount) {
             if (!obj) return;
             ensureDebtHistory(obj);
-            const target = money(targetAmount);
-            const current = money((obj.debtHistory || []).reduce((sum, item) => sum + getDebtHistoryRemaining(item), 0));
-            const delta = money(Math.abs(target - current));
-
-            if (Math.abs(target - current) < 0.005) {
-                syncDebtTotalFromHistory(obj);
-                return;
-            }
-
-            if (target > current) {
-                obj.debtHistory.push({
-                    sessions: 0, price: 0, total: delta, remaining: delta,
-                    source: 'تعديل يدوي', note: note || 'تعديل المتأخرات', manual: true,
-                    monthKey: getEntityMonthKey(obj),
-                    id: `debt_adj_${Date.now()}_${Math.random().toString(36).slice(2,8)}`
-                });
-            } else {
-                let reduction = delta;
-                for (let i = 0; i < obj.debtHistory.length && reduction > 0; i++) {
-                    const itemRemaining = getDebtHistoryRemaining(obj.debtHistory[i]);
-                    if (itemRemaining <= 0) continue;
-                    const used = Math.min(itemRemaining, reduction);
-                    obj.debtHistory[i].remaining = money(itemRemaining - used);
-                    reduction = money(reduction - used);
-                }
-            }
-            obj.debtNote = note || obj.debtNote || 'متأخرات سابقة';
-            syncDebtTotalFromHistory(obj);
-        }
-
-        // دفع المتأخرات: الدفع الجزئي يخصم من أقدم متأخر أولاً.
-        function applyDebtPayment(obj, amount) {
-            if (!obj) return 0;
-            ensureDebtHistory(obj);
-            let remainingPayment = money(amount);
-            const currentDebt = syncDebtTotalFromHistory(obj);
-            if (remainingPayment <= 0 || currentDebt <= 0) return 0;
-            const actualPayment = Math.min(remainingPayment, currentDebt);
+            let remainingPayment = Math.max(0, parseFloat(amount) || 0);
+            const currentDebt = Math.max(0, parseFloat(obj.previousDebt) || 0);
+            if (remainingPayment <= 0 || currentDebt <= 0) return;
 
             (obj.debtHistory || []).forEach(item => {
                 if (remainingPayment <= 0) return;
                 const itemRemaining = getDebtHistoryRemaining(item);
                 if (itemRemaining <= 0) return;
                 const paid = Math.min(itemRemaining, remainingPayment);
-                item.remaining = money(itemRemaining - paid);
-                remainingPayment = money(remainingPayment - paid);
+                item.remaining = Math.round((itemRemaining - paid) * 100) / 100;
+                remainingPayment = Math.round((remainingPayment - paid) * 100) / 100;
             });
 
             syncDebtTotalFromHistory(obj);
-            return actualPayment;
         }
 
         function recordDebtPayment(obj, amount) {
             if (!obj) return false;
-            const debt = syncDebtTotalFromHistory(obj);
-            const payment = money(amount);
+            const debt = Math.max(0, parseFloat(obj.previousDebt) || 0);
+            const payment = Math.max(0, parseFloat(amount) || 0);
             if (payment <= 0 || debt <= 0) return false;
-            const actualPayment = applyDebtPayment(obj, Math.min(payment, debt));
-            if (actualPayment <= 0) return false;
-            addCollectedPayment(obj, actualPayment, 'debt', getEntityMonthKey(obj));
+            const actualPayment = Math.min(payment, debt);
+            addCollectedPayment(obj, actualPayment, 'debt');
+            applyDebtPayment(obj, actualPayment);
             return true;
         }
 
@@ -2397,29 +2344,16 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function deleteAllData() {
-            showAppConfirm('تحذير', 'سيتم حذف جميع البيانات بالكامل (المجموعات والتلاميذ)! سيتم أولًا حفظ نسخة أمان تلقائية إذا كان الاتصال السحابي متاحًا.', async function() {
-                try {
-                    if (cloudSyncReady && navigator.onLine && typeof cloudCreateSafetyBackup === 'function') {
-                        await cloudCreateSafetyBackup(getLocalCloudData(), 'نسخة أمان تلقائية قبل حذف جميع البيانات');
-                    } else if (cloudSyncReady) {
-                        showAppAlert('تم إلغاء الحذف', 'لا يوجد اتصال بالسحابة لإنشاء نسخة الأمان الإلزامية. لم يتم حذف أي بيانات.');
-                        return;
-                    }
-                    groups = [];
-                    students = [];
-                    localStorage.removeItem(userStorageKey('teacher_groups_local'));
-                    localStorage.removeItem(userStorageKey('teacher_students_local'));
-                    calculateSummaryTotals();
-                    renderTodaySessions();
-                    renderMiniCards();
-                    renderStudentMiniCards();
-                    saveData();
-                    navigateTo('page6');
-                    showAppAlert('تم الحذف بأمان', 'تم حذف البيانات بعد حفظ نسخة أمان تلقائية من الحالة السابقة.');
-                } catch (err) {
-                    console.error('Delete-all safety backup error:', err);
-                    showAppAlert('تم إلغاء الحذف', 'تعذر إنشاء نسخة الأمان قبل الحذف، لذلك لم يتم حذف أي بيانات.');
-                }
+            showAppConfirm('تحذير', 'سيتم حذف جميع البيانات بالكامل (المجموعات والتلاميذ)!', function() {
+                groups = [];
+                students = [];
+                localStorage.removeItem(userStorageKey('teacher_groups_local'));
+                localStorage.removeItem(userStorageKey('teacher_students_local'));
+                calculateSummaryTotals();
+                renderTodaySessions();
+                renderMiniCards();
+                renderStudentMiniCards();
+                navigateTo('page6');
             });
         }
 
@@ -2438,55 +2372,35 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         }
 
-        // ===== سجل التحصيل الفعلي =====
-        // كل عملية تحصيل تُحفظ ولا تُحذف. الإلغاء يُسجل كعملية عكسية.
+        // ===== سجل التحصيل الفعلي فقط =====
+        // لا يُستخدم هذا السجل لتحديد حالة المطلوب؛ حالتا السداد محفوظتان في الكيان نفسه.
         function migratePaymentHistory(obj) {
-            if (!obj || typeof obj !== 'object') return;
+            if (!obj || typeof obj !== 'object' || Array.isArray(obj.paymentHistory)) return;
+            const history = [];
             const legacyMonthKey = obj.monthKey || getCollectionMonthKey();
-            const hadHistory = Array.isArray(obj.paymentHistory);
-            const history = hadHistory ? obj.paymentHistory : [];
 
-            history.forEach(item => {
-                if (!item || typeof item !== 'object') return;
-                item.type = item.type || 'other';
-                item.amount = Number.parseFloat(item.amount);
-                if (!Number.isFinite(item.amount)) item.amount = 0;
-                item.amount = Math.round(item.amount * 100) / 100;
-                item.monthKey = /^\d{4}-\d{2}$/.test(String(item.monthKey || '')) ? String(item.monthKey) : legacyMonthKey;
-                item.date = item.date || new Date().toISOString();
-                if (!item.id) item.id = `legacy_${item.type}_${item.monthKey}_${item.amount}_${item.date}`;
-            });
-
-            const isGroup = Array.isArray(obj.daysData) && obj.daysData.some(d => d && Number.parseInt(d.sessionsCount, 10) > 1);
-            const sessions = Array.isArray(obj.daysData) ? obj.daysData.reduce((n, d) => {
-                if (d && d.status === 'present') return n + (isGroup ? Math.max(1, parseInt(d.sessionsCount, 10) || 1) : 1);
-                if (d && !d.status && (d.count || 0) > 0) return n + 1;
-                return n;
-            }, 0) : (parseInt(obj.sessionsCount, 10) || 0);
-            const monthAmount = money(sessions * (parseFloat(obj.price) || 0));
-            const legacyMonthPaid = isGroup ? !!obj.isMonthPaid : !!obj.isPaid;
-            const currentMonthCollected = getPaymentHistoryTotal(obj, 'month', legacyMonthKey);
-
-            // ترقية البيانات القديمة حتى لو كانت paymentHistory موجودة ولكنها ناقصة.
-            // لا نكرر العملية إذا كان هناك تحصيل شهر مسجل بالفعل.
-            if (legacyMonthPaid && monthAmount > 0 && currentMonthCollected <= 0) {
-                history.push({type:'month', amount:monthAmount, monthKey:legacyMonthKey, date:new Date().toISOString(), migrated:true});
+            if (obj.isMonthPaid) {
+                const sessions = Array.isArray(obj.daysData) ? obj.daysData.reduce((n, d) => {
+                    if (d.status === 'present') return n + Math.max(1, parseInt(d.sessionsCount, 10) || 1);
+                    if (!d.status && (d.count || 0) > 0) return n + 1;
+                    return n;
+                }, 0) : 0;
+                const amount = sessions * (parseFloat(obj.price) || 0);
+                if (amount > 0) history.push({type: 'month', amount, monthKey: legacyMonthKey});
+            } else if (obj.isPaid) {
+                const sessions = Array.isArray(obj.daysData) ? obj.daysData.reduce((n, d) => {
+                    if (d.status === 'present') return n + 1;
+                    if (!d.status && (d.count || 0) > 0) return n + 1;
+                    return n;
+                }, 0) : (parseInt(obj.sessionsCount, 10) || 0);
+                const amount = sessions * (parseFloat(obj.price) || 0);
+                if (amount > 0) history.push({type: 'month', amount, monthKey: legacyMonthKey});
             }
 
-            // استعادة تحصيل المتأخرات القديمة عند وجود دليل مالي قابل للاستعادة.
-            if (obj.isDebtPaid) {
-                let legacyDebtPaidAmount = 0;
-                if (Array.isArray(obj.debtHistory)) {
-                    legacyDebtPaidAmount = money(obj.debtHistory.reduce((sum, item) => sum + money(item && item.total), 0));
-                }
-                if (legacyDebtPaidAmount <= 0) legacyDebtPaidAmount = money(obj.previousDebt);
-                const currentDebtCollected = getPaymentHistoryTotal(obj, 'debt', legacyMonthKey);
-                if (legacyDebtPaidAmount > 0 && currentDebtCollected <= 0) {
-                    history.push({type:'debt', amount:legacyDebtPaidAmount, monthKey:legacyMonthKey, date:new Date().toISOString(), migrated:true});
-                }
+            if (obj.isDebtPaid && (parseFloat(obj.previousDebt) || 0) > 0) {
+                history.push({type: 'debt', amount: parseFloat(obj.previousDebt) || 0, monthKey: legacyMonthKey});
             }
-
-            obj.paymentHistory = history.filter(item => item && Number.isFinite(Number(item.amount)) && Number(item.amount) !== 0);
+            obj.paymentHistory = history;
         }
 
         function getPaymentHistory(obj) {
@@ -2499,80 +2413,88 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             return obj.paymentHistory;
         }
 
-        function addCollectedPayment(obj, amount, type, monthKeyOverride) {
-            const value = Number.parseFloat(amount);
-            if (!obj || !Number.isFinite(value) || value <= 0) return false;
+        function addCollectedPayment(obj, amount, type) {
+            amount = Math.max(0, parseFloat(amount) || 0);
+            if (!obj || amount <= 0) return;
             getPaymentHistoryForWrite(obj).push({
                 type: type || 'other',
-                amount: Math.round(value * 100) / 100,
-                monthKey: monthKeyOverride || getEntityMonthKey(obj),
-                date: new Date().toISOString(),
-                id: `pay_${Date.now()}_${Math.random().toString(36).slice(2,8)}`
+                amount,
+                monthKey: getCollectionMonthKey(),
+                date: new Date().toISOString()
             });
-            return true;
         }
 
-        // لا نحذف أي عملية من سجل التحصيل. التصحيح/الإلغاء عملية مالية جديدة.
-        function addPaymentReversal(obj, amount, type, monthKey) {
-            const value = Number.parseFloat(amount);
-            if (!obj || !Number.isFinite(value) || value <= 0) return false;
-            getPaymentHistoryForWrite(obj).push({
-                type: `${type || 'other'}_reversal`,
-                amount: -Math.round(value * 100) / 100,
-                monthKey: monthKey || getEntityMonthKey(obj),
-                date: new Date().toISOString(),
-                id: `rev_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
-                reversal: true
-            });
-            return true;
+        function removeCurrentMonthPayment(obj, type) {
+            if (!obj) return false;
+            const history = getPaymentHistoryForWrite(obj);
+            const currentMonthKey = getCollectionMonthKey();
+            for (let i = history.length - 1; i >= 0; i--) {
+                const item = history[i];
+                if (item && item.monthKey === currentMonthKey && item.type === (type || 'month')) {
+                    history.splice(i, 1);
+                    return true;
+                }
+            }
+            return false;
         }
 
-        function getPaymentHistoryTotal(obj, type, monthKey) {
-            const key = monthKey || getEntityMonthKey(obj);
-            return money(getPaymentHistory(obj).reduce((sum, item) => {
-                if (!item || item.monthKey !== key) return sum;
-                if (type && item.type !== type && item.type !== `${type}_reversal`) return sum;
-                return sum + (Number.parseFloat(item.amount) || 0);
-            }, 0));
+        function getCollectedPaymentsTotal(obj, type) {
+            const currentMonthKey = getCollectionMonthKey();
+            return getPaymentHistory(obj).reduce((sum, item) => {
+                if (item && item.monthKey === currentMonthKey && (!type || item.type === type)) {
+                    return sum + Math.max(0, parseFloat(item.amount) || 0);
+                }
+                return sum;
+            }, 0);
         }
 
-        function getCollectedPaymentsTotal(obj) {
-            return getPaymentHistoryTotal(obj, null, getEntityMonthKey(obj));
+        // المبلغ المحصل من الشهر الحالي فقط، مستقل تمامًا عن تحصيل المتأخرات.
+        function getCurrentMonthPaymentAmount(obj) {
+            return getCollectedPaymentsTotal(obj, 'month');
         }
 
-        // مصدر الحقيقة المالي: المطلوب = المتبقي من الشهر + المتبقي من المتأخرات.
+        // مصدر موحد للحسابات المالية: كل الواجهات تعتمد على نفس القيم بدل إعادة حسابها كل مرة.
         function getFinancialMetrics(obj, type) {
             const empty = {
                 sessions: 0, monthMoney: 0, previousDebt: 0, totalRequired: 0,
-                monthPaid: false, debtPaid: false, collectedAmount: 0,
+                monthPaid: false, debtPaid: false, collectedAmount: 0, monthPaidAmount: 0,
                 unpaidMonth: 0, unpaidDebt: 0, isFullyPaid: true, hasDebt: false, isUnpaid: false
             };
             if (!obj) return empty;
-
             const isGroup = type === 'group';
             const sessions = isGroup ? calculateGroupSessionCount(obj) : calculateStudentSessionCount(obj);
-            const price = money(obj.price);
-            const monthMoney = money(sessions * price);
-            const entityMonthKey = getEntityMonthKey(obj);
-
-            ensureDebtHistory(obj);
-            const previousDebt = syncDebtTotalFromHistory(obj);
-
-            const monthCollected = Math.min(monthMoney, Math.max(0, getPaymentHistoryTotal(obj, 'month', entityMonthKey)));
-            const unpaidMonth = money(Math.max(0, monthMoney - monthCollected));
-            const unpaidDebt = previousDebt;
-            const totalRequired = money(unpaidMonth + unpaidDebt);
+            const price = Math.max(0, parseFloat(obj.price) || 0);
+            const monthMoney = sessions * price;
+            const previousDebt = Math.max(0, parseFloat(obj.previousDebt) || 0);
+            const monthPaidAmount = Math.min(monthMoney, getCurrentMonthPaymentAmount(obj));
+            const monthPaid = monthMoney === 0 || monthPaidAmount >= monthMoney;
+            const debtPaid = !!obj.isDebtPaid || previousDebt === 0;
+            const unpaidMonth = Math.max(0, monthMoney - monthPaidAmount);
+            const unpaidDebt = debtPaid ? 0 : previousDebt;
+            const totalRequired = unpaidMonth + unpaidDebt;
             const collectedAmount = getCollectedPaymentsTotal(obj);
-
             return {
                 sessions, monthMoney, previousDebt, totalRequired,
-                monthPaid: unpaidMonth <= 0,
-                debtPaid: unpaidDebt <= 0,
-                collectedAmount, unpaidMonth, unpaidDebt,
-                isFullyPaid: totalRequired <= 0,
+                monthPaid, debtPaid, collectedAmount, monthPaidAmount, unpaidMonth, unpaidDebt,
+                isFullyPaid: totalRequired === 0,
                 hasDebt: unpaidDebt > 0,
                 isUnpaid: totalRequired > 0
             };
+        }
+
+        // تسجيل دفعة للشهر الحالي، كاملة أو جزئية، مع منع تجاوز المبلغ المستحق.
+        function recordMonthPayment(obj, amount, type) {
+            if (!obj) return false;
+            const metrics = getFinancialMetrics(obj, type);
+            const remaining = Math.max(0, metrics.monthMoney - metrics.monthPaidAmount);
+            const payment = Math.max(0, parseFloat(amount) || 0);
+            if (payment <= 0 || remaining <= 0) return false;
+            const actualPayment = Math.min(payment, remaining);
+            addCollectedPayment(obj, actualPayment, 'month');
+            const paidNow = metrics.monthPaidAmount + actualPayment >= metrics.monthMoney;
+            if (type === 'group') obj.isMonthPaid = paidNow;
+            else obj.isPaid = paidNow;
+            return true;
         }
 
         function calculateSummaryTotals() {
@@ -2770,7 +2692,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <div class="financial-divider"></div>
                 <div class="financial-total-required">إجمالي المطلوب في الشهر: <strong>${totalRequired} ج</strong></div>
                 <div class="financial-payment-actions">
-                    <div class="payment-toggle"><span>حساب الشهر الحالي (${monthMoney} ج):</span><button class="pay-btn ${monthPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentMonthFn}">${monthPaid ? 'تم دفع الشهر' : 'دفع الشهر الحالي'}</button></div>
+                    <div class="payment-toggle"><span>حساب الشهر الحالي (${monthMoney} ج) — المتبقي ${financial.unpaidMonth} ج:</span><button class="pay-btn ${monthPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentMonthFn}">${monthPaid ? 'تم دفع الشهر بالكامل' : (financial.monthPaidAmount > 0 ? 'استكمال دفع الشهر' : 'دفع الشهر الحالي')}</button></div>
                     ${hasDebt ? `<div class="payment-toggle"><span>تسوية المتأخرات (${previousDebt} ج):</span><button class="pay-btn ${debtPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentDebtFn}">${debtPaid ? 'تم دفع المتأخرات' : 'دفع المتأخرات'}</button></div>` : ''}
                 </div>
             </div>`;
@@ -2793,7 +2715,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const currentSessionsCount = Math.max(1, parseInt(dayObj.sessionsCount, 10) || 1);
                 let sessionCountBtns = '';
                 for (let opt = 1; opt <= 6; opt++) {
-                    sessionCountBtns += `<button class="session-num-btn ${currentSessionsCount === opt ? 'active' : ''}"${futureDisabled} onclick="updateGroupDaySessionsCount(${groupIndex}, ${i}, ${opt}, event)" type="button">${opt}</button>`;
+                    sessionCountBtns += `<button class="session-num-btn ${currentSessionsCount === opt ? 'active' : ''}"${futureDisabled} onclick="updateGroupDaySessionsCount(${groupIndex}, ${i}, ${opt})">${opt}</button>`;
                 }
                 daysHTML += `
                     <div class="day-row${isFutureDay ? ' future-day' : ''}">
@@ -2802,9 +2724,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                             <span>${currentStatus === 'present' ? 'حصة فعلية' : (currentStatus === 'absent' ? 'غائب' : (currentStatus === 'canceled' ? 'ملغية' : 'غير محدد'))}</span>
                         </div>
                         <div class="status-btns">
-                            <button class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'present', event)" type="button">حاضر</button>
-                            <button class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'absent', event)" type="button">غائب</button>
-                            <button class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'canceled', event)" type="button">ملغي</button>
+                            <button class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'present')">حاضر</button>
+                            <button class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'absent')">غائب</button>
+                            <button class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'canceled')">ملغي</button>
                         </div>
                         ${currentStatus === 'present' ? `
                         <div class="sessions-count-container">
@@ -2845,35 +2767,30 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 </div>`;
         }
 
-        function setGroupDayStatus(gIdx, dIdx, status, event) {
-            if (event) { event.preventDefault(); event.stopPropagation(); }
-            const group = groups[gIdx];
-            if (!group) return;
-            if (!Array.isArray(group.daysData)) group.daysData = [];
-            const day = group.daysData[dIdx];
+        function setGroupDayStatus(gIdx, dIdx, status) {
+            const day = groups[gIdx].daysData[dIdx];
             if (!day) return;
             if (isFutureDateKey(day.dateKey)) {
                 showFutureDayWarning(day);
                 return;
             }
             day.status = (day.status === status) ? '' : status;
-            day.sessionsCount = day.status === 'present' ? Math.max(1, parseInt(day.sessionsCount, 10) || 1) : 0;
+            if(day.status !== 'present') {
+                day.sessionsCount = 0;
+            } else {
+                if(!day.sessionsCount) day.sessionsCount = 1;
+            }
             saveData();
         }
 
-        function updateGroupDaySessionsCount(gIdx, dIdx, val, event) {
-            if (event) { event.preventDefault(); event.stopPropagation(); }
-            const group = groups[gIdx];
-            if (!group) return;
-            if (!Array.isArray(group.daysData)) group.daysData = [];
-            const day = group.daysData[dIdx];
+        function updateGroupDaySessionsCount(gIdx, dIdx, val) {
+            const day = groups[gIdx].daysData[dIdx];
             if (!day) return;
             if (isFutureDateKey(day.dateKey)) {
                 showFutureDayWarning(day);
                 return;
             }
-            if (day.status !== 'present') day.status = 'present';
-            day.sessionsCount = Math.min(6, Math.max(1, parseInt(val, 10) || 1));
+            day.sessionsCount = parseInt(val) || 1;
             saveData();
         }
 
@@ -3056,9 +2973,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                         </div>
                         
                         <div class="status-btns">
-                            <button class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'present', event)" type="button">حاضر</button>
-                            <button class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'absent', event)" type="button">غائب</button>
-                            <button class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'canceled', event)" type="button">ملغي</button>
+                            <button class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'present')">حاضر</button>
+                            <button class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'absent')">غائب</button>
+                            <button class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'canceled')">ملغي</button>
                         </div>
 
                         ${currentStatus === 'present' ? `
@@ -3296,48 +3213,142 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             window.open(targetUrl, '_blank');
         }
 
-        function setStudentDayStatus(sIdx, dIdx, status, event) {
-            if (event) { event.preventDefault(); event.stopPropagation(); }
-            const student = students[sIdx];
-            if (!student) return;
-            if (!Array.isArray(student.daysData)) student.daysData = [];
-            const day = student.daysData[dIdx];
+        function setStudentDayStatus(sIdx, dIdx, status) {
+            const day = students[sIdx].daysData[dIdx];
             if (!day) return;
             if (isFutureDateKey(day.dateKey)) {
                 showFutureDayWarning(day);
                 return;
             }
             day.status = (day.status === status) ? '' : status;
-            if (day.status !== 'present') day.sessionsCount = 0;
-            else day.sessionsCount = 1;
+            if(day.status !== 'present') day.sessionsCount = 0;
             saveData();
         }
 
         function setMonthPaymentState(obj, type, paid) {
             if (!obj) return;
             const metrics = getFinancialMetrics(obj, type);
-            const monthKey = getEntityMonthKey(obj);
-            const collected = Math.max(0, getPaymentHistoryTotal(obj, 'month', monthKey));
-
             if (paid) {
-                const outstanding = money(Math.max(0, metrics.monthMoney - collected));
-                if (outstanding > 0) addCollectedPayment(obj, outstanding, 'month', monthKey);
-            } else if (collected > 0) {
-                // لا نحذف التحصيل السابق؛ نسجل عكسه ليظل السجل المالي قابلًا للمراجعة.
-                addPaymentReversal(obj, collected, 'month', monthKey);
+                recordMonthPayment(obj, metrics.monthMoney - metrics.monthPaidAmount, type);
+            } else {
+                // لا نحذف أي تحصيل سابق؛ الدفع الجزئي يجب أن يبقى محفوظًا كسجل مالي صحيح.
+                const currentAmount = getCurrentMonthPaymentAmount(obj);
+                if (currentAmount > 0) {
+                    const history = getPaymentHistoryForWrite(obj);
+                    const currentMonthKey = getCollectionMonthKey();
+                    for (let i = history.length - 1; i >= 0; i--) {
+                        const item = history[i];
+                        if (item && item.monthKey === currentMonthKey && item.type === 'month') history.splice(i, 1);
+                    }
+                }
+                if (type === 'group') obj.isMonthPaid = false;
+                else obj.isPaid = false;
             }
+        }
 
-            // إبقاء الحقول القديمة متزامنة للتوافق مع النسخ القديمة/النسخ السحابية فقط.
-            const newMetrics = getFinancialMetrics(obj, type);
-            if (type === 'group') obj.isMonthPaid = newMetrics.monthPaid;
-            else obj.isPaid = newMetrics.monthPaid;
+        function openMonthPaymentDialog(type, index, event) {
+            if (event) event.stopPropagation();
+            const obj = type === 'group' ? groups[index] : students[index];
+            if (!obj) return;
+            const metrics = getFinancialMetrics(obj, type);
+            const remaining = metrics.unpaidMonth;
+            if (remaining <= 0) return;
+
+            window.pendingMonthPayment = { type, index };
+            document.getElementById('appDialogTitle').innerText = 'دفع حساب الشهر';
+            document.getElementById('appDialogMsg').innerText =
+                `المتبقي من حساب الشهر: ${remaining} ج. اختر طريقة السداد: دفع الشهر بالكامل أو دفع جزء منه.`;
+            document.getElementById('appDialogActions').innerHTML = `
+                <button type="button" class="btn-3d btn-red-3d" onclick="confirmFullMonthPayment()">دفع الشهر بالكامل</button>
+                <button type="button" class="btn-3d" onclick="openPartialMonthPayment()">دفع جزئي</button>
+                <button type="button" class="btn-3d" onclick="closeAppDialog()">إلغاء</button>
+            `;
+            document.getElementById('appDialogModal').style.display = 'flex';
+        }
+
+        function confirmFullMonthPayment() {
+            const pending = window.pendingMonthPayment;
+            if (!pending) return;
+            const obj = pending.type === 'group' ? groups[pending.index] : students[pending.index];
+            if (!obj) return;
+            const metrics = getFinancialMetrics(obj, pending.type);
+            const remaining = metrics.unpaidMonth;
+            document.getElementById('appDialogTitle').innerText = 'تأكيد دفع الشهر بالكامل';
+            document.getElementById('appDialogMsg').innerText =
+                `سيتم تسجيل سداد المتبقي من حساب الشهر بالكامل (${remaining} ج). هل تريد الاستمرار؟`;
+            document.getElementById('appDialogActions').innerHTML = `
+                <button type="button" class="btn-3d btn-red-3d" onclick="executeFullMonthPayment()">نعم، دفع بالكامل</button>
+                <button type="button" class="btn-3d" onclick="openMonthPaymentDialog('${pending.type}', ${pending.index})">رجوع</button>
+            `;
+        }
+
+        function executeFullMonthPayment() {
+            const pending = window.pendingMonthPayment;
+            if (!pending) return;
+            const obj = pending.type === 'group' ? groups[pending.index] : students[pending.index];
+            if (!obj) return;
+            const metrics = getFinancialMetrics(obj, pending.type);
+            const amount = metrics.unpaidMonth;
+            if (amount <= 0 || !recordMonthPayment(obj, amount, pending.type)) return;
+            window.pendingMonthPayment = null;
+            saveData();
+            closeAppDialog();
+            if (pending.type === 'group') renderGroupDetail(pending.index);
+            else renderStudentDetail(pending.index);
+            renderFinancialLists();
+            showAppAlert('تم سداد الشهر', 'تم دفع حساب الشهر بالكامل.');
+        }
+
+        function openPartialMonthPayment() {
+            const pending = window.pendingMonthPayment;
+            if (!pending) return;
+            const obj = pending.type === 'group' ? groups[pending.index] : students[pending.index];
+            if (!obj) return;
+            const remaining = getFinancialMetrics(obj, pending.type).unpaidMonth;
+            document.getElementById('appDialogTitle').innerText = 'دفع جزئي للشهر';
+            document.getElementById('appDialogMsg').innerHTML = `
+                <div>المبلغ المتبقي من حساب الشهر: <strong>${remaining} ج</strong></div>
+                <div style="margin-top:8px;">أدخل الجزء المراد دفعه فقط:</div>
+                <input id="partialMonthPaymentAmount" class="debt-payment-input" type="number" min="0.01" max="${remaining}" step="0.01" inputmode="decimal" placeholder="المبلغ المدفوع">
+            `;
+            document.getElementById('appDialogActions').innerHTML = `
+                <button type="button" class="btn-3d btn-red-3d" onclick="executePartialMonthPayment()">دفع الجزء</button>
+                <button type="button" class="btn-3d" onclick="openMonthPaymentDialog('${pending.type}', ${pending.index})">رجوع</button>
+            `;
+            const input = document.getElementById('partialMonthPaymentAmount');
+            if (input) input.focus();
+        }
+
+        function executePartialMonthPayment() {
+            const pending = window.pendingMonthPayment;
+            const input = document.getElementById('partialMonthPaymentAmount');
+            if (!pending || !input) return;
+            const obj = pending.type === 'group' ? groups[pending.index] : students[pending.index];
+            if (!obj) return;
+            const remaining = getFinancialMetrics(obj, pending.type).unpaidMonth;
+            const amount = parseFloat(input.value);
+            if (!Number.isFinite(amount) || amount <= 0) {
+                showAppAlert('مبلغ غير صحيح', 'أدخل مبلغًا أكبر من صفر.');
+                return;
+            }
+            if (amount >= remaining) {
+                showAppAlert('استخدم الدفع الكامل', 'هذا المبلغ يساوي أو يتجاوز المتبقي من الشهر. اختر «دفع الشهر بالكامل».');
+                return;
+            }
+            if (!recordMonthPayment(obj, amount, pending.type)) return;
+            window.pendingMonthPayment = null;
+            saveData();
+            closeAppDialog();
+            if (pending.type === 'group') renderGroupDetail(pending.index);
+            else renderStudentDetail(pending.index);
+            renderFinancialLists();
+            showAppAlert('تم الدفع الجزئي', `تم تسجيل دفع ${amount} ج، والمتبقي من حساب الشهر ${Math.max(0, getFinancialMetrics(obj, pending.type).unpaidMonth)} ج.`);
         }
 
         function toggleStudentPayment(idx) {
             const student = students[idx];
             if (!student) return;
-            setMonthPaymentState(student, 'student', !getFinancialMetrics(student, 'student').monthPaid);
-            saveData();
+            openMonthPaymentDialog('student', idx);
         }
 
         // التحقق من طول رقم الهاتف: التنبيه فقط، بدون منع الحفظ أو تعديل الرقم.
@@ -3401,11 +3412,13 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const previousDebtChanged = (Math.max(0, parseFloat(student.previousDebt) || 0) !== previousDebt);
                 Object.assign(student, {name, phone, grade, price, debtNote, previousDebt, day1, day2, day3, day4, days, scheduleDays: [...days], time, timeHour: timeData.hour, timeMinute: timeData.minute, timePeriod: timeData.period, timeEnd, timeEndHour: timeData.timeEndHour, timeEndMinute: timeData.timeEndMinute, timeEndPeriod: timeData.timeEndPeriod});
                 if (previousDebtChanged) {
-                    setManualDebtBalance(student, previousDebt, debtNote || 'تعديل المتأخرات');
-                } else {
-                    syncDebtTotalFromHistory(student);
+                    student.isDebtPaid = previousDebt <= 0;
+                    student.debtHistory = previousDebt > 0 ? [{sessions: 0, price: 0, total: previousDebt, remaining: previousDebt, source: 'إدخال يدوي', note: debtNote || 'متأخرات سابقة', manual: true}] : [];
                 }
-                // تغيير السعر/الأيام لا يمسح تحصيلًا حقيقيًا؛ الرصيد الجديد يحسب الفرق تلقائيًا.
+                // نحافظ على معرف التلميذ ثابتًا، ونلغي تحصيل الشهر الحالي إذا تغير السعر أو أيام الجدول.
+                if (priceChanged || daysChanged) {
+                    setMonthPaymentState(student, 'student', false);
+                }
                 if (daysChanged) {
                     const studentMonthFirstDay = student.monthKey ? `${student.monthKey}-01` : defaultFirstDay;
                     student.daysData = mergeDaysDataPreserveData(
@@ -3431,11 +3444,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function toggleMonthPayment(index, event) {
-            if (event) event.stopPropagation();
-            const group = groups[index];
-            if (!group) return;
-            setMonthPaymentState(group, 'group', !getFinancialMetrics(group, 'group').monthPaid);
-            saveData();
+            openMonthPaymentDialog('group', index, event);
         }
 
         function openStartMonthModal() {
@@ -3456,44 +3465,58 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             closeStartMonthModal();
 
             const allEntities = [...groups, ...students];
-            const pendingEntities = allEntities.filter(item => String(item && item.monthKey || '') !== targetMonthKey);
-            if (!pendingEntities.length) {
-                showAppAlert('الشهر مسجل بالفعل', `الشهر ${targetMonthKey} تم بدء العمل عليه بالفعل لكل المجموعات والتلاميذ.`);
+            const alreadyStarted = allEntities.some(item => item.monthKey === targetMonthKey);
+            if (alreadyStarted) {
+                showAppAlert('الشهر مسجل بالفعل', `الشهر ${targetMonthKey} تم بدء العمل عليه بالفعل. لن يتم ترحيل المستحقات مرة أخرى حتى لا تتكرر المتأخرات.`);
                 return;
             }
 
-            showAppConfirm('بدء شهر جديد', 'سيتم نقل المتبقي غير المدفوع من الشهر السابق إلى المتأخرات، مع الاحتفاظ بكل عمليات التحصيل في سجلها وعدم تكرار الترحيل لمن بدأ الشهر بالفعل.', function() {
-                pendingEntities.forEach(entity => {
-                    const isGroup = groups.includes(entity);
-                    const type = isGroup ? 'group' : 'student';
-                    const scheduleDays = getStableScheduleDays(entity);
-                    const scheduleTime = formatScheduleTime(entity.timeHour || '', entity.timeMinute || '', entity.timePeriod || '');
-                    const scheduleTimeEnd = formatScheduleTime(entity.timeEndHour || '', entity.timeEndMinute || '', entity.timeEndPeriod || '');
+            showAppConfirm('بدء شهر جديد', 'سيتم نقل غير المدفوع للمتأخرات وتوليد جدول الشهر الجديد. لن يتم حذف بيانات الشهر القديم من النسخة الاحتياطية، ولن تتأثر بيانات التلميذ بحسابات المجموعة.', function() {
+                // ===== المجموعات فقط =====
+                groups.forEach(group => {
+                    const scheduleDays = getStableScheduleDays(group);
+                    const scheduleTime = formatScheduleTime(group.timeHour || '', group.timeMinute || '', group.timePeriod || '');
+                    const scheduleTimeEnd = formatScheduleTime(group.timeEndHour || '', group.timeEndMinute || '', group.timeEndPeriod || '');
 
-                    ensureDebtHistory(entity);
-                    const financial = getFinancialMetrics(entity, type);
-                    if (financial.unpaidMonth > 0) {
-                        addPreviousDebtEntry(
-                            entity,
-                            financial.sessions,
-                            entity.price,
-                            `متأخرات ${entity.monthKey || 'الشهر السابق'}`,
-                            financial.unpaidMonth
-                        );
+                    ensureDebtHistory(group);
+                    const groupFinancial = getFinancialMetrics(group, 'group');
+                    if (groupFinancial.unpaidMonth > 0) {
+                        addPreviousDebtEntry(group, 1, groupFinancial.unpaidMonth, `متأخرات ${group.monthKey || 'الشهر السابق'}`);
                     }
 
-                    entity.scheduleDays = [...scheduleDays];
-                    entity.time = scheduleTime;
-                    entity.timeEnd = scheduleTimeEnd;
-                    entity.daysData = generateDatesForGroup(scheduleDays, '', startDateVal, '');
-                    entity.monthKey = targetMonthKey;
-                    if (isGroup) entity.isMonthPaid = false;
-                    else entity.isPaid = false;
-                    syncDebtTotalFromHistory(entity);
+                    // تثبيت الأيام والوقت، ثم توليد تواريخ الشهر الجديد على نفس أيام الأسبوع.
+                    group.scheduleDays = [...scheduleDays];
+                    group.time = scheduleTime;
+                    group.timeEnd = scheduleTimeEnd;
+                    group.daysData = generateDatesForGroup(scheduleDays, '', startDateVal, '');
+                    group.monthKey = targetMonthKey;
+                    group.isMonthPaid = false;
+                    group.isDebtPaid = false;
+                });
+
+                // ===== التلاميذ فقط =====
+                students.forEach(student => {
+                    const scheduleDays = getStableScheduleDays(student);
+                    const scheduleTime = formatScheduleTime(student.timeHour || '', student.timeMinute || '', student.timePeriod || '');
+                    const scheduleTimeEnd = formatScheduleTime(student.timeEndHour || '', student.timeEndMinute || '', student.timeEndPeriod || '');
+
+                    ensureDebtHistory(student);
+                    const studentFinancial = getFinancialMetrics(student, 'student');
+                    if (studentFinancial.unpaidMonth > 0) {
+                        addPreviousDebtEntry(student, 1, studentFinancial.unpaidMonth, `متأخرات ${student.monthKey || 'الشهر السابق'}`);
+                    }
+
+                    student.scheduleDays = [...scheduleDays];
+                    student.time = scheduleTime;
+                    student.timeEnd = scheduleTimeEnd;
+                    student.daysData = generateDatesForGroup(scheduleDays, '', startDateVal, '');
+                    student.monthKey = targetMonthKey;
+                    student.isPaid = false;
+                    student.isDebtPaid = false;
                 });
 
                 saveData();
-                showAppAlert('تم التحديث', 'تم بدء الشهر الجديد وترحيل المتبقي الفعلي فقط إلى المتأخرات، مع الحفاظ على سجل التحصيل بالكامل.');
+                showAppAlert('تم التحديث', 'تم بدء الشهر الجديد مع تثبيت المواعيد وترحيل المتأخرات كاملة (عدد الحصص × سعر الحصة = الإجمالي).');
             });
         }
 
@@ -3552,11 +3575,13 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const previousDebtChanged = (Math.max(0, parseFloat(group.previousDebt) || 0) !== previousDebt);
                 Object.assign(group, {name, phone, day1, day2, day3, day4, days, scheduleDays: [...days], time, timeHour: timeData.hour, timeMinute: timeData.minute, timePeriod: timeData.period, timeEnd, timeEndHour: timeData.timeEndHour, timeEndMinute: timeData.timeEndMinute, timeEndPeriod: timeData.timeEndPeriod, price, debtNote, previousDebt});
                 if (previousDebtChanged) {
-                    setManualDebtBalance(group, previousDebt, debtNote || 'تعديل المتأخرات');
-                } else {
-                    syncDebtTotalFromHistory(group);
+                    group.isDebtPaid = previousDebt <= 0;
+                    group.debtHistory = previousDebt > 0 ? [{sessions: 0, price: 0, total: previousDebt, remaining: previousDebt, source: 'إدخال يدوي', note: debtNote || 'متأخرات سابقة', manual: true}] : [];
                 }
-                // تغيير السعر/الأيام لا يمسح تحصيلًا حقيقيًا؛ الرصيد الجديد يحسب الفرق تلقائيًا.
+                // نحافظ على حالة السداد عند تعديل البيانات العادية، ونلغي تحصيل الشهر الحالي إذا تغير السعر أو أيام الجدول.
+                if (priceChanged || daysChanged) {
+                    setMonthPaymentState(group, 'group', false);
+                }
                 if (daysChanged) {
                     const groupMonthFirstDay = group.monthKey ? `${group.monthKey}-01` : defaultFirstDay;
                     group.daysData = mergeDaysDataPreserveData(
@@ -3573,462 +3598,289 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 
         // ==================== النسخ الاحتياطي إلى Google Drive ====================
         // Google Identity Services - مناسب للـ PWA/المتصفح
-        // =========================
-        // المزامنة السحابية الحقيقية عبر Firebase Firestore
-        // =========================
-        // لا توجد هنا عملية Backup/Restore تستبدل البيانات.
-        // localStorage مجرد ذاكرة مؤقتة للعمل دون اتصال، بينما Firestore هو المصدر السحابي للحساب.
-        let cloudSyncReady = false;
-        let cloudSyncApplying = false;
-        let cloudSyncWriting = false;
-        let cloudSyncUserUid = null;
-        let cloudSyncUnsubscribe = null;
-        let cloudSyncPending = false;
-        let cloudSyncBase = {groups: [], students: [], recycle_bin: []};
+        const CLIENT_ID = '310650752416-dskh559v6u5vjbc2jih585o35ola5a2p.apps.googleusercontent.com';
+        const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+        let tokenClient = null;
+        let accessToken = null;
+        let backupInProgress = false;
+        let drivePermissionGranted = false;
 
-        function cloneCloudData(data) {
-            try { return JSON.parse(JSON.stringify(data)); } catch (_) { return {groups:[],students:[],recycle_bin:[]}; }
+        function getDrivePermissionKey(uid) {
+            return 'drive_permission_granted_' + (uid || 'guest');
         }
 
-        function getLocalCloudData() {
-            return {
-                groups: cloneCloudData(groups),
-                students: cloneCloudData(students),
-                recycle_bin: (typeof recycleGet === 'function' ? cloneCloudData(recycleGet()) : [])
-            };
+        function loadDrivePermissionState(uid) {
+            drivePermissionGranted = uid ? localStorage.getItem(getDrivePermissionKey(uid)) === 'true' : false;
+            return drivePermissionGranted;
         }
 
-        function normalizeCloudData(data) {
-            const normalized = normalizeImportedData({
-                groups: Array.isArray(data?.groups) ? data.groups : [],
-                students: Array.isArray(data?.students) ? data.students : []
-            });
-            if (!normalized) return {groups:[], students:[], recycle_bin:[]};
-            return {
-                groups: normalized.groups || [],
-                students: normalized.students || [],
-                recycle_bin: Array.isArray(data?.recycle_bin) ? data.recycle_bin : []
-            };
+        function markDrivePermissionGranted(uid) {
+            drivePermissionGranted = true;
+            if (uid) localStorage.setItem(getDrivePermissionKey(uid), 'true');
         }
 
-        function cloudObjectKey(item, index) {
-            if (item && item.id !== undefined && item.id !== null) return 'id:' + String(item.id);
-            if (item && item.studentId) return 'studentId:' + String(item.studentId);
-            return 'index:' + index;
-        }
-
-        function financialItemKey(item, index) {
-            if (item && item.id) return String(item.id);
-            return `${item?.type || ''}|${item?.monthKey || ''}|${item?.amount ?? ''}|${item?.date || ''}|${index}`;
-        }
-
-        function debtItemKey(item, index) {
-            if (item && item.id) return String(item.id);
-            return `${item?.monthKey || ''}|${item?.source || ''}|${item?.total ?? ''}|${index}`;
-        }
-
-        // في تعارض السحابة، لا نُسقط العمليات المالية القادمة من أي جهاز.
-        // التحصيلات غير قابلة للتعديل؛ المتأخرات الجديدة تُدمج، ثم يُعاد احتساب المتبقي
-        // من سجل الدين الأساسي مع تطبيق عمليات السداد الجديدة فقط.
-        function mergeFinancialEntity(base, local, cloud) {
-            const result = cloneCloudData(local || cloud || base || {});
-            if (!base) return result;
-
-            // التحصيلات معاملات غير قابلة للحذف: نأخذ اتحاد السجلين بدل اختيار جهاز واحد.
-            const basePayments = Array.isArray(base.paymentHistory) ? base.paymentHistory : [];
-            const localPayments = Array.isArray(local?.paymentHistory) ? local.paymentHistory : [];
-            const cloudPayments = Array.isArray(cloud?.paymentHistory) ? cloud.paymentHistory : [];
-            const mergedPayments = new Map();
-            [...basePayments, ...localPayments, ...cloudPayments].forEach((item, i) => {
-                if (!item) return;
-                const key = financialItemKey(item, i);
-                if (!mergedPayments.has(key)) mergedPayments.set(key, cloneCloudData(item));
-            });
-            result.paymentHistory = [...mergedPayments.values()];
-
-            // المتأخرات التزام ذو رصيد. عند السداد من جهازين في نفس الوقت،
-            // نضم مقدار التخفيض من كل جهاز إلى حالة الأساس بدل إسقاط أحدهما.
-            const baseDebts = Array.isArray(base.debtHistory) ? base.debtHistory : [];
-            const localDebts = Array.isArray(local?.debtHistory) ? local.debtHistory : [];
-            const cloudDebts = Array.isArray(cloud?.debtHistory) ? cloud.debtHistory : [];
-            const localMap = new Map(localDebts.map((x,i)=>[debtItemKey(x,i),x]));
-            const cloudMap = new Map(cloudDebts.map((x,i)=>[debtItemKey(x,i),x]));
-            const mergedDebts = [];
-            const seen = new Set();
-
-            baseDebts.forEach((baseItem, i) => {
-                const key = debtItemKey(baseItem, i);
-                const l = localMap.get(key);
-                const c = cloudMap.get(key);
-                const baseRemaining = getDebtHistoryRemaining(baseItem);
-                const localRemaining = l ? getDebtHistoryRemaining(l) : baseRemaining;
-                const cloudRemaining = c ? getDebtHistoryRemaining(c) : baseRemaining;
-                const localReduction = Math.max(0, baseRemaining - localRemaining);
-                const cloudReduction = Math.max(0, baseRemaining - cloudRemaining);
-                const merged = cloneCloudData(l || c || baseItem);
-                merged.remaining = money(Math.max(0, baseRemaining - localReduction - cloudReduction));
-                merged.total = money(baseItem.total);
-                mergedDebts.push(merged);
-                seen.add(key);
-            });
-
-            // متأخرات أُضيفت بعد النسخة الأساسية تُضم من أي جهاز.
-            [...localDebts, ...cloudDebts].forEach((item, i) => {
-                if (!item) return;
-                const key = debtItemKey(item, i);
-                if (seen.has(key)) return;
-                mergedDebts.push(cloneCloudData(item));
-                seen.add(key);
-            });
-            result.debtHistory = mergedDebts;
-
-            ensureDebtHistory(result);
-            syncDebtTotalFromHistory(result);
-            return result;
-        }
-
-        function mergeCloudArrays(baseArr, localArr, cloudArr) {
-            const baseMap = new Map((Array.isArray(baseArr) ? baseArr : []).map((x,i)=>[cloudObjectKey(x,i), x]));
-            const localMap = new Map((Array.isArray(localArr) ? localArr : []).map((x,i)=>[cloudObjectKey(x,i), x]));
-            const cloudMap = new Map((Array.isArray(cloudArr) ? cloudArr : []).map((x,i)=>[cloudObjectKey(x,i), x]));
-            const keys = new Set([...baseMap.keys(), ...localMap.keys(), ...cloudMap.keys()]);
-            const result = [];
-            for (const key of keys) {
-                const base = baseMap.get(key);
-                const local = localMap.get(key);
-                const cloud = cloudMap.get(key);
-                if (!base) {
-                    if (local !== undefined) result.push(local);
-                    else if (cloud !== undefined) result.push(cloud);
-                    continue;
-                }
-                if (local === undefined && cloud === undefined) continue;
-                if (local === undefined) { result.push(cloud); continue; }
-                if (cloud === undefined) { result.push(local); continue; }
-                const baseJson = JSON.stringify(base);
-                const localJson = JSON.stringify(local);
-                const cloudJson = JSON.stringify(cloud);
-                if (localJson === baseJson) result.push(cloud);
-                else if (cloudJson === baseJson) result.push(local);
-                else if (localJson === cloudJson) result.push(local);
-                else result.push(mergeFinancialEntity(base, local, cloud));
+        function initGoogleDriveAuth() {
+            if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+                throw new Error('GOOGLE_IDENTITY_SERVICES_UNAVAILABLE');
             }
-            return result;
-        }
-
-        function mergeCloudData(localData, cloudData) {
-            return {
-                groups: mergeCloudArrays(cloudSyncBase.groups, localData.groups, cloudData.groups),
-                students: mergeCloudArrays(cloudSyncBase.students, localData.students, cloudData.students),
-                recycle_bin: mergeCloudArrays(cloudSyncBase.recycle_bin, localData.recycle_bin, cloudData.recycle_bin)
-            };
-        }
-
-        function persistLocalCloudData(data) {
-            groups = data.groups || [];
-            students = data.students || [];
-            if (typeof recycleSave === 'function') recycleSave(data.recycle_bin || []);
-            dataNormalizationDone = false;
-            ensureStudentIds();
-            groups.forEach(migratePaymentHistory);
-            students.forEach(migratePaymentHistory);
-            groups.forEach(group => { ensureDebtHistory(group); syncDebtTotalFromHistory(group); });
-            students.forEach(student => { ensureDebtHistory(student); syncDebtTotalFromHistory(student); });
-            dataNormalizationDone = true;
-            try {
-                localStorage.setItem(userStorageKey('teacher_groups_local'), JSON.stringify(groups));
-                localStorage.setItem(userStorageKey('teacher_students_local'), JSON.stringify(students));
-            } catch (err) { console.error('Cloud local cache error:', err); }
-            selectedGroupIndex = null;
-            selectedStudentIndex = null;
-            calculateSummaryTotals();
-            renderTodaySessions();
-            renderMiniCards();
-            renderStudentMiniCards();
-            if (document.getElementById('page6')?.classList.contains('active')) renderFinancialLists();
-        }
-
-        function cloudSyncStatus(text) {
-            const el = document.getElementById('lastDriveBackupTime');
-            if (el) el.textContent = text;
-        }
-
-        function saveCloudSyncState() {
-            try {
-                localStorage.setItem(userStorageKey('cloud_sync_pending'), cloudSyncPending ? '1' : '0');
-                localStorage.setItem(userStorageKey('cloud_sync_base'), JSON.stringify(cloudSyncBase));
-            } catch (_) {}
-        }
-
-        function loadCloudSyncState() {
-            try {
-                cloudSyncPending = localStorage.getItem(userStorageKey('cloud_sync_pending')) === '1';
-                const raw = localStorage.getItem(userStorageKey('cloud_sync_base'));
-                cloudSyncBase = raw ? normalizeCloudData(JSON.parse(raw)) : {groups:[],students:[],recycle_bin:[]};
-            } catch (_) {
-                cloudSyncPending = false;
-                cloudSyncBase = {groups:[],students:[],recycle_bin:[]};
-            }
-        }
-
-        async function writeCloudData(silent=false) {
-            if (!cloudSyncReady || !window.cloudFirestoreSetDoc || !cloudSyncUserUid || cloudSyncWriting) return false;
-            cloudSyncWriting = true;
-            try {
-                const data = getLocalCloudData();
-                await window.cloudFirestoreSetDoc(data);
-                cloudSyncBase = cloneCloudData(data);
-                cloudSyncPending = false;
-                saveCloudSyncState();
-                cloudSyncStatus('متزامنة مع السحابة');
-                return true;
-            } catch (err) {
-                console.error('Cloud sync write error:', err);
-                cloudSyncPending = true;
-                saveCloudSyncState();
-                cloudSyncStatus('غير متصلة — البيانات محفوظة محليًا مؤقتًا');
-                if (!silent) showAppAlert('تعذر المزامنة', 'تعذر رفع آخر تعديلات إلى السحابة الآن. لن يتم حذف بياناتك، وستتم المحاولة تلقائيًا عند عودة الاتصال.');
-                return false;
-            } finally { cloudSyncWriting = false; }
-        }
-
-        async function startCloudSync(options={}) {
-            if (!cloudSyncReady || !cloudSyncUserUid || !window.cloudFirestoreGetDoc) {
-                if (!options.silent) showAppAlert('المزامنة السحابية', 'سجّل الدخول أولًا وانتظر اكتمال الاتصال بالسحابة.');
-                return false;
-            }
-            try {
-                loadCloudSyncState();
-                const cloudRaw = await window.cloudFirestoreGetDoc();
-                const localData = getLocalCloudData();
-                const cloudData = cloudRaw ? normalizeCloudData(cloudRaw) : {groups:[],students:[],recycle_bin:[]};
-                const localHasData = localData.groups.length || localData.students.length || localData.recycle_bin.length;
-                const cloudHasData = cloudData.groups.length || cloudData.students.length || cloudData.recycle_bin.length;
-                let merged;
-                if (!cloudHasData && localHasData) merged = localData;
-                else if (cloudHasData && !localHasData) merged = cloudData;
-                else if (cloudHasData && localHasData) merged = mergeCloudData(localData, cloudData);
-                else merged = {groups:[],students:[],recycle_bin:[]};
-                cloudSyncApplying = true;
-                persistLocalCloudData(merged);
-                cloudSyncBase = cloneCloudData(merged);
-                cloudSyncPending = false;
-                saveCloudSyncState();
-                cloudSyncApplying = false;
-                await writeCloudData(true);
-                cloudSyncStatus('متزامنة مع السحابة');
-                return true;
-            } catch (err) {
-                cloudSyncApplying = false;
-                console.error('Cloud sync initial error:', err);
-                cloudSyncStatus('تعذر الاتصال — البيانات المحلية محفوظة');
-                if (!options.silent) showAppAlert('تعذر المزامنة', 'تعذر الاتصال بقاعدة البيانات السحابية. بياناتك الحالية لن تُحذف.');
-                return false;
-            }
-        }
-
-        // =========================
-        // نسخ أمان تاريخية غير مدمرة
-        // النسخة لا تستبدل البيانات الحالية تلقائيًا. الاستعادة لا تتم إلا بطلب صريح،
-        // وقبلها تُنشأ نسخة أمان تلقائية من الحالة الحالية حتى يمكن الرجوع إليها.
-        // =========================
-        let cloudSafetyBackupBusy = false;
-        const CLOUD_SAFETY_MAX_BYTES = 900 * 1024;
-        const CLOUD_SAFETY_LIST_LIMIT = 20;
-
-        function safetyBackupPayload(data) {
-            return {
-                groups: cloneCloudData(data.groups || []),
-                students: cloneCloudData(data.students || []),
-                recycle_bin: cloneCloudData(data.recycle_bin || []),
-                schemaVersion: 2,
-                backupType: 'manual-safety-backup',
-                createdAt: Date.now()
-            };
-        }
-
-        function safetyBackupSizeBytes(data) {
-            try {
-                return new TextEncoder().encode(JSON.stringify(data)).length;
-            } catch (_) {
-                return Infinity;
-            }
-        }
-
-        async function cloudCreateSafetyBackup(data, label='نسخة أمان') {
-            if (!cloudSyncReady || !cloudSyncUserUid || !window.cloudFirestoreCreateBackup) {
-                throw new Error('CLOUD_BACKUP_NOT_READY');
-            }
-            const payload = safetyBackupPayload(data || getLocalCloudData());
-            if (safetyBackupSizeBytes(payload) > CLOUD_SAFETY_MAX_BYTES) {
-                throw new Error('CLOUD_BACKUP_TOO_LARGE');
-            }
-            return await window.cloudFirestoreCreateBackup(payload, label);
-        }
-
-        async function createCloudSafetyBackup() {
-            if (cloudSafetyBackupBusy) return;
-            if (!navigator.onLine) {
-                showAppAlert('لا يوجد اتصال بالإنترنت', 'لا يمكن إنشاء نسخة أمان سحابية بدون اتصال. بياناتك الحالية لن تتأثر.');
-                return;
-            }
-            cloudSafetyBackupBusy = true;
-            try {
-                // أولًا نُسوّي الحالة الحالية مع السحابة، دون استبدالها بشكل أعمى.
-                const synced = await startCloudSync({silent:true});
-                if (!synced) throw new Error('SYNC_BEFORE_BACKUP_FAILED');
-                const id = await cloudCreateSafetyBackup(getLocalCloudData(), 'نسخة أمان يدوية');
-                showAppAlert('تم إنشاء نسخة الأمان', `تم حفظ نسخة أمان مستقلة برقم ${id}. النسخة الحالية لم يتم استبدالها أو حذفها.`);
-            } catch (err) {
-                console.error('Safety backup error:', err);
-                const message = err?.message === 'CLOUD_BACKUP_TOO_LARGE'
-                    ? 'حجم البيانات كبير جدًا لنسخة Firestore واحدة. لم يتم حذف أو تعديل أي بيانات.'
-                    : 'تعذر إنشاء نسخة الأمان الآن. لم يتم حذف أو استبدال بياناتك.';
-                showAppAlert('تعذر إنشاء نسخة الأمان', message);
-            } finally {
-                cloudSafetyBackupBusy = false;
-            }
-        }
-
-        async function openCloudSafetyBackups() {
-            if (!cloudSyncReady || !cloudSyncUserUid || !window.cloudFirestoreListBackups) {
-                showAppAlert('نسخ الأمان', 'سجّل الدخول وانتظر اكتمال الاتصال بالسحابة أولًا.');
-                return;
-            }
-            try {
-                const list = await window.cloudFirestoreListBackups(CLOUD_SAFETY_LIST_LIMIT);
-                const old = document.getElementById('cloudSafetyBackupsModal');
-                if (old) old.remove();
-                const box = document.createElement('div');
-                box.id = 'cloudSafetyBackupsModal';
-                box.className = 'modal';
-                box.style.display = 'flex';
-                const rows = list.length ? list.map((x,i) => {
-                    const d = x.createdAt ? new Date(x.createdAt).toLocaleString('ar-EG') : 'تاريخ غير معروف';
-                    const label = escapeHtml(x.label || 'نسخة أمان');
-                    return `<div style="padding:10px;border:1px solid #ccc;border-radius:8px;margin:7px 0">`+
-                        `<strong>${label}</strong><br><small>${escapeHtml(d)}</small>`+
-                        `<div style="display:flex;gap:7px;margin-top:8px;flex-wrap:wrap">`+
-                        `<button class="btn-3d" data-safety-restore="${escapeHtml(x.id)}">استعادة آمنة</button>`+
-                        `</div></div>`;
-                }).join('') : '<p style="text-align:center">لا توجد نسخ أمان محفوظة.</p>';
-                box.innerHTML = `<div class="modal-content" style="max-height:80vh;overflow:auto">`+
-                    `<h3 style="text-align:center">سجل نسخ الأمان</h3>`+
-                    `<p style="font-size:.9rem;text-align:center">النسخ هنا تاريخية ومستقلة، ولا تُستخدم تلقائيًا. عند الاستعادة تُحفظ الحالة الحالية أولًا كنسخة أمان.</p>`+
-                    rows + `<button class="btn-3d" data-close-safety>إغلاق</button></div>`;
-                document.body.appendChild(box);
-                box.querySelector('[data-close-safety]').onclick = () => box.remove();
-                box.querySelectorAll('[data-safety-restore]').forEach(btn => {
-                    btn.onclick = () => requestCloudSafetyRestore(btn.dataset.safetyRestore);
-                });
-            } catch (err) {
-                console.error('List safety backups error:', err);
-                showAppAlert('تعذر فتح نسخ الأمان', 'لم أستطع قراءة سجل النسخ الآن. بياناتك الحالية لم تتأثر.');
-            }
-        }
-
-        async function requestCloudSafetyRestore(backupId) {
-            if (!backupId || cloudSafetyBackupBusy) return;
-            showAppConfirm(
-                'استعادة نسخة أمان',
-                'سيتم أولًا حفظ بياناتك الحالية كنسخة أمان تلقائية، ثم استبدال الحالة الحالية بالنسخة التي اخترتها. لا يتم ذلك إلا بعد تأكيدك، وإذا فشل حفظ النسخة الحالية فلن تبدأ الاستعادة.',
-                async function() { await restoreCloudSafetyBackup(backupId); }
-            );
-        }
-
-        async function restoreCloudSafetyBackup(backupId) {
-            if (cloudSafetyBackupBusy) return;
-            if (!navigator.onLine) {
-                showAppAlert('لا يوجد اتصال بالإنترنت', 'لا يمكن تنفيذ الاستعادة بدون اتصال بالسحابة. بياناتك الحالية لم تتأثر.');
-                return;
-            }
-            cloudSafetyBackupBusy = true;
-            const oldTimer = cloudSyncTimer;
-            if (oldTimer) clearTimeout(oldTimer);
-            cloudSyncApplying = true;
-            try {
-                const backup = await window.cloudFirestoreGetBackup(backupId);
-                if (!backup) throw new Error('BACKUP_NOT_FOUND');
-                const restored = normalizeCloudData(backup);
-                const hasBackupData = restored.groups.length || restored.students.length || restored.recycle_bin.length;
-                if (!hasBackupData) throw new Error('EMPTY_BACKUP');
-                const current = getLocalCloudData();
-                // نقطة أمان إلزامية قبل أي استبدال.
-                await cloudCreateSafetyBackup(current, 'نسخة أمان تلقائية قبل الاستعادة');
-                // نكتب النسخة المختارة إلى السحابة أولًا. إذا فشلت الكتابة، لا نلمس البيانات المحلية.
-                await window.cloudFirestoreSetDoc(restored);
-                persistLocalCloudData(restored);
-                cloudSyncBase = cloneCloudData(restored);
-                cloudSyncPending = false;
-                saveCloudSyncState();
-                cloudSyncStatus('تمت الاستعادة بأمان');
-                showAppAlert('تمت الاستعادة', 'تمت استعادة النسخة المختارة بنجاح، وتم حفظ الحالة السابقة تلقائيًا كنسخة أمان.');
-                const box = document.getElementById('cloudSafetyBackupsModal');
-                if (box) box.remove();
-            } catch (err) {
-                console.error('Safety restore error:', err);
-                const message = err?.message === 'BACKUP_NOT_FOUND'
-                    ? 'النسخة المطلوبة غير موجودة.'
-                    : 'فشلت الاستعادة قبل إتمامها. بياناتك الحالية لم يتم استبدالها.';
-                showAppAlert('تعذر الاستعادة', message);
-            } finally {
-                cloudSyncApplying = false;
-                cloudSafetyBackupBusy = false;
-            }
-        }
-
-        async function startCloudSyncNow() {
-            if (!navigator.onLine) {
-                showAppAlert('لا يوجد اتصال بالإنترنت', 'البيانات الحالية محفوظة على الجهاز مؤقتًا. اتصل بالإنترنت ثم أعد المزامنة.');
-                return;
-            }
-            await startCloudSync({silent:false});
-        }
-
-        window.startCloudSync = startCloudSync;
-        window.startCloudSyncNow = startCloudSyncNow;
-
-        window.initCloudSync = async function(uid) {
-            if (!uid || !window.cloudFirestoreInit) return;
-            if (cloudSyncUnsubscribe) { try { cloudSyncUnsubscribe(); } catch (_) {} cloudSyncUnsubscribe = null; }
-            cloudSyncUserUid = uid;
-            cloudSyncReady = false;
-            loadCloudSyncState();
-            try {
-                await window.cloudFirestoreInit(uid);
-                cloudSyncReady = true;
-                await startCloudSync({silent:true});
-                cloudSyncUnsubscribe = window.cloudFirestoreListen((cloudData)=>{
-                    if (!cloudData || cloudSyncWriting) return;
-                    try {
-                        const incoming = normalizeCloudData(cloudData);
-                        const localData = getLocalCloudData();
-                        const merged = mergeCloudData(localData, incoming);
-                        const incomingJson = JSON.stringify(incoming);
-                        const mergedJson = JSON.stringify(merged);
-                        if (incomingJson === JSON.stringify(cloudSyncBase) && !cloudSyncPending) return;
-                        cloudSyncApplying = true;
-                        persistLocalCloudData(merged);
-                        cloudSyncBase = cloneCloudData(merged);
-                        cloudSyncPending = mergedJson !== incomingJson;
-                        saveCloudSyncState();
-                        cloudSyncApplying = false;
-                        if (cloudSyncPending) writeCloudData(true);
-                        else cloudSyncStatus('متزامنة مع السحابة');
-                    } catch (err) {
-                        cloudSyncApplying = false;
-                        console.error('Cloud realtime sync error:', err);
+            if (tokenClient) return;
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: DRIVE_SCOPE,
+                callback: async (response) => {
+                    if (response.error || !response.access_token) {
+                        console.error('Google OAuth error:', response);
+                        showAppAlert('خطأ في صلاحية Google', 'لم يتم منح صلاحية Google Drive. تأكد من السماح للتطبيق بالوصول إلى Drive ثم حاول مرة أخرى.');
+                        return;
                     }
-                });
-                cloudSyncStatus('متزامنة مع السحابة');
-            } catch (err) {
-                console.error('Cloud sync init error:', err);
-                cloudSyncReady = false;
-                cloudSyncStatus('تعذر الاتصال بالسحابة');
-            }
-        };
+                    accessToken = response.access_token;
+                    markDrivePermissionGranted(appUserKey);
+                    await uploadBackupToDrive();
+                }
+            });
+        }
 
-        window.addEventListener('online', ()=>{ if (cloudSyncReady) scheduleCloudSync(); });
+        async function startGoogleDriveBackup() {
+            if (backupInProgress) return;
+            try {
+                initGoogleDriveAuth();
+                if (accessToken) {
+                    await uploadBackupToDrive();
+                    return;
+                }
+                // Google يرفض الطلب قبل ظهور نافذة الاختيار إذا كان Origin غير مسجل.
+                // في هذه الحالة نستخدم حساب Google المرتبط بـ Firebase كمسار احتياطي للـPWA.
+                try {
+                    // طلب الإذن مرة واحدة فقط طوال استخدام البرنامج
+                tokenClient.requestAccessToken({ prompt: drivePermissionGranted ? '' : 'consent' });
+                } catch (err) {
+                    console.error('Google GIS request error:', err);
+                    if (window.firebaseDriveAuth) {
+                        const fallbackToken = await window.firebaseDriveAuth();
+                        if (fallbackToken) {
+                            accessToken = fallbackToken;
+                            await uploadBackupToDrive();
+                            return;
+                        }
+                    }
+                    throw err;
+                }
+            } catch (err) {
+                console.error('Google Drive auth init error:', err);
+                const origin = location.origin || (location.protocol + '//' + location.host);
+                if (String(err?.message || '').toLowerCase().includes('origin') || String(err?.error || '').toLowerCase().includes('origin')) {
+                    showAppAlert('Google رفض الاتصال', 'خطأ 400: origin_mismatch\n\nأصل التطبيق الحالي هو:\n' + origin + '\n\nأضف هذا العنوان في Google Cloud ضمن Authorized JavaScript origins لنفس Client ID.');
+                } else {
+                    showAppAlert('تعذر تشغيل Google Drive', 'تعذر الحصول على صلاحية Google Drive. تأكد من اتصال الإنترنت وإعداد OAuth ثم حاول مرة أخرى.');
+                }
+            }
+        }
+
+        async function driveFetch(url, options = {}) {
+            if (!accessToken) throw new Error('NO_DRIVE_TOKEN');
+            const response = await fetch(url, {
+                ...options,
+                headers: {
+                    ...(options.headers || {}),
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            });
+            if (response.status === 401) {
+                accessToken = null;
+                throw new Error('DRIVE_UNAUTHORIZED');
+            }
+            return response;
+        }
+
+        async function getDriveError(response) {
+            let body = '';
+            try { body = await response.text(); } catch (_) {}
+            let message = '';
+            try { message = JSON.parse(body)?.error?.message || ''; } catch (_) {}
+            return `HTTP ${response.status}${message ? `: ${message}` : ''}`;
+        }
+
+        async function findDriveBackupFile(fileName = null) {
+            const q = fileName
+                ? `name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`
+                : "name contains 'backup_drosak_' and trashed = false";
+            const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
+                '&spaces=drive&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime desc&pageSize=100';
+            const response = await driveFetch(url);
+            if (!response.ok) throw new Error('DRIVE_LIST_FAILED: ' + await getDriveError(response));
+            const data = await response.json();
+            const files = Array.isArray(data.files) ? data.files : [];
+            if (fileName) return files.find(f => f.name === fileName) || null;
+            return files.find(f => /^backup_drosak_\d{4}-\d{2}-\d{2}\.json$/i.test(f.name)) || null;
+        }
+
+        function formatDriveBackupTime(dateValue) {
+            if (!dateValue) return 'لم يتم العثور على نسخة احتياطية';
+            const d = new Date(dateValue);
+            if (Number.isNaN(d.getTime())) return 'غير معروف';
+            return d.toLocaleString('ar-EG', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+
+        function setLastDriveBackupTime(dateValue) {
+            const el = document.getElementById('lastDriveBackupTime');
+            if (el) el.textContent = formatDriveBackupTime(dateValue);
+            if (dateValue) localStorage.setItem('last_drive_backup_time', dateValue);
+        }
+
+        function loadSavedDriveBackupTime() {
+            const saved = localStorage.getItem('last_drive_backup_time');
+            const el = document.getElementById('lastDriveBackupTime');
+            if (el && saved) el.textContent = formatDriveBackupTime(saved);
+        }
+
+        async function refreshDriveBackupStatus() {
+            loadSavedDriveBackupTime();
+            if (!accessToken || typeof findDriveBackupFile !== 'function') return;
+            try {
+                const existing = await findDriveBackupFile();
+                if (existing?.modifiedTime) {
+                    setLastDriveBackupTime(existing.modifiedTime);
+                } else {
+                    const el = document.getElementById('lastDriveBackupTime');
+                    if (el && !localStorage.getItem('last_drive_backup_time')) {
+                        el.textContent = 'لا توجد نسخة احتياطية';
+                    }
+                }
+            } catch (err) {
+                console.warn('Could not refresh Drive backup status:', err);
+            }
+        }
+
+        async function uploadBackupToDrive() {
+            if (!accessToken || backupInProgress) return false;
+            backupInProgress = true;
+            try {
+                const backupData = {
+                    teacher_groups_local: JSON.parse(localStorage.getItem(userStorageKey('teacher_groups_local')) || '[]'),
+                    teacher_students_local: JSON.parse(localStorage.getItem(userStorageKey('teacher_students_local')) || '[]')
+                };
+                const fileName = `backup_drosak_${new Date().toISOString().slice(0,10)}.json`;
+                const fileContent = JSON.stringify(backupData, null, 2);
+                const existing = await findDriveBackupFile(fileName);
+                let response;
+
+                if (existing?.id) {
+                    // تحديث محتوى النسخة الموجودة اليوم فقط.
+                    response = await driveFetch(
+                        'https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(existing.id) + '?uploadType=media',
+                        {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: fileContent
+                        }
+                    );
+                } else {
+                    // إنشاء الملف كملف JSON في Drive.
+                    const form = new FormData();
+                    form.append('metadata', new Blob([
+                        JSON.stringify({name: fileName, mimeType: 'application/json'})
+                    ], {type: 'application/json'}));
+                    form.append('file', new Blob([fileContent], {type: 'application/json'}));
+                    response = await driveFetch(
+                        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
+                        {method: 'POST', body: form}
+                    );
+                }
+
+                if (!response.ok) {
+                    const detail = await getDriveError(response);
+                    console.error('Google Drive upload error:', detail);
+                    showAppAlert('فشل النسخ الاحتياطي',
+                        response.status === 403
+                            ? 'Google رفض العملية (403). غالبًا Google Drive API غير مفعّل أو صلاحية Drive غير مضافة لهذا العميل.'
+                            : `تعذر رفع النسخة إلى Google Drive. ${detail}`
+                    );
+                    return false;
+                }
+
+                const backupCompletedAt = new Date().toISOString();
+                setLastDriveBackupTime(backupCompletedAt);
+                showAppAlert('تم النسخ الاحتياطي', 'تم حفظ النسخة الاحتياطية بنجاح داخل Google Drive.');
+                return true;
+            } catch (err) {
+                console.error('Google Drive backup error:', err);
+                const msg = String(err?.message || err);
+                if (msg.includes('DRIVE_UNAUTHORIZED')) {
+                    showAppAlert('انتهت صلاحية Google Drive', 'اضغط النسخ الاحتياطي مرة أخرى لمنح الصلاحية من جديد.');
+                } else if (msg.includes('DRIVE_LIST_FAILED')) {
+                    showAppAlert('تعذر الوصول إلى Google Drive', 'تعذر قراءة ملفات Drive. تأكد من تفعيل Google Drive API ومنح التطبيق صلاحية Drive.');
+                } else {
+                    showAppAlert('خطأ أثناء الرفع', 'حدث خطأ أثناء رفع النسخة الاحتياطية إلى Google Drive. افتح التطبيق من HTTPS وتأكد من اتصال الإنترنت.');
+                }
+                return false;
+            } finally {
+                backupInProgress = false;
+            }
+        }
+
+        async function triggerRestoreFileInput() {
+            if (backupInProgress) return;
+            try {
+                initGoogleDriveAuth();
+                if (!accessToken) {
+                    // طلب الإذن مرة واحدة فقط طوال استخدام البرنامج
+                tokenClient.requestAccessToken({ prompt: drivePermissionGranted ? '' : 'consent' });
+                    showAppAlert('السماح بالوصول', 'اسمح للتطبيق بالوصول إلى Google Drive، ثم اضغط استعادة النسخة الاحتياطية مرة أخرى.');
+                    return;
+                }
+                backupInProgress = true;
+                const existing = await findDriveBackupFile();
+                if (!existing?.id) {
+                    showAppAlert('لا توجد نسخة احتياطية', 'لم يتم العثور على نسخة احتياطية للتطبيق على Google Drive.');
+                    return;
+                }
+                const response = await driveFetch(
+                    'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(existing.id) + '?alt=media'
+                );
+                if (!response.ok) throw new Error('DRIVE_DOWNLOAD_FAILED: ' + await getDriveError(response));
+                const importedData = normalizeImportedData(JSON.parse(await response.text()));
+                if (!importedData) {
+                    showAppAlert('خطأ', 'النسخة الاحتياطية الموجودة على Google Drive غير صالحة.');
+                    return;
+                }
+                showAppConfirm('استعادة النسخة الاحتياطية', 'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية بالبيانات الموجودة في النسخة الاحتياطية.', function () {
+                    groups = importedData.groups;
+                    students = importedData.students;
+                    selectedGroupIndex = null;
+                    selectedStudentIndex = null;
+                    dataNormalizationDone = false;
+                    saveData();
+                    showAppAlert('تم بنجاح', 'تمت استعادة النسخة الاحتياطية من Google Drive بنجاح!');
+                    navigateTo('page1');
+                });
+            } catch (err) {
+                console.error('Google Drive restore error:', err);
+                showAppAlert('تعذر الاستعادة', 'تعذر قراءة النسخة الاحتياطية من Google Drive. تأكد من الصلاحيات واتصال الإنترنت ثم حاول مرة أخرى.');
+            } finally {
+                backupInProgress = false;
+            }
+        }
+
+        // إعداد التشغيل الأولي والتنقل عند تحميل الصفحة
+        document.addEventListener('DOMContentLoaded', () => {
+            ensureStudentIds();
+            saveData();
+            buildDaySelector('groupDaySelector', []);
+            buildDaySelector('studentDaySelector', []);
+            renderTodaySessions();
+            calculateSummaryTotals();
+            setThemeButton(document.body.classList.contains('dark-mode'));
+            loadSavedDriveBackupTime();
+        });
+            window.addEventListener('resize', syncFixedContentOffsets);
+        window.addEventListener('load', syncFixedContentOffsets);
 
 </script>
 
@@ -4053,87 +3905,62 @@ document.body.classList.add('firebase-auth-pending');
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
 import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",storageBucket:"your-works-1aea7.firebasestorage.app",messagingSenderId:"1084540974820",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1",measurementId:"G-RYZPVNLKZQ"};
 const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider();
-const db=getFirestore(app);
-window.cloudFirestoreInit=async function(uid){ if(!uid) throw new Error("NO_USER"); };
-window.cloudFirestoreGetDoc=async function(){ const snap=await getDoc(doc(db,"users",auth.currentUser.uid,"appData","main")); return snap.exists()?snap.data():null; };
-window.cloudFirestoreSetDoc=async function(data){ await setDoc(doc(db,"users",auth.currentUser.uid,"appData","main"), {...data, schemaVersion:2, updatedAt:Date.now()}, {merge:false}); };
-window.cloudFirestoreListen=function(cb){ return onSnapshot(doc(db,"users",auth.currentUser.uid,"appData","main"), snap=>{ if(snap.exists()) cb(snap.data()); }); };
-window.cloudFirestoreCreateBackup=async function(data,label){
-  if(!auth.currentUser) throw new Error("NO_USER");
-  const backupId = new Date().toISOString().replace(/[-:.TZ]/g,'') + '_' + Math.random().toString(36).slice(2,8);
-  const payload = {...data, label: label || 'نسخة أمان', createdAt: Date.now(), backupId};
-  await setDoc(doc(db,"users",auth.currentUser.uid,"appBackups",backupId), payload, {merge:false});
-  return backupId;
-};
-window.cloudFirestoreListBackups=async function(max=20){
-  if(!auth.currentUser) throw new Error("NO_USER");
-  const q = query(collection(db,"users",auth.currentUser.uid,"appBackups"), orderBy("createdAt","desc"), limit(Math.min(50, Math.max(1, Number(max)||20)));
-  const snap = await getDocs(q);
-  return snap.docs.map(d=>({id:d.id,...d.data()}));
-};
-window.cloudFirestoreGetBackup=async function(backupId){
-  if(!auth.currentUser || !backupId) throw new Error("NO_BACKUP");
-  const snap = await getDoc(doc(db,"users",auth.currentUser.uid,"appBackups",String(backupId)));
-  return snap.exists()?snap.data():null;
-};
-const loginScreen=document.getElementById('loginScreen'),googleLoginButton=document.getElementById('googleLoginButton'),loginMessage=document.getElementById('loginMessage');
-function msg(x){if(loginMessage) loginMessage.textContent=x||''}
-function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')} function hide(){loginScreen.hidden=true;document.body.classList.remove('login-locked')}
-function friendly(e){const m={'auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google؛ سيتم فتح تسجيل الدخول بالطريقة البديلة.','auth/account-exists-with-different-credential':'هذا الحساب مرتبط بطريقة تسجيل دخول مختلفة.','auth/operation-not-allowed':'يجب تفعيل تسجيل الدخول بحساب Google من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول بحساب Google. تأكد من الإنترنت وإعدادات Firebase.'}
-let loginInProgress=false;
-async function loginWithGoogle(){
-  if(loginInProgress) return null;
-  loginInProgress=true;
+provider.addScope('https://www.googleapis.com/auth/drive.file');
+window.firebaseDriveAuth=async function(){
   try{
-    msg('جارٍ فتح تسجيل الدخول بحساب Google...');
-    const ua=navigator.userAgent||'';
-    const isAndroidWebView=/Android/i.test(ua)&&(/; wv\)/i.test(ua)||/Version\/4\.0/i.test(ua));
-    if(isAndroidWebView){
-      msg('جارٍ تحويلك إلى Google...');
-      await signInWithRedirect(auth,provider);
-      return null;
-    }
     const r=await signInWithPopup(auth,provider);
-    return{user:r.user};
+    const c=GoogleAuthProvider.credentialFromResult(r);
+    return c?.accessToken||null;
   }catch(e){
-    if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'||e?.code==='auth/operation-not-supported-in-this-environment'){
-      msg('جارٍ تحويلك إلى Google لتسجيل الدخول...');
+    if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){
+      sessionStorage.setItem('drive_auth_pending','1');
       await signInWithRedirect(auth,provider);
       return null;
     }
     throw e;
-  }finally{loginInProgress=false;}
-}
-googleLoginButton.addEventListener('click',async()=>{
-  if(loginInProgress) return;
-  googleLoginButton.disabled=true;
-  try{await loginWithGoogle()}catch(e){console.error('خطأ في Google:',e);msg(friendly(e));googleLoginButton.disabled=false;}
-});
-getRedirectResult(auth).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
+  }
+};
+
+const loginScreen=document.getElementById('loginScreen'),googleLoginButton=document.getElementById('googleLoginButton'),loginMessage=document.getElementById('loginMessage');
+function msg(x){if(loginMessage) loginMessage.textContent=x||''}
+function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')} function hide(){loginScreen.hidden=true;document.body.classList.remove('login-locked')}
+function friendly(e){const m={'auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google؛ سيتم فتح تسجيل الدخول بالطريقة البديلة.','auth/account-exists-with-different-credential':'هذا الحساب مرتبط بطريقة تسجيل دخول مختلفة.','auth/operation-not-allowed':'يجب تفعيل تسجيل الدخول بحساب Google من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول بحساب Google. تأكد من الإنترنت وإعدادات Firebase.'}
+async function loginWithGoogle(){try{const r=await signInWithPopup(auth,provider);return{user:r.user}}catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null}throw e}}
+googleLoginButton.addEventListener('click',async()=>{msg('جارٍ فتح تسجيل الدخول بحساب Google...');googleLoginButton.disabled=true;try{await loginWithGoogle()}catch(e){console.error('خطأ في Google:',e);msg(friendly(e))}finally{googleLoginButton.disabled=false}});
+getRedirectResult(auth).then(r=>{if(r){const c=GoogleAuthProvider.credentialFromResult(r);if(c?.accessToken){window.pendingDriveAccessToken=c.accessToken;window.dispatchEvent(new CustomEvent('drive-auth-ready'));}if(sessionStorage.getItem('drive_auth_pending')==='1'){sessionStorage.removeItem('drive_auth_pending');setTimeout(()=>{if(window.pendingDriveAccessToken){window.dispatchEvent(new CustomEvent('drive-auth-ready'));}},150);}}return r}).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
 const authLoading=document.getElementById('authLoading');
 onAuthStateChanged(auth,user=>{
-  if(user){
-    // لا ننتظر المزامنة السحابية حتى يظهر التطبيق بعد نجاح المصادقة.
-    switchAppUser(user.uid);
-    if(authLoading) authLoading.hidden=true;
-    document.body.classList.remove('firebase-auth-pending');
-    document.documentElement.classList.remove('firebase-startup-pending');
-    hide();
-    if(typeof window.initCloudSync==='function') window.initCloudSync(user.uid).catch(err=>console.error('Cloud sync init error:',err));
-  }else{
-    if(cloudSyncUnsubscribe){try{cloudSyncUnsubscribe();}catch(_){} cloudSyncUnsubscribe=null;}
-    cloudSyncReady=false;
-    cloudSyncUserUid=null;
-    switchAppUser('guest');
-    if(authLoading) authLoading.hidden=true;
-    document.body.classList.remove('firebase-auth-pending');
-    document.documentElement.classList.remove('firebase-startup-pending');
-    show();
+if(user){ 
+  switchAppUser(user.uid);
+  if(typeof loadDrivePermissionState==='function') loadDrivePermissionState(user.uid);
+  if(authLoading) authLoading.hidden=true;
+  document.body.classList.remove('firebase-auth-pending');
+  document.documentElement.classList.remove('firebase-startup-pending');
+  hide();
+  // عند تسجيل الدخول بالبريد الإلكتروني: اطلب صلاحية Google Drive مرة واحدة فقط.
+  if(user.providerData?.some(p=>p.providerId==='password') && !drivePermissionGranted){
+    setTimeout(()=>{
+      try{
+        initGoogleDriveAuth();
+        if(tokenClient) tokenClient.requestAccessToken({prompt:'consent'});
+      }catch(err){
+        console.warn('Drive permission request skipped:', err);
+      }
+    }, 500);
   }
-});
+}else{
+  switchAppUser('guest');
+  loadDrivePermissionState(null);
+  if(authLoading) authLoading.hidden=true;
+  document.body.classList.remove('firebase-auth-pending');
+  document.documentElement.classList.remove('firebase-startup-pending');
+  show();
+}
+}); window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>{
+ showAppConfirm("هل تريد تسجيل الخروج ؟", "", function(){ signOut(auth); });
+};
 </script>
 
 
@@ -4197,7 +4024,7 @@ function buildPDFExportReport(){
         const monthMoney = pdfMoney(metrics.monthMoney);
         const debt = pdfMoney(metrics.previousDebt);
         const required = metrics.totalRequired;
-        groupsMonth += metrics.monthPaid ? 0 : monthMoney;
+        groupsMonth += metrics.unpaidMonth;
         groupsDebt += metrics.debtPaid ? 0 : debt;
         if (metrics.isFullyPaid) groupsPaid += 1; else groupsUnpaid += 1;
         groupRows.push({group,sessions,monthMoney,debt,required});
@@ -4211,7 +4038,7 @@ function buildPDFExportReport(){
         const monthMoney = pdfMoney(financial.monthMoney);
         const debt = pdfMoney(financial.previousDebt);
         const required = financial.totalRequired;
-        studentsMonth += financial.monthPaid ? 0 : monthMoney;
+        studentsMonth += financial.unpaidMonth;
         studentsDebt += financial.debtPaid ? 0 : debt;
         if (financial.isFullyPaid) studentsPaid += 1; else studentsUnpaid += 1;
         studentRows.push({student,metrics,sessions,monthMoney,debt,required});
