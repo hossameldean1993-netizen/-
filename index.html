@@ -4344,14 +4344,20 @@ if(user){
   window.pendingDriveAccessToken = null;
   switchAppUser(user.uid);
   if(typeof loadDrivePermissionState==='function') loadDrivePermissionState(user.uid);
-  const canWrite = await claimWriteSession(user.uid);
-  watchWriteSession(user.uid);
+  // لا ننتظر Firestore قبل إظهار التطبيق؛ هذا يمنع تأخير تسجيل الدخول بسبب الشبكة.
+  // يبدأ الجهاز أولًا في وضع القراءة فقط، ثم تُحسم صلاحية التعديل في الخلفية.
+  updateWriteAccessUI(false, 'جارٍ التحقق من صلاحية التعديل...');
   if(authLoading) authLoading.hidden=true;
   document.body.classList.remove('firebase-auth-pending');
   document.documentElement.classList.remove('firebase-startup-pending');
   hide();
-  // بعد تحديد المستخدم، فعّل المزامنة تلقائيًا. إذا كان الدخول بالبريد الإلكتروني
-  // فسيُطلب إذن Drive مرة واحدة فقط عند الحاجة.
+  claimWriteSession(user.uid).then(()=>{
+    watchWriteSession(user.uid);
+  }).catch(err=>{
+    console.warn('Write session claim skipped:', err);
+    updateWriteAccessUI(false, 'تعذر التحقق من صلاحية التعديل. تم تفعيل وضع القراءة فقط حفاظًا على البيانات.');
+  });
+  // بعد تسجيل الدخول، فعّل المزامنة تلقائيًا دون انتظار عملية قفل الجلسة.
   setTimeout(()=>{
     try{
       if(accessToken){ syncWithDrive(); return; }
@@ -4359,7 +4365,7 @@ if(user){
     }catch(err){
       console.warn('Drive auto-sync permission skipped:', err);
     }
-  }, 500);
+  }, 150);
 }else{
   markSessionInactive();
   accessToken = null;
