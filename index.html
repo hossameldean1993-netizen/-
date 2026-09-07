@@ -1083,12 +1083,12 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <div id="writeAccessStatus" aria-live="polite"></div>
                 <div id="driveBackupStatus" class="drive-backup-status" aria-live="polite">
                     <span class="drive-backup-status-icon">☁️</span>
-                    <span><b>حالة المزامنة:</b> <span id="lastDriveBackupTime">لم تتم المزامنة بعد</span></span>
+                    <span><b>آخر مزامنة سحابية ناجحة:</b> <span id="lastDriveBackupTime">لم تتم المزامنة بعد</span></span>
                 </div>
             <div class="control-buttons-wrapper">
                 <button class="btn-3d btn-red-3d settings-btn" onclick="openStartMonthModal()">بدء شهر جديد</button>
                 <button class="btn-3d btn-red-3d settings-btn" onclick="deleteAllData()" data-write-action="true">حذف جميع البيانات</button>
-                <button class="btn-3d settings-btn" onclick="startGoogleDriveBackup()">مزامنة البيانات تلقائيًا مع Google Drive</button>
+                <button class="btn-3d settings-btn" onclick="startGoogleDriveBackup()">نسخة احتياطية إلى Google Drive</button>
                 <button class="btn-3d settings-btn" onclick="exportPDFReport()">تصدير PDF</button>
                 <button class="btn-3d settings-btn" onclick="openRecycleBin()">سلة المحذوفات</button>
                 <button class="btn-3d btn-full" onclick="toggleTheme()" id="themeToggleText">
@@ -1990,25 +1990,18 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             if (document.getElementById('page6').classList.contains('active')) renderFinancialLists();
 
             // بعد أي تعديل حقيقي: جدولة مزامنة، وليس إنشاء نسخة احتياطية.
-            if (markAsChanged && typeof scheduleAutoDriveBackup === 'function') scheduleAutoDriveBackup();
+            if (markAsChanged) {
+                if (typeof window.scheduleCloudSync === 'function') window.scheduleCloudSync();
+                else if (typeof scheduleAutoDriveBackup === 'function') scheduleAutoDriveBackup();
+            }
             return true;
         }
 
         let autoDriveBackupTimer = null;
 
         function scheduleAutoDriveBackup() {
-            // وجود تعديل محلي غير متزامن يُحفظ بشكل دائم حتى لو كان توكن Drive
-            // غير متاح لحظة التعديل أو انقطع الإنترنت.
-            localStorage.setItem(userStorageKey('data_sync_pending'), 'true');
-            if (autoDriveBackupTimer) clearTimeout(autoDriveBackupTimer);
-            autoDriveBackupTimer = setTimeout(async () => {
-                try {
-                    if (typeof syncWithDrive !== 'function') return;
-                    await syncWithDrive();
-                } catch (err) {
-                    console.warn('Auto sync skipped:', err);
-                }
-            }, 1500);
+            // الاسم محفوظ للتوافق مع الاستدعاءات القديمة؛ المزامنة التلقائية الأساسية أصبحت Firestore.
+            if (typeof window.scheduleCloudSync === 'function') window.scheduleCloudSync();
         }
 
         function isDriveSyncPending() {
@@ -3613,8 +3606,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             saveData(); closeGroupModal(); if (editId !== '') renderGroupDetail(parseInt(editId, 10)); else navigateTo('page2');
         }
 
-        // ==================== المزامنة التلقائية مع Google Drive ====================
-        // لا توجد "نسخ احتياطية" متعددة هنا: يوجد ملف مزامنة واحد لكل مستخدم.
+        // ==================== Google Drive: نسخة احتياطية يدوية فقط ====================
+        // المزامنة الأساسية تتم عبر Firestore. Google Drive محفوظ كطبقة نسخة احتياطية يدوية فقط.
         // قاعدة الحسم: أحدث updatedAt هو المصدر المعتمد دائمًا.
         const CLIENT_ID = '310650752416-dskh559v6u5vjbc2jih585o35ola5a2p.apps.googleusercontent.com';
         const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
@@ -3707,13 +3700,14 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     driveTokenRefreshInProgress = false;
                     accessToken = response.access_token;
                     markDrivePermissionGranted(appUserKey);
-                    await syncWithDrive();
+                    // Drive للنسخة الاحتياطية فقط؛ لا نبدأ مزامنة تلقائية بعد الحصول على التوكن.
+
                 }
             });
         }
 
         async function startGoogleDriveBackup() {
-            // اسم الدالة محفوظ حتى لا تتعطل أزرار/استدعاءات قديمة، لكن وظيفتها الآن هي المزامنة.
+            // النسخة الاحتياطية إلى Google Drive متاحة يدويًا فقط؛ المزامنة اليومية تتم عبر Firestore.
             if (syncInProgress) return;
             try {
                 initGoogleDriveAuth();
@@ -3905,7 +3899,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     if (compareSyncDates(remote.updatedAt, localUpdatedAt) >= 0) {
                         await applyRemoteSyncData(remote);
                         setLastDriveBackupTime(new Date().toISOString());
-                        setDriveSyncPending(false);
                         return true;
                     }
                     return false;
@@ -3937,7 +3930,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     if (!response.ok) throw new Error('DRIVE_CREATE_FAILED: ' + await getDriveError(response));
                     const created = await response.json().catch(() => ({}));
                     setLastDriveBackupTime(new Date().toISOString());
-                    setDriveSyncPending(false);
                     return !!created?.id;
                 }
 
@@ -3949,13 +3941,11 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     // السحابة أحدث: السحابة هي النسخة المعتمدة، ونستبدل المحلي بها بدون إنشاء تعديل جديد.
                     await applyRemoteSyncData(remotePayload);
                     setLastDriveBackupTime(new Date().toISOString());
-                    setDriveSyncPending(false);
                     return true;
                 }
 
                 if (comparison === 0) {
                     setLastDriveBackupTime(new Date().toISOString());
-                    setDriveSyncPending(false);
                     return true;
                 }
 
@@ -3970,18 +3960,15 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 if (remoteRevisionChanged && latestComparison <= 0) {
                     await applyRemoteSyncData(latestRemote);
                     setLastDriveBackupTime(new Date().toISOString());
-                    setDriveSyncPending(false);
                     return true;
                 }
                 if (latestComparison < 0) {
                     await applyRemoteSyncData(latestRemote);
                     setLastDriveBackupTime(new Date().toISOString());
-                    setDriveSyncPending(false);
                     return true;
                 }
                 if (latestComparison === 0) {
                     setLastDriveBackupTime(new Date().toISOString());
-                    setDriveSyncPending(false);
                     return true;
                 }
 
@@ -3994,7 +3981,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     if (conflictComparison < 0 || conflictComparison === 0) {
                         await applyRemoteSyncData(conflictRemote);
                         setLastDriveBackupTime(new Date().toISOString());
-                        setDriveSyncPending(false);
                         return true;
                     }
                     // الإصدار السحابي تغيّر، لكنه أقدم زمنيًا من تعديل الجهاز؛ نعتمد الإصدار
@@ -4029,7 +4015,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     await applyRemoteSyncData(verifiedRemote);
                 }
                 setLastDriveBackupTime(new Date().toISOString());
-                setDriveSyncPending(false);
                 return true;
             } catch (err) {
                 console.error('Google Drive sync error:', err);
@@ -4094,22 +4079,19 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         window.addEventListener('online', () => {
             const needsSync = isDriveSyncPending() || (typeof window.hasWriteAccess === 'function' && !window.hasWriteAccess());
             if (needsSync) {
-                if (accessToken) syncWithDrive();
-                else requestDriveAccessToken(false);
+                if (writeAccessGranted) syncToFirestore();
             }
         });
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState !== 'visible') return;
             const needsSync = isDriveSyncPending() || (typeof window.hasWriteAccess === 'function' && !window.hasWriteAccess());
             if (!needsSync) return;
-            if (accessToken) syncWithDrive();
-            else requestDriveAccessToken(false);
+            if (writeAccessGranted) syncToFirestore();
         });
         setInterval(() => {
             const readOnly = typeof window.hasWriteAccess === 'function' && !window.hasWriteAccess();
             if (document.visibilityState === 'visible' && navigator.onLine && (isDriveSyncPending() || readOnly)) {
-                if (accessToken) syncWithDrive();
-                else requestDriveAccessToken(false);
+                if (writeAccessGranted) syncToFirestore();
             }
         }, 30000);
 
@@ -4168,8 +4150,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebas
 import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, runTransaction, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",storageBucket:"your-works-1aea7.firebasestorage.app",messagingSenderId:"1084540974820",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1",measurementId:"G-RYZPVNLKZQ"};
-const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider(),db=getFirestore(app);
-provider.addScope('https://www.googleapis.com/auth/drive.file');
+const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider(),driveProvider=new GoogleAuthProvider(),db=getFirestore(app);
+driveProvider.addScope('https://www.googleapis.com/auth/drive.file');
 const SESSION_COLLECTION = 'app_active_sessions';
 const SESSION_LEASE_LABEL = 'write';
 let activeSessionUnsubscribe = null;
@@ -4177,6 +4159,89 @@ let currentSessionUserId = null;
 let currentSessionId = '';
 let writeAccessGranted = false;
 let sessionOperationInProgress = false;
+const SYNC_COLLECTION = 'app_sync_data';
+const SYNC_SCHEMA_VERSION = 1;
+let cloudSyncUnsubscribe = null;
+let cloudSyncWriteInProgress = false;
+let cloudSyncQueued = false;
+
+function getCloudSyncRef(uid){ return doc(db, SYNC_COLLECTION, uid); }
+function cloudSyncPayload(){
+  return {
+    schemaVersion: SYNC_SCHEMA_VERSION,
+    ownerKey: String(appUserKey || 'guest'),
+    updatedAt: localStorage.getItem(userStorageKey('data_updated_at')) || window.localDataUpdatedAt || '1970-01-01T00:00:00.000Z',
+    revision: localStorage.getItem(userStorageKey('data_revision')) || window.localDataRevision || '',
+    groups: Array.isArray(groups) ? groups : [],
+    students: Array.isArray(students) ? students : [],
+    syncedAt: serverTimestamp()
+  };
+}
+function stopCloudSyncWatch(){
+  if(cloudSyncUnsubscribe){ cloudSyncUnsubscribe(); cloudSyncUnsubscribe=null; }
+}
+async function applyFirestoreSyncData(remote){
+  if(!remote || !Array.isArray(remote.groups) || !Array.isArray(remote.students)) return false;
+  if(remote.ownerKey && String(remote.ownerKey)!==String(appUserKey||'guest')) return false;
+  const localUpdatedAt = localStorage.getItem(userStorageKey('data_updated_at')) || window.localDataUpdatedAt || '';
+  const remoteTime = Date.parse(remote.updatedAt || '') || 0;
+  const localTime = Date.parse(localUpdatedAt || '') || 0;
+  if(remoteTime < localTime) return false;
+  if(remoteTime === localTime && String(remote.revision||'') === String(localStorage.getItem(userStorageKey('data_revision')) || window.localDataRevision || '')) return false;
+  await applyRemoteSyncData(remote);
+  setDriveSyncPending(false);
+  if(remote.updatedAt) setLastDriveBackupTime(remote.updatedAt);
+  return true;
+}
+function startCloudSyncWatch(uid){
+  stopCloudSyncWatch();
+  if(!uid) return;
+  const ref=getCloudSyncRef(uid);
+  cloudSyncUnsubscribe=onSnapshot(ref, snap=>{
+    if(!snap.exists()) return;
+    const remote=snap.data()||{};
+    applyFirestoreSyncData(remote).catch(err=>console.warn('Firestore sync apply skipped:',err));
+  }, err=>console.error('Firestore sync watcher error:',err));
+}
+async function syncToFirestore(){
+  if(!currentSessionUserId || !writeAccessGranted) return false;
+  if(cloudSyncWriteInProgress){ cloudSyncQueued=true; return false; }
+  if(!isDriveSyncPending()) return true;
+  cloudSyncWriteInProgress=true;
+  try{
+    const payload=cloudSyncPayload();
+    const ref=getCloudSyncRef(currentSessionUserId);
+    const result=await runTransaction(db, async transaction=>{
+      const snap=await transaction.get(ref);
+      const remote=snap.exists()?snap.data():null;
+      const localTime=Date.parse(payload.updatedAt||'')||0;
+      const remoteTime=Date.parse(remote?.updatedAt||'')||0;
+      if(remote && remoteTime>localTime) return {action:'pull',data:remote};
+      if(remote && remoteTime===localTime && String(remote.revision||'')!==String(payload.revision||'')) return {action:'pull',data:remote};
+      transaction.set(ref,payload,{merge:false});
+      return {action:'write'};
+    });
+    if(result.action==='pull'){
+      await applyFirestoreSyncData(result.data);
+      return true;
+    }
+    setDriveSyncPending(false);
+    setLastDriveBackupTime(new Date().toISOString());
+    return true;
+  }catch(err){
+    console.warn('Firestore auto sync failed:',err);
+    return false;
+  }finally{
+    cloudSyncWriteInProgress=false;
+    if(cloudSyncQueued){ cloudSyncQueued=false; setTimeout(()=>syncToFirestore(),0); }
+  }
+}
+window.syncToFirestore=syncToFirestore;
+window.scheduleCloudSync=function(){
+  localStorage.setItem(userStorageKey('data_sync_pending'),'true');
+  clearTimeout(window.__cloudSyncTimer);
+  window.__cloudSyncTimer=setTimeout(()=>syncToFirestore(),350);
+};
 
 function getSessionId(uid){
   const key = 'app_write_session_' + (uid || 'guest');
@@ -4280,23 +4345,8 @@ async function logoutOtherDevices(){
       const ref = doc(db, SESSION_COLLECTION, currentSessionUserId);
       await setDoc(ref, { sessionId: currentSessionId, uid: currentSessionUserId, mode: SESSION_LEASE_LABEL, updatedAt: serverTimestamp() }, { merge: true });
       updateWriteAccessUI(true);
-      // بعد الاستحواذ على صلاحية التعديل نقرأ النسخة الموجودة على Drive أولًا،
-      // حتى لا تُرفع نسخة محلية قديمة كانت موجودة على هذا الجهاز وهو Read Only.
-      if (accessToken && typeof findDriveSyncFile === 'function') {
-        try {
-          const existing = await findDriveSyncFile();
-          if (existing?.id) {
-            const remote = await readDriveSyncFile(existing.id);
-            await applyRemoteSyncData(remote);
-            setDriveSyncPending(false);
-            setLastDriveBackupTime(new Date().toISOString());
-          }
-        } catch (pullErr) {
-          console.warn('Could not refresh data after session takeover:', pullErr);
-        }
-      } else if (typeof requestDriveAccessToken === 'function' && !accessToken) {
-        requestDriveAccessToken(false);
-      }
+      // بعد الاستحواذ على صلاحية التعديل، Firestore هو مصدر المزامنة الأساسي.
+      await syncToFirestore();
       showAppAlert('تم بنجاح', 'تم تسجيل الخروج من جميع الأجهزة الأخرى. هذا الجهاز أصبح صاحب صلاحية التعديل.');
     } catch (err) {
       console.error('Logout other devices error:', err);
@@ -4308,6 +4358,7 @@ window.logoutOtherDevices = logoutOtherDevices;
 
 function markSessionInactive(){
   if (activeSessionUnsubscribe) { activeSessionUnsubscribe(); activeSessionUnsubscribe = null; }
+  stopCloudSyncWatch();
   currentSessionUserId = null;
   currentSessionId = '';
   updateWriteAccessUI(false, '');
@@ -4315,13 +4366,13 @@ function markSessionInactive(){
 
 window.firebaseDriveAuth=async function(){
   try{
-    const r=await signInWithPopup(auth,provider);
+    const r=await signInWithPopup(auth,driveProvider);
     const c=GoogleAuthProvider.credentialFromResult(r);
     return c?.accessToken||null;
   }catch(e){
     if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){
       sessionStorage.setItem('drive_auth_pending','1');
-      await signInWithRedirect(auth,provider);
+      await signInWithRedirect(auth,driveProvider);
       return null;
     }
     throw e;
@@ -4332,17 +4383,17 @@ const loginScreen=document.getElementById('loginScreen'),googleLoginButton=docum
 function msg(x){if(loginMessage) loginMessage.textContent=x||''}
 function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')} function hide(){loginScreen.hidden=true;document.body.classList.remove('login-locked')}
 function friendly(e){const m={'auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google؛ سيتم فتح تسجيل الدخول بالطريقة البديلة.','auth/account-exists-with-different-credential':'هذا الحساب مرتبط بطريقة تسجيل دخول مختلفة.','auth/operation-not-allowed':'يجب تفعيل تسجيل الدخول بحساب Google من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول بحساب Google. تأكد من الإنترنت وإعدادات Firebase.'}
-async function loginWithGoogle(){try{const r=await signInWithPopup(auth,provider);const c=GoogleAuthProvider.credentialFromResult(r);if(c?.accessToken){window.pendingDriveAccessToken=c.accessToken;window.dispatchEvent(new CustomEvent('drive-auth-ready'));}return{user:r.user}}catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null}throw e}}
+async function loginWithGoogle(){try{const r=await signInWithPopup(auth,provider);return{user:r.user}}catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null}throw e}}
 googleLoginButton.addEventListener('click',async()=>{msg('جارٍ فتح تسجيل الدخول بحساب Google...');googleLoginButton.disabled=true;try{await loginWithGoogle()}catch(e){console.error('خطأ في Google:',e);msg(friendly(e))}finally{googleLoginButton.disabled=false}});
-getRedirectResult(auth).then(r=>{if(r){const c=GoogleAuthProvider.credentialFromResult(r);if(c?.accessToken){accessToken=c.accessToken;window.pendingDriveAccessToken=c.accessToken;window.dispatchEvent(new CustomEvent('drive-auth-ready'));setTimeout(()=>syncWithDrive(),0);}if(sessionStorage.getItem('drive_auth_pending')==='1'){sessionStorage.removeItem('drive_auth_pending');setTimeout(()=>{if(window.pendingDriveAccessToken){window.dispatchEvent(new CustomEvent('drive-auth-ready'));}},150);}}return r}).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
+getRedirectResult(auth).then(r=>{if(r){const c=GoogleAuthProvider.credentialFromResult(r);if(c?.accessToken){accessToken=c.accessToken;window.pendingDriveAccessToken=c.accessToken;window.dispatchEvent(new CustomEvent('drive-auth-ready'));}if(sessionStorage.getItem('drive_auth_pending')==='1'){sessionStorage.removeItem('drive_auth_pending');setTimeout(()=>{if(window.pendingDriveAccessToken){window.dispatchEvent(new CustomEvent('drive-auth-ready'));}},150);}}return r}).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
 const authLoading=document.getElementById('authLoading');
 onAuthStateChanged(auth,user=>{
 if(user){ 
   // كل مستخدم له جلسة مزامنة مستقلة؛ لا نسمح بإعادة استخدام token من مستخدم سابق.
-  const pendingToken = window.pendingDriveAccessToken || null;
-  accessToken = pendingToken;
+  accessToken = null;
   window.pendingDriveAccessToken = null;
   switchAppUser(user.uid);
+  startCloudSyncWatch(user.uid);
   if(typeof loadDrivePermissionState==='function') loadDrivePermissionState(user.uid);
   // لا ننتظر Firestore قبل إظهار التطبيق؛ هذا يمنع تأخير تسجيل الدخول بسبب الشبكة.
   // يبدأ الجهاز أولًا في وضع القراءة فقط، ثم تُحسم صلاحية التعديل في الخلفية.
@@ -4353,19 +4404,13 @@ if(user){
   hide();
   claimWriteSession(user.uid).then(()=>{
     watchWriteSession(user.uid);
+    if(writeAccessGranted) syncToFirestore();
   }).catch(err=>{
     console.warn('Write session claim skipped:', err);
     updateWriteAccessUI(false, 'تعذر التحقق من صلاحية التعديل. تم تفعيل وضع القراءة فقط حفاظًا على البيانات.');
   });
-  // بعد تسجيل الدخول، فعّل المزامنة تلقائيًا دون انتظار عملية قفل الجلسة.
-  setTimeout(()=>{
-    try{
-      if(accessToken){ syncWithDrive(); return; }
-      requestDriveAccessToken(false);
-    }catch(err){
-      console.warn('Drive auto-sync permission skipped:', err);
-    }
-  }, 150);
+  // المزامنة الأساسية تتم عبر Firestore ولا تنتظر Google Drive.
+  // Google Drive لا يُستخدم للمزامنة اليومية؛ النسخة الاحتياطية إليه تبدأ فقط عند طلبها يدويًا.
 }else{
   markSessionInactive();
   accessToken = null;
