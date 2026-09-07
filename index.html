@@ -3931,20 +3931,26 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                         setLastDriveBackupTime(new Date().toISOString());
                         return true;
                     }
-                    setTimeout(() => syncWithDrive(), 0);
-                    return false;
+                    // الإصدار السحابي تغيّر، لكنه أقدم زمنيًا من تعديل الجهاز؛ نعتمد الإصدار
+                    // السحابي الحالي كـ baseRevision ثم نسمح بمحاولة مشروطة جديدة بدل الدوران بلا نهاية.
+                    localStorage.setItem(userStorageKey('data_base_revision'), conflictRemote.revision || '');
+                    localPayload.baseRevision = conflictRemote.revision || '';
                 }
                 const response = await updateDriveSyncFile(latestRemote.id, localPayload, latestRemote._etag || '');
                 if (!response.ok) {
                     if (response.status === 412) {
                         const conflictRemote = await readDriveSyncFile(latestRemote.id);
-                        if (compareSyncDates(localPayload.updatedAt, conflictRemote.updatedAt) < 0) {
+                        const conflictComparison = compareSyncDates(localPayload.updatedAt, conflictRemote.updatedAt);
+                        if (conflictComparison <= 0) {
                             await applyRemoteSyncData(conflictRemote);
                             setLastDriveBackupTime(new Date().toISOString());
                             return true;
                         }
-                        // لو كان تعديل الجهاز ما زال أحدث، نعيد دورة المزامنة بقراءة جديدة فقط؛
-                        // لا نكتب فوق أي إصدار ظهر بعد آخر قراءة.
+                        // حدث تعارض أثناء الكتابة، لكن تعديل الجهاز ما زال أحدث زمنيًا.
+                        // نحدّث baseRevision إلى الإصدار الذي ظهر فعليًا على Drive، ثم نعيد
+                        // المحاولة على ETag جديد؛ وبذلك لا ندخل في حلقة 412، ولا نكتب فوق
+                        // تعديل أحدث من تعديل الجهاز.
+                        localStorage.setItem(userStorageKey('data_base_revision'), conflictRemote.revision || '');
                         setTimeout(() => syncWithDrive(), 0);
                         return false;
                     }
