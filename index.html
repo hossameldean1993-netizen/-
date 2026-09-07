@@ -1080,13 +1080,14 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
     <div id="page7" class="page">
         <div class="settings-page-card">
             <div class="settings-page-title">الإعدادات</div>
+                <div id="writeAccessStatus" aria-live="polite"></div>
                 <div id="driveBackupStatus" class="drive-backup-status" aria-live="polite">
                     <span class="drive-backup-status-icon">☁️</span>
                     <span><b>حالة المزامنة:</b> <span id="lastDriveBackupTime">لم تتم المزامنة بعد</span></span>
                 </div>
             <div class="control-buttons-wrapper">
                 <button class="btn-3d btn-red-3d settings-btn" onclick="openStartMonthModal()">بدء شهر جديد</button>
-                <button class="btn-3d btn-red-3d settings-btn" onclick="deleteAllData()">حذف جميع البيانات</button>
+                <button class="btn-3d btn-red-3d settings-btn" onclick="deleteAllData()" data-write-action="true">حذف جميع البيانات</button>
                 <button class="btn-3d settings-btn" onclick="startGoogleDriveBackup()">مزامنة البيانات تلقائيًا مع Google Drive</button>
                 <button class="btn-3d settings-btn" onclick="exportPDFReport()">تصدير PDF</button>
                 <button class="btn-3d settings-btn" onclick="openRecycleBin()">سلة المحذوفات</button>
@@ -1094,6 +1095,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     <span class="theme-icon" aria-hidden="true"></span>
                     <span class="theme-label">الوضع الليلي</span>
                 </button>
+                <button class="btn-3d settings-btn" onclick="logoutOtherDevices()">تسجيل الخروج من جميع الأجهزة الأخرى</button>
                 <button class="btn-3d btn-red-3d settings-btn" onclick="logoutFromGoogle()">خروج من البرنامج</button>
                             </div>
         </div>
@@ -1226,7 +1228,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <div class="day-selector-hint">اضغط على الأيام المطلوبة لتحديدها</div>
             </div>
             <div class="modal-actions">
-                <button class="btn-3d" onclick="saveGroup()">حفظ</button>
+                <button class="btn-3d" onclick="saveGroup()" data-write-action="true">حفظ</button>
                 <button class="btn-3d" onclick="closeGroupModal()">إلغاء</button>
             </div>
         </div>
@@ -1285,7 +1287,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <div class="day-selector-hint">اضغط على الأيام المطلوبة لتحديدها</div>
             </div>
             <div class="modal-actions">
-                <button class="btn-3d" onclick="saveStudent()">حفظ التلميذ</button>
+                <button class="btn-3d" onclick="saveStudent()" data-write-action="true">حفظ التلميذ</button>
                 <button class="btn-3d" onclick="closeStudentModal()">إلغاء</button>
             </div>
         </div>
@@ -1302,7 +1304,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <input type="date" id="monthStartDate" style="text-align:center;">
             </div>
             <div class="modal-actions">
-                <button class="btn-3d btn-red-3d" onclick="confirmResetNewMonth()">تحديث الجدول لشهر جديد</button>
+                <button class="btn-3d btn-red-3d" onclick="confirmResetNewMonth()" data-write-action="true">تحديث الجدول لشهر جديد</button>
                 <button class="btn-3d" onclick="closeStartMonthModal()">إلغاء</button>
             </div>
         </div>
@@ -1877,6 +1879,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function saveData(markAsChanged = true) {
+            if (markAsChanged && typeof window.ensureWriteAccess === 'function' && !window.ensureWriteAccess()) return false;
             // التطبيع/ترقية البيانات يتم مرة واحدة فقط بدل إعادة المرور على كل السجلات عند كل نقرة.
             if (!dataNormalizationDone) {
                 ensureStudentIds();
@@ -1919,6 +1922,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     localStorage.setItem(userStorageKey('data_updated_at'), changedAt);
                     localStorage.setItem(userStorageKey('data_revision'), changedRevision);
                     localStorage.setItem(userStorageKey('data_base_revision'), previousRevision);
+                    localStorage.setItem(userStorageKey('data_sync_pending'), 'true');
                     window.localDataUpdatedAt = changedAt;
                     window.localDataRevision = changedRevision;
                 }
@@ -1993,6 +1997,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         let autoDriveBackupTimer = null;
 
         function scheduleAutoDriveBackup() {
+            // وجود تعديل محلي غير متزامن يُحفظ بشكل دائم حتى لو كان توكن Drive
+            // غير متاح لحظة التعديل أو انقطع الإنترنت.
+            localStorage.setItem(userStorageKey('data_sync_pending'), 'true');
             if (autoDriveBackupTimer) clearTimeout(autoDriveBackupTimer);
             autoDriveBackupTimer = setTimeout(async () => {
                 try {
@@ -2002,6 +2009,15 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     console.warn('Auto sync skipped:', err);
                 }
             }, 1500);
+        }
+
+        function isDriveSyncPending() {
+            return localStorage.getItem(userStorageKey('data_sync_pending')) === 'true';
+        }
+
+        function setDriveSyncPending(value) {
+            if (value) localStorage.setItem(userStorageKey('data_sync_pending'), 'true');
+            else localStorage.removeItem(userStorageKey('data_sync_pending'));
         }
 
         function generateDatesForGroup(day1Name, day2Name, startDateStr, defaultStatus = 'present', day3Name = '', day4Name = '', ...extraDayNames) {
@@ -2164,7 +2180,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             document.getElementById('appDialogMsg').innerText =
                 `سيتم تسجيل سداد المتأخرات بالكامل (${Math.max(0, parseFloat(obj.previousDebt) || 0)} ج) وحذف بيانات المتأخرات من كارت الحسابات. هل تريد الاستمرار؟`;
             document.getElementById('appDialogActions').innerHTML = `
-                <button type="button" class="btn-3d btn-red-3d" onclick="executeFullDebtPayment()">نعم، دفع بالكامل</button>
+                <button type="button" class="btn-3d btn-red-3d" onclick="executeFullDebtPayment()" data-write-action="true">نعم، دفع بالكامل</button>
                 <button type="button" class="btn-3d" onclick="openDebtPaymentDialog('${pending.type}', ${pending.index})">رجوع</button>
             `;
         }
@@ -2198,7 +2214,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <input id="partialDebtPaymentAmount" class="debt-payment-input" type="number" min="0.01" max="${debt}" step="0.01" inputmode="decimal" placeholder="المبلغ المدفوع">
             `;
             document.getElementById('appDialogActions').innerHTML = `
-                <button type="button" class="btn-3d btn-red-3d" onclick="executePartialDebtPayment()">دفع الجزء</button>
+                <button type="button" class="btn-3d btn-red-3d" onclick="executePartialDebtPayment()" data-write-action="true">دفع الجزء</button>
                 <button type="button" class="btn-3d" onclick="openDebtPaymentDialog('${pending.type}', ${pending.index})">رجوع</button>
             `;
             const input = document.getElementById('partialDebtPaymentAmount');
@@ -2693,8 +2709,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <div class="financial-divider"></div>
                 <div class="financial-total-required">إجمالي المطلوب في الشهر: <strong>${totalRequired} ج</strong></div>
                 <div class="financial-payment-actions">
-                    <div class="payment-toggle"><span>حساب الشهر الحالي (${monthMoney} ج) — المتبقي ${financial.unpaidMonth} ج:</span><button class="pay-btn ${monthPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentMonthFn}">${monthPaid ? 'تم دفع الشهر بالكامل' : (financial.monthPaidAmount > 0 ? 'استكمال دفع الشهر' : 'دفع الشهر الحالي')}</button></div>
-                    ${hasDebt ? `<div class="payment-toggle"><span>تسوية المتأخرات (${previousDebt} ج):</span><button class="pay-btn ${debtPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentDebtFn}">${debtPaid ? 'تم دفع المتأخرات' : 'دفع المتأخرات'}</button></div>` : ''}
+                    <div class="payment-toggle"><span>حساب الشهر الحالي (${monthMoney} ج) — المتبقي ${financial.unpaidMonth} ج:</span><button class="pay-btn ${monthPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentMonthFn}" data-write-action="true">${monthPaid ? 'تم دفع الشهر بالكامل' : (financial.monthPaidAmount > 0 ? 'استكمال دفع الشهر' : 'دفع الشهر الحالي')}</button></div>
+                    ${hasDebt ? `<div class="payment-toggle"><span>تسوية المتأخرات (${previousDebt} ج):</span><button class="pay-btn ${debtPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentDebtFn}" data-write-action="true">${debtPaid ? 'تم دفع المتأخرات' : 'دفع المتأخرات'}</button></div>` : ''}
                 </div>
             </div>`;
         }
@@ -2716,7 +2732,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const currentSessionsCount = Math.max(1, parseInt(dayObj.sessionsCount, 10) || 1);
                 let sessionCountBtns = '';
                 for (let opt = 1; opt <= 6; opt++) {
-                    sessionCountBtns += `<button class="session-num-btn ${currentSessionsCount === opt ? 'active' : ''}"${futureDisabled} onclick="updateGroupDaySessionsCount(${groupIndex}, ${i}, ${opt})">${opt}</button>`;
+                    sessionCountBtns += `<button class="session-num-btn ${currentSessionsCount === opt ? 'active' : ''}"${futureDisabled} onclick="updateGroupDaySessionsCount(${groupIndex}, ${i}, ${opt})" data-write-action="true">${opt}</button>`;
                 }
                 daysHTML += `
                     <div class="day-row${isFutureDay ? ' future-day' : ''}">
@@ -2725,9 +2741,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                             <span>${currentStatus === 'present' ? 'حصة فعلية' : (currentStatus === 'absent' ? 'غائب' : (currentStatus === 'canceled' ? 'ملغية' : 'غير محدد'))}</span>
                         </div>
                         <div class="status-btns">
-                            <button class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'present')">حاضر</button>
-                            <button class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'absent')">غائب</button>
-                            <button class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'canceled')">ملغي</button>
+                            <button class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'present')" data-write-action="true">حاضر</button>
+                            <button class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'absent')" data-write-action="true">غائب</button>
+                            <button class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'canceled')" data-write-action="true">ملغي</button>
                         </div>
                         ${currentStatus === 'present' ? `
                         <div class="sessions-count-container">
@@ -2740,7 +2756,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             container.innerHTML = `
                 <div class="detail-actions-card">
                     <button class="btn-3d" onclick="openEditModal(${groupIndex})">تعديل البيانات</button>
-                    <button class="btn-3d btn-red-3d" onclick="deleteGroup(${groupIndex})">حذف المجموعة</button>
+                    <button class="btn-3d btn-red-3d" onclick="deleteGroup(${groupIndex})" data-write-action="true">حذف المجموعة</button>
                 </div>
                 <div class="group-card ${isFullyPaid ? 'paid' : ''} ${hasDebt ? 'has-debt' : ''}">
                     <div class="group-header">
@@ -2974,9 +2990,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                         </div>
                         
                         <div class="status-btns">
-                            <button class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'present')">حاضر</button>
-                            <button class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'absent')">غائب</button>
-                            <button class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'canceled')">ملغي</button>
+                            <button class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'present')" data-write-action="true">حاضر</button>
+                            <button class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'absent')" data-write-action="true">غائب</button>
+                            <button class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'canceled')" data-write-action="true">ملغي</button>
                         </div>
 
                         ${currentStatus === 'present' ? `
@@ -3013,7 +3029,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             container.innerHTML = `
                 <div class="detail-actions-card">
                     <button class="btn-3d" onclick="openEditStudentModal(${studentIndex})">تعديل البيانات</button>
-                    <button class="btn-3d btn-red-3d" onclick="deleteStudent(${studentIndex})">حذف التلميذ</button>
+                    <button class="btn-3d btn-red-3d" onclick="deleteStudent(${studentIndex})" data-write-action="true">حذف التلميذ</button>
                 </div>
                 <div class="group-card ${isFullyPaid ? 'paid' : ''} ${hasDebt ? 'has-debt' : ''}">
                     <div class="group-header">
@@ -3278,7 +3294,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             document.getElementById('appDialogMsg').innerText =
                 `سيتم تسجيل سداد المتبقي من حساب الشهر بالكامل (${remaining} ج). هل تريد الاستمرار؟`;
             document.getElementById('appDialogActions').innerHTML = `
-                <button type="button" class="btn-3d btn-red-3d" onclick="executeFullMonthPayment()">نعم، دفع بالكامل</button>
+                <button type="button" class="btn-3d btn-red-3d" onclick="executeFullMonthPayment()" data-write-action="true">نعم، دفع بالكامل</button>
                 <button type="button" class="btn-3d" onclick="openMonthPaymentDialog('${pending.type}', ${pending.index})">رجوع</button>
             `;
         }
@@ -3313,7 +3329,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <input id="partialMonthPaymentAmount" class="debt-payment-input" type="number" min="0.01" max="${remaining}" step="0.01" inputmode="decimal" placeholder="المبلغ المدفوع">
             `;
             document.getElementById('appDialogActions').innerHTML = `
-                <button type="button" class="btn-3d btn-red-3d" onclick="executePartialMonthPayment()">دفع الجزء</button>
+                <button type="button" class="btn-3d btn-red-3d" onclick="executePartialMonthPayment()" data-write-action="true">دفع الجزء</button>
                 <button type="button" class="btn-3d" onclick="openMonthPaymentDialog('${pending.type}', ${pending.index})">رجوع</button>
             `;
             const input = document.getElementById('partialMonthPaymentAmount');
@@ -3610,6 +3626,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         let drivePermissionGranted = false;
         let syncInProgress = false;
         let syncQueued = false;
+        let driveTokenRefreshInProgress = false;
         window.localDataUpdatedAt = localStorage.getItem(userStorageKey('data_updated_at')) || '';
         window.localDataRevision = localStorage.getItem(userStorageKey('data_revision')) || '';
 
@@ -3658,6 +3675,20 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             return parseSyncDate(a) - parseSyncDate(b);
         }
 
+        function requestDriveAccessToken(forceConsent = false) {
+            try {
+                initGoogleDriveAuth();
+                if (!tokenClient || driveTokenRefreshInProgress) return false;
+                driveTokenRefreshInProgress = true;
+                tokenClient.requestAccessToken({ prompt: forceConsent ? 'consent' : (drivePermissionGranted ? '' : 'consent') });
+                return true;
+            } catch (err) {
+                driveTokenRefreshInProgress = false;
+                console.warn('Drive token request failed:', err);
+                return false;
+            }
+        }
+
         function initGoogleDriveAuth() {
             if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
                 throw new Error('GOOGLE_IDENTITY_SERVICES_UNAVAILABLE');
@@ -3668,10 +3699,12 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 scope: DRIVE_SCOPE,
                 callback: async (response) => {
                     if (response.error || !response.access_token) {
+                        driveTokenRefreshInProgress = false;
                         console.error('Google OAuth error:', response);
                         showAppAlert('خطأ في صلاحية Google', 'لم يتم منح صلاحية Google Drive. اسمح للتطبيق بالوصول إلى Drive لتفعيل المزامنة التلقائية.');
                         return;
                     }
+                    driveTokenRefreshInProgress = false;
                     accessToken = response.access_token;
                     markDrivePermissionGranted(appUserKey);
                     await syncWithDrive();
@@ -3860,7 +3893,33 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         async function syncWithDrive() {
-            if (!accessToken) return false;
+            // الجهاز صاحب صلاحية التعديل فقط يستطيع الكتابة إلى Google Drive.
+            // الأجهزة الأخرى تعمل في وضع القراءة فقط، وتسحب أحدث نسخة دون رفع بياناتها.
+            if (typeof window.hasWriteAccess === 'function' && !window.hasWriteAccess()) {
+                if (!accessToken) return false;
+                try {
+                    const existing = await findDriveSyncFile();
+                    if (!existing?.id) return false;
+                    const remote = await readDriveSyncFile(existing.id);
+                    const localUpdatedAt = localStorage.getItem(userStorageKey('data_updated_at')) || window.localDataUpdatedAt || '';
+                    if (compareSyncDates(remote.updatedAt, localUpdatedAt) >= 0) {
+                        await applyRemoteSyncData(remote);
+                        setLastDriveBackupTime(new Date().toISOString());
+                        setDriveSyncPending(false);
+                        return true;
+                    }
+                    return false;
+                } catch (err) {
+                    console.warn('Read-only sync skipped:', err);
+                    return false;
+                }
+            }
+            // لا نسقط التعديل إذا لم يكن توكن Drive متاحًا الآن؛ يظل Pending
+            // وسيعاد تلقائيًا عند توفر التوكن أو عودة الإنترنت.
+            if (!accessToken) {
+                if (isDriveSyncPending()) requestDriveAccessToken(false);
+                return false;
+            }
             if (syncInProgress) {
                 syncQueued = true;
                 return false;
@@ -3878,6 +3937,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     if (!response.ok) throw new Error('DRIVE_CREATE_FAILED: ' + await getDriveError(response));
                     const created = await response.json().catch(() => ({}));
                     setLastDriveBackupTime(new Date().toISOString());
+                    setDriveSyncPending(false);
                     return !!created?.id;
                 }
 
@@ -3889,11 +3949,13 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     // السحابة أحدث: السحابة هي النسخة المعتمدة، ونستبدل المحلي بها بدون إنشاء تعديل جديد.
                     await applyRemoteSyncData(remotePayload);
                     setLastDriveBackupTime(new Date().toISOString());
+                    setDriveSyncPending(false);
                     return true;
                 }
 
                 if (comparison === 0) {
                     setLastDriveBackupTime(new Date().toISOString());
+                    setDriveSyncPending(false);
                     return true;
                 }
 
@@ -3908,15 +3970,18 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 if (remoteRevisionChanged && latestComparison <= 0) {
                     await applyRemoteSyncData(latestRemote);
                     setLastDriveBackupTime(new Date().toISOString());
+                    setDriveSyncPending(false);
                     return true;
                 }
                 if (latestComparison < 0) {
                     await applyRemoteSyncData(latestRemote);
                     setLastDriveBackupTime(new Date().toISOString());
+                    setDriveSyncPending(false);
                     return true;
                 }
                 if (latestComparison === 0) {
                     setLastDriveBackupTime(new Date().toISOString());
+                    setDriveSyncPending(false);
                     return true;
                 }
 
@@ -3929,6 +3994,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     if (conflictComparison < 0 || conflictComparison === 0) {
                         await applyRemoteSyncData(conflictRemote);
                         setLastDriveBackupTime(new Date().toISOString());
+                        setDriveSyncPending(false);
                         return true;
                     }
                     // الإصدار السحابي تغيّر، لكنه أقدم زمنيًا من تعديل الجهاز؛ نعتمد الإصدار
@@ -3963,12 +4029,14 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     await applyRemoteSyncData(verifiedRemote);
                 }
                 setLastDriveBackupTime(new Date().toISOString());
+                setDriveSyncPending(false);
                 return true;
             } catch (err) {
                 console.error('Google Drive sync error:', err);
                 const msg = String(err?.message || err);
                 if (msg.includes('DRIVE_UNAUTHORIZED')) {
                     accessToken = null;
+                    if (isDriveSyncPending()) requestDriveAccessToken(false);
                 } else if (msg.includes('DRIVE_SYNC_WRONG_USER')) {
                     showAppAlert('خطأ في حساب المزامنة', 'ملف المزامنة الموجود في Google Drive مرتبط بحساب مستخدم مختلف. لم يتم تغيير بياناتك المحلية.');
                 } else if (msg.includes('LOCAL_STORAGE_SYNC_FAILED')) {
@@ -4023,9 +4091,27 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         });
             window.addEventListener('resize', syncFixedContentOffsets);
         window.addEventListener('load', syncFixedContentOffsets);
-        window.addEventListener('online', () => { if (accessToken) syncWithDrive(); });
-        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && accessToken) syncWithDrive(); });
-        setInterval(() => { if (document.visibilityState === 'visible' && navigator.onLine && accessToken) syncWithDrive(); }, 30000);
+        window.addEventListener('online', () => {
+            const needsSync = isDriveSyncPending() || (typeof window.hasWriteAccess === 'function' && !window.hasWriteAccess());
+            if (needsSync) {
+                if (accessToken) syncWithDrive();
+                else requestDriveAccessToken(false);
+            }
+        });
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible') return;
+            const needsSync = isDriveSyncPending() || (typeof window.hasWriteAccess === 'function' && !window.hasWriteAccess());
+            if (!needsSync) return;
+            if (accessToken) syncWithDrive();
+            else requestDriveAccessToken(false);
+        });
+        setInterval(() => {
+            const readOnly = typeof window.hasWriteAccess === 'function' && !window.hasWriteAccess();
+            if (document.visibilityState === 'visible' && navigator.onLine && (isDriveSyncPending() || readOnly)) {
+                if (accessToken) syncWithDrive();
+                else requestDriveAccessToken(false);
+            }
+        }, 30000);
 
 </script>
 
@@ -4037,6 +4123,36 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 
+<script>
+// حماية وضع القراءة فقط: نمنع عمليات التعديل نفسها، وليس مجرد زر الحفظ.
+(function(){
+  const protectedFunctions = [
+    'deleteAllData','deleteGroup','deleteStudent','setGroupDayStatus','updateGroupDaySessionsCount',
+    'setStudentDayStatus','updateStudentEvalData','executeFullMonthPayment','executePartialMonthPayment',
+    'executeFullDebtPayment','executePartialDebtPayment','confirmResetNewMonth','saveGroup','saveStudent',
+    'recycleRestore','recycleDelete'
+  ];
+  function wrap(){
+    protectedFunctions.forEach(name=>{
+      const fn=window[name];
+      if(typeof fn!=='function' || fn.__writeAccessWrapped) return;
+      const wrapped=function(...args){
+        if(typeof window.ensureWriteAccess==='function' && !window.ensureWriteAccess()) return false;
+        return fn.apply(this,args);
+      };
+      wrapped.__writeAccessWrapped=true;
+      window[name]=wrapped;
+    });
+  }
+  wrap();
+  window.addEventListener('load', wrap);
+  document.addEventListener('click', function(e){
+    if(typeof window.hasWriteAccess!=='function' || window.hasWriteAccess()) return;
+    const btn=e.target.closest?.('[data-write-action="true"]');
+    if(btn){ e.preventDefault(); e.stopImmediatePropagation(); window.ensureWriteAccess(); }
+  }, true);
+})();
+</script>
 <style id="firebase-startup-guard">
 /* منع أي وميض لمحتوى التطبيق قبل اكتمال Firebase Auth */
 body.firebase-auth-pending > *:not(#authLoading) { visibility: hidden !important; }
@@ -4050,9 +4166,153 @@ document.body.classList.add('firebase-auth-pending');
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
 import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, runTransaction, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",storageBucket:"your-works-1aea7.firebasestorage.app",messagingSenderId:"1084540974820",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1",measurementId:"G-RYZPVNLKZQ"};
-const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider();
+const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider(),db=getFirestore(app);
 provider.addScope('https://www.googleapis.com/auth/drive.file');
+const SESSION_COLLECTION = 'app_active_sessions';
+const SESSION_LEASE_LABEL = 'write';
+let activeSessionUnsubscribe = null;
+let currentSessionUserId = null;
+let currentSessionId = '';
+let writeAccessGranted = false;
+let sessionOperationInProgress = false;
+
+function getSessionId(uid){
+  const key = 'app_write_session_' + (uid || 'guest');
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+      ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
+function updateWriteAccessUI(canWrite, message=''){
+  writeAccessGranted = !!canWrite;
+  document.body.classList.toggle('app-readonly', !writeAccessGranted);
+  const el = document.getElementById('writeAccessStatus');
+  if (el) {
+    el.className = writeAccessGranted ? 'writer' : 'readonly';
+    el.textContent = writeAccessGranted ? 'وضع التعديل: هذا الجهاز لديه صلاحية التعديل' : (message || 'وضع القراءة فقط: جهاز آخر لديه صلاحية التعديل');
+  }
+  document.querySelectorAll('[data-write-action="true"]').forEach(btn => {
+    btn.disabled = !writeAccessGranted;
+    btn.setAttribute('aria-disabled', String(!writeAccessGranted));
+  });
+}
+
+function hasWriteAccess(){ return writeAccessGranted; }
+window.hasWriteAccess = hasWriteAccess;
+window.ensureWriteAccess = function(){
+  if (writeAccessGranted) return true;
+  showAppAlert('وضع القراءة فقط', 'هذا الحساب قيد التعديل من جهاز آخر. يمكنك عرض البيانات، لكن لا يمكنك إجراء تعديلات حتى يتم تسجيل الخروج من الجهاز الآخر أو استخدام «تسجيل الخروج من جميع الأجهزة الأخرى».');
+  return false;
+};
+
+async function claimWriteSession(uid){
+  if (!uid) return false;
+  currentSessionUserId = uid;
+  currentSessionId = getSessionId(uid);
+  const ref = doc(db, SESSION_COLLECTION, uid);
+  try {
+    const result = await runTransaction(db, async transaction => {
+      const snap = await transaction.get(ref);
+      const data = snap.exists() ? snap.data() : null;
+      if (!data || !data.sessionId || data.sessionId === currentSessionId) {
+        transaction.set(ref, {
+          sessionId: currentSessionId,
+          uid,
+          mode: SESSION_LEASE_LABEL,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+        return true;
+      }
+      return false;
+    });
+    updateWriteAccessUI(result, result ? '' : 'وضع القراءة فقط: جهاز آخر لديه صلاحية التعديل');
+    return result;
+  } catch (err) {
+    console.error('Session lock error:', err);
+    updateWriteAccessUI(false, 'تعذر التحقق من صلاحية التعديل. تم تفعيل وضع القراءة فقط حفاظًا على البيانات.');
+    return false;
+  }
+}
+
+function watchWriteSession(uid){
+  if (activeSessionUnsubscribe) { activeSessionUnsubscribe(); activeSessionUnsubscribe = null; }
+  if (!uid) return;
+  currentSessionUserId = uid;
+  currentSessionId = getSessionId(uid);
+  const ref = doc(db, SESSION_COLLECTION, uid);
+  activeSessionUnsubscribe = onSnapshot(ref, snap => {
+    const data = snap.exists() ? snap.data() : null;
+    if (!data || !data.sessionId) {
+      updateWriteAccessUI(false, 'لا توجد جلسة تعديل نشطة. استخدم «تسجيل الخروج من جميع الأجهزة الأخرى» لبدء جلسة جديدة.');
+      return;
+    }
+    const mine = data.sessionId === currentSessionId;
+    updateWriteAccessUI(mine, mine ? '' : 'وضع القراءة فقط: جهاز آخر لديه صلاحية التعديل');
+  }, err => {
+    console.error('Session watcher error:', err);
+    updateWriteAccessUI(false, 'تعذر متابعة جلسة التعديل. تم تفعيل وضع القراءة فقط حفاظًا على البيانات.');
+  });
+}
+
+async function releaseWriteSession(uid){
+  if (!uid) return;
+  const ref = doc(db, SESSION_COLLECTION, uid);
+  try {
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(ref);
+      if (snap.exists() && snap.data()?.sessionId === currentSessionId) transaction.delete(ref);
+    });
+  } catch (err) { console.warn('Could not release write session:', err); }
+}
+
+async function logoutOtherDevices(){
+  if (!currentSessionUserId) return;
+  showAppConfirm('تسجيل الخروج من جميع الأجهزة الأخرى', 'سيتم إلغاء صلاحية التعديل على جميع الأجهزة الأخرى. الجهاز الحالي سيظل مسجلًا للدخول. هل أنت متأكد؟', async function(){
+    if (sessionOperationInProgress) return;
+    sessionOperationInProgress = true;
+    try {
+      const ref = doc(db, SESSION_COLLECTION, currentSessionUserId);
+      await setDoc(ref, { sessionId: currentSessionId, uid: currentSessionUserId, mode: SESSION_LEASE_LABEL, updatedAt: serverTimestamp() }, { merge: true });
+      updateWriteAccessUI(true);
+      // بعد الاستحواذ على صلاحية التعديل نقرأ النسخة الموجودة على Drive أولًا،
+      // حتى لا تُرفع نسخة محلية قديمة كانت موجودة على هذا الجهاز وهو Read Only.
+      if (accessToken && typeof findDriveSyncFile === 'function') {
+        try {
+          const existing = await findDriveSyncFile();
+          if (existing?.id) {
+            const remote = await readDriveSyncFile(existing.id);
+            await applyRemoteSyncData(remote);
+            setDriveSyncPending(false);
+            setLastDriveBackupTime(new Date().toISOString());
+          }
+        } catch (pullErr) {
+          console.warn('Could not refresh data after session takeover:', pullErr);
+        }
+      } else if (typeof requestDriveAccessToken === 'function' && !accessToken) {
+        requestDriveAccessToken(false);
+      }
+      showAppAlert('تم بنجاح', 'تم تسجيل الخروج من جميع الأجهزة الأخرى. هذا الجهاز أصبح صاحب صلاحية التعديل.');
+    } catch (err) {
+      console.error('Logout other devices error:', err);
+      showAppAlert('تعذر التنفيذ', 'لم نتمكن من تسجيل الخروج من الأجهزة الأخرى. تأكد من الاتصال بالإنترنت ثم حاول مرة أخرى.');
+    } finally { sessionOperationInProgress = false; }
+  });
+}
+window.logoutOtherDevices = logoutOtherDevices;
+
+function markSessionInactive(){
+  if (activeSessionUnsubscribe) { activeSessionUnsubscribe(); activeSessionUnsubscribe = null; }
+  currentSessionUserId = null;
+  currentSessionId = '';
+  updateWriteAccessUI(false, '');
+}
+
 window.firebaseDriveAuth=async function(){
   try{
     const r=await signInWithPopup(auth,provider);
@@ -4084,6 +4344,8 @@ if(user){
   window.pendingDriveAccessToken = null;
   switchAppUser(user.uid);
   if(typeof loadDrivePermissionState==='function') loadDrivePermissionState(user.uid);
+  const canWrite = await claimWriteSession(user.uid);
+  watchWriteSession(user.uid);
   if(authLoading) authLoading.hidden=true;
   document.body.classList.remove('firebase-auth-pending');
   document.documentElement.classList.remove('firebase-startup-pending');
@@ -4093,15 +4355,13 @@ if(user){
   setTimeout(()=>{
     try{
       if(accessToken){ syncWithDrive(); return; }
-      initGoogleDriveAuth();
-      if(tokenClient){
-        tokenClient.requestAccessToken({prompt: drivePermissionGranted ? '' : 'consent'});
-      }
+      requestDriveAccessToken(false);
     }catch(err){
       console.warn('Drive auto-sync permission skipped:', err);
     }
   }, 500);
 }else{
+  markSessionInactive();
   accessToken = null;
   window.pendingDriveAccessToken = null;
   switchAppUser('guest');
@@ -4112,7 +4372,7 @@ if(user){
   show();
 }
 }); window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>{
- showAppConfirm("هل تريد تسجيل الخروج ؟", "", function(){ signOut(auth); });
+ showAppConfirm("هل تريد تسجيل الخروج ؟", "", async function(){ await releaseWriteSession(currentSessionUserId); markSessionInactive(); await signOut(auth); });
 };
 </script>
 
@@ -4358,7 +4618,7 @@ function recycleDelete(i){
         inactivityTimer=setTimeout(()=>{
             const login=document.getElementById('loginScreen');
             if(login && login.hidden && window.firebaseAuth){
-                signOut(window.firebaseAuth);
+                if (typeof window.logoutFromGoogle === 'function') window.logoutFromGoogle();
             }
         }, inactivityLimit);
     }
