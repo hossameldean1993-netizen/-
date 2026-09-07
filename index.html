@@ -4083,31 +4083,57 @@ const loginScreen=document.getElementById('loginScreen'),googleLoginButton=docum
 function msg(x){if(loginMessage) loginMessage.textContent=x||''}
 function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')} function hide(){loginScreen.hidden=true;document.body.classList.remove('login-locked')}
 function friendly(e){const m={'auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google؛ سيتم فتح تسجيل الدخول بالطريقة البديلة.','auth/account-exists-with-different-credential':'هذا الحساب مرتبط بطريقة تسجيل دخول مختلفة.','auth/operation-not-allowed':'يجب تفعيل تسجيل الدخول بحساب Google من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول بحساب Google. تأكد من الإنترنت وإعدادات Firebase.'}
-async function loginWithGoogle(){try{const r=await signInWithPopup(auth,provider);return{user:r.user}}catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null}throw e}}
-googleLoginButton.addEventListener('click',async()=>{msg('جارٍ فتح تسجيل الدخول بحساب Google...');googleLoginButton.disabled=true;try{await loginWithGoogle()}catch(e){console.error('خطأ في Google:',e);msg(friendly(e))}finally{googleLoginButton.disabled=false}});
+let loginInProgress=false;
+async function loginWithGoogle(){
+  if(loginInProgress) return null;
+  loginInProgress=true;
+  try{
+    msg('جارٍ فتح تسجيل الدخول بحساب Google...');
+    const ua=navigator.userAgent||'';
+    const isAndroidWebView=/Android/i.test(ua)&&(/; wv\)/i.test(ua)||/Version\/4\.0/i.test(ua));
+    if(isAndroidWebView){
+      msg('جارٍ تحويلك إلى Google...');
+      await signInWithRedirect(auth,provider);
+      return null;
+    }
+    const r=await signInWithPopup(auth,provider);
+    return{user:r.user};
+  }catch(e){
+    if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'||e?.code==='auth/operation-not-supported-in-this-environment'){
+      msg('جارٍ تحويلك إلى Google لتسجيل الدخول...');
+      await signInWithRedirect(auth,provider);
+      return null;
+    }
+    throw e;
+  }finally{loginInProgress=false;}
+}
+googleLoginButton.addEventListener('click',async()=>{
+  if(loginInProgress) return;
+  googleLoginButton.disabled=true;
+  try{await loginWithGoogle()}catch(e){console.error('خطأ في Google:',e);msg(friendly(e));googleLoginButton.disabled=false;}
+});
 getRedirectResult(auth).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
 const authLoading=document.getElementById('authLoading');
 onAuthStateChanged(auth,user=>{
-if(user){ 
-  switchAppUser(user.uid);
-  if(typeof window.initCloudSync==='function') window.initCloudSync(user.uid);
-  if(authLoading) authLoading.hidden=true;
-  document.body.classList.remove('firebase-auth-pending');
-  document.documentElement.classList.remove('firebase-startup-pending');
-  hide();
-}else{
-  if(cloudSyncUnsubscribe){try{cloudSyncUnsubscribe();}catch(_){} cloudSyncUnsubscribe=null;}
-  cloudSyncReady=false;
-  cloudSyncUserUid=null;
-  switchAppUser('guest');
-  if(authLoading) authLoading.hidden=true;
-  document.body.classList.remove('firebase-auth-pending');
-  document.documentElement.classList.remove('firebase-startup-pending');
-  show();
-}
-}); window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>{
- showAppConfirm("هل تريد تسجيل الخروج ؟", "", function(){ signOut(auth); });
-};
+  if(user){
+    // لا ننتظر المزامنة السحابية حتى يظهر التطبيق بعد نجاح المصادقة.
+    switchAppUser(user.uid);
+    if(authLoading) authLoading.hidden=true;
+    document.body.classList.remove('firebase-auth-pending');
+    document.documentElement.classList.remove('firebase-startup-pending');
+    hide();
+    if(typeof window.initCloudSync==='function') window.initCloudSync(user.uid).catch(err=>console.error('Cloud sync init error:',err));
+  }else{
+    if(cloudSyncUnsubscribe){try{cloudSyncUnsubscribe();}catch(_){} cloudSyncUnsubscribe=null;}
+    cloudSyncReady=false;
+    cloudSyncUserUid=null;
+    switchAppUser('guest');
+    if(authLoading) authLoading.hidden=true;
+    document.body.classList.remove('firebase-auth-pending');
+    document.documentElement.classList.remove('firebase-startup-pending');
+    show();
+  }
+});
 </script>
 
 
