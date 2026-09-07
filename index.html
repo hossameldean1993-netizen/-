@@ -1082,14 +1082,13 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             <div class="settings-page-title">الإعدادات</div>
                 <div id="driveBackupStatus" class="drive-backup-status" aria-live="polite">
                     <span class="drive-backup-status-icon">☁️</span>
-                    <span><b>آخر نسخ احتياطي:</b> <span id="lastDriveBackupTime">لم يتم التحقق بعد</span></span>
+                    <span><b>حالة المزامنة السحابية:</b> <span id="lastDriveBackupTime">لم يتم التحقق بعد</span></span>
                 </div>
             <div class="control-buttons-wrapper">
                 <button class="btn-3d btn-red-3d settings-btn" onclick="openStartMonthModal()">بدء شهر جديد</button>
                 <button class="btn-3d btn-red-3d settings-btn" onclick="deleteAllData()">حذف جميع البيانات</button>
-                <button class="btn-3d settings-btn" onclick="startGoogleDriveBackup()">النسخ الاحتياطي إلى Google Drive</button>
+                <button class="btn-3d settings-btn" onclick="startCloudSyncNow()">مزامنة البيانات سحابيًا</button>
                 
-                <button class="btn-3d settings-btn" onclick="triggerRestoreFileInput()">استعادة النسخة الاحتياطية</button>
                 <button class="btn-3d settings-btn" onclick="exportPDFReport()">تصدير PDF</button>
                 <button class="btn-3d settings-btn" onclick="openRecycleBin()">سلة المحذوفات</button>
                 <button class="btn-3d btn-full" onclick="toggleTheme()" id="themeToggleText">
@@ -1429,7 +1428,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             } else if (pageId === 'page6') {
                 document.getElementById('navAccounts').classList.add('active');
             } else if (pageId === 'page7') {
-                loadSavedDriveBackupTime();
+                loadCloudSyncState();
                 refreshDriveBackupStatus();
                 document.getElementById('navSettings').classList.add('active');
             }
@@ -1914,7 +1913,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 localStorage.setItem(userStorageKey('teacher_students_local'), studentsJson);
             } catch (err) {
                 console.error('Save data error:', err);
-                showAppAlert('تعذر حفظ البيانات', 'مساحة التخزين في الهاتف ممتلئة أو غير متاحة. بياناتك الحالية لم تُحذف من الذاكرة. يُفضّل عمل نسخة احتياطية ثم تحرير مساحة.');
+                showAppAlert('تعذر حفظ البيانات', 'مساحة التخزين في الهاتف ممتلئة أو غير متاحة. بياناتك الحالية لم تُحذف من الذاكرة. يُفضّل الاتصال بالسحابة عند عودة الإنترنت ثم إعادة المزامنة.');
                 return false;
             }
             calculateSummaryTotals();
@@ -1975,32 +1974,17 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             }
             if (document.getElementById('page6').classList.contains('active')) renderFinancialLists();
 
-            // نسخ احتياطي تلقائي بعد أي عملية حفظ ناجحة
-            scheduleAutoDriveBackup();
+            // مزامنة سحابية تلقائية بعد أي عملية حفظ ناجحة. localStorage يبقى ذاكرة مؤقتة فقط للعمل دون إنترنت.
+            if (typeof scheduleCloudSync === 'function') scheduleCloudSync();
             return true;
         }
 
-        let autoDriveBackupTimer = null;
-
-        function scheduleAutoDriveBackup() {
-            if (autoDriveBackupTimer) clearTimeout(autoDriveBackupTimer);
-            autoDriveBackupTimer = setTimeout(async () => {
-                try {
-                    if (typeof uploadBackupToDrive !== 'function') return;
-                    if (typeof accessToken !== 'undefined' && accessToken) {
-                        await uploadBackupToDrive();
-                        return;
-                    }
-                    // إذا كانت صلاحية Drive ممنوحة سابقًا، جدّد الرمز بصمت عند الحاجة
-                    // حتى يستمر النسخ التلقائي بعد انتهاء صلاحية الرمز الحالي.
-                    if (drivePermissionGranted && typeof initGoogleDriveAuth === 'function') {
-                        initGoogleDriveAuth();
-                        if (tokenClient) tokenClient.requestAccessToken({ prompt: '' });
-                    }
-                } catch (err) {
-                    console.warn('Auto backup skipped:', err);
-                }
-            }, 3000);
+        let cloudSyncTimer = null;
+        function scheduleCloudSync() {
+            if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
+            cloudSyncTimer = setTimeout(() => {
+                if (typeof window.startCloudSync === 'function') window.startCloudSync({silent:true});
+            }, 1200);
         }
 
         function generateDatesForGroup(day1Name, day2Name, startDateStr, defaultStatus = 'present', day3Name = '', day4Name = '', ...extraDayNames) {
@@ -2438,26 +2422,21 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             return false;
         }
 
-        function getCollectedPaymentsTotal(obj, type) {
+        function getCollectedPaymentsTotal(obj) {
             const currentMonthKey = getCollectionMonthKey();
             return getPaymentHistory(obj).reduce((sum, item) => {
-                if (item && item.monthKey === currentMonthKey && (!type || item.type === type)) {
+                if (item && item.monthKey === currentMonthKey) {
                     return sum + Math.max(0, parseFloat(item.amount) || 0);
                 }
                 return sum;
             }, 0);
         }
 
-        // المبلغ المحصل من الشهر الحالي فقط، مستقل تمامًا عن تحصيل المتأخرات.
-        function getCurrentMonthPaymentAmount(obj) {
-            return getCollectedPaymentsTotal(obj, 'month');
-        }
-
         // مصدر موحد للحسابات المالية: كل الواجهات تعتمد على نفس القيم بدل إعادة حسابها كل مرة.
         function getFinancialMetrics(obj, type) {
             const empty = {
                 sessions: 0, monthMoney: 0, previousDebt: 0, totalRequired: 0,
-                monthPaid: false, debtPaid: false, collectedAmount: 0, monthPaidAmount: 0,
+                monthPaid: false, debtPaid: false, collectedAmount: 0,
                 unpaidMonth: 0, unpaidDebt: 0, isFullyPaid: true, hasDebt: false, isUnpaid: false
             };
             if (!obj) return empty;
@@ -2466,35 +2445,21 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const price = Math.max(0, parseFloat(obj.price) || 0);
             const monthMoney = sessions * price;
             const previousDebt = Math.max(0, parseFloat(obj.previousDebt) || 0);
-            const monthPaidAmount = Math.min(monthMoney, getCurrentMonthPaymentAmount(obj));
-            const monthPaid = monthMoney === 0 || monthPaidAmount >= monthMoney;
-            const debtPaid = !!obj.isDebtPaid || previousDebt === 0;
-            const unpaidMonth = Math.max(0, monthMoney - monthPaidAmount);
+            const monthPaidFlag = isGroup ? !!obj.isMonthPaid : !!obj.isPaid;
+            const debtPaidFlag = !!obj.isDebtPaid;
+            const monthPaid = monthPaidFlag || monthMoney === 0;
+            const debtPaid = debtPaidFlag || previousDebt === 0;
+            const unpaidMonth = monthPaid ? 0 : monthMoney;
             const unpaidDebt = debtPaid ? 0 : previousDebt;
             const totalRequired = unpaidMonth + unpaidDebt;
             const collectedAmount = getCollectedPaymentsTotal(obj);
             return {
                 sessions, monthMoney, previousDebt, totalRequired,
-                monthPaid, debtPaid, collectedAmount, monthPaidAmount, unpaidMonth, unpaidDebt,
+                monthPaid, debtPaid, collectedAmount, unpaidMonth, unpaidDebt,
                 isFullyPaid: totalRequired === 0,
                 hasDebt: unpaidDebt > 0,
                 isUnpaid: totalRequired > 0
             };
-        }
-
-        // تسجيل دفعة للشهر الحالي، كاملة أو جزئية، مع منع تجاوز المبلغ المستحق.
-        function recordMonthPayment(obj, amount, type) {
-            if (!obj) return false;
-            const metrics = getFinancialMetrics(obj, type);
-            const remaining = Math.max(0, metrics.monthMoney - metrics.monthPaidAmount);
-            const payment = Math.max(0, parseFloat(amount) || 0);
-            if (payment <= 0 || remaining <= 0) return false;
-            const actualPayment = Math.min(payment, remaining);
-            addCollectedPayment(obj, actualPayment, 'month');
-            const paidNow = metrics.monthPaidAmount + actualPayment >= metrics.monthMoney;
-            if (type === 'group') obj.isMonthPaid = paidNow;
-            else obj.isPaid = paidNow;
-            return true;
         }
 
         function calculateSummaryTotals() {
@@ -2692,7 +2657,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <div class="financial-divider"></div>
                 <div class="financial-total-required">إجمالي المطلوب في الشهر: <strong>${totalRequired} ج</strong></div>
                 <div class="financial-payment-actions">
-                    <div class="payment-toggle"><span>حساب الشهر الحالي (${monthMoney} ج) — المتبقي ${financial.unpaidMonth} ج:</span><button class="pay-btn ${monthPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentMonthFn}">${monthPaid ? 'تم دفع الشهر بالكامل' : (financial.monthPaidAmount > 0 ? 'استكمال دفع الشهر' : 'دفع الشهر الحالي')}</button></div>
+                    <div class="payment-toggle"><span>حساب الشهر الحالي (${monthMoney} ج):</span><button class="pay-btn ${monthPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentMonthFn}">${monthPaid ? 'تم دفع الشهر' : 'دفع الشهر الحالي'}</button></div>
                     ${hasDebt ? `<div class="payment-toggle"><span>تسوية المتأخرات (${previousDebt} ج):</span><button class="pay-btn ${debtPaid ? 'is-paid' : 'not-paid'}" onclick="${paymentDebtFn}">${debtPaid ? 'تم دفع المتأخرات' : 'دفع المتأخرات'}</button></div>` : ''}
                 </div>
             </div>`;
@@ -3228,127 +3193,29 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         function setMonthPaymentState(obj, type, paid) {
             if (!obj) return;
             const metrics = getFinancialMetrics(obj, type);
+            const currentPaid = metrics.monthPaid;
+            if (paid === currentPaid) return;
+
             if (paid) {
-                recordMonthPayment(obj, metrics.monthMoney - metrics.monthPaidAmount, type);
-            } else {
-                // لا نحذف أي تحصيل سابق؛ الدفع الجزئي يجب أن يبقى محفوظًا كسجل مالي صحيح.
-                const currentAmount = getCurrentMonthPaymentAmount(obj);
-                if (currentAmount > 0) {
-                    const history = getPaymentHistoryForWrite(obj);
-                    const currentMonthKey = getCollectionMonthKey();
-                    for (let i = history.length - 1; i >= 0; i--) {
-                        const item = history[i];
-                        if (item && item.monthKey === currentMonthKey && item.type === 'month') history.splice(i, 1);
-                    }
+                if (metrics.monthMoney > 0) {
+                    // منع وجود أكثر من عملية تحصيل للشهر الحالي عند إعادة التسجيل.
+                    removeCurrentMonthPayment(obj, 'month');
+                    addCollectedPayment(obj, metrics.monthMoney, 'month');
                 }
-                if (type === 'group') obj.isMonthPaid = false;
-                else obj.isPaid = false;
+            } else {
+                // الإلغاء لا يعتمد على مبلغ قديم؛ هذا يمنع انفصال السجل عن الحساب بعد تعديل السعر/الحصص.
+                removeCurrentMonthPayment(obj, 'month');
             }
-        }
 
-        function openMonthPaymentDialog(type, index, event) {
-            if (event) event.stopPropagation();
-            const obj = type === 'group' ? groups[index] : students[index];
-            if (!obj) return;
-            const metrics = getFinancialMetrics(obj, type);
-            const remaining = metrics.unpaidMonth;
-            if (remaining <= 0) return;
-
-            window.pendingMonthPayment = { type, index };
-            document.getElementById('appDialogTitle').innerText = 'دفع حساب الشهر';
-            document.getElementById('appDialogMsg').innerText =
-                `المتبقي من حساب الشهر: ${remaining} ج. اختر طريقة السداد: دفع الشهر بالكامل أو دفع جزء منه.`;
-            document.getElementById('appDialogActions').innerHTML = `
-                <button type="button" class="btn-3d btn-red-3d" onclick="confirmFullMonthPayment()">دفع الشهر بالكامل</button>
-                <button type="button" class="btn-3d" onclick="openPartialMonthPayment()">دفع جزئي</button>
-                <button type="button" class="btn-3d" onclick="closeAppDialog()">إلغاء</button>
-            `;
-            document.getElementById('appDialogModal').style.display = 'flex';
-        }
-
-        function confirmFullMonthPayment() {
-            const pending = window.pendingMonthPayment;
-            if (!pending) return;
-            const obj = pending.type === 'group' ? groups[pending.index] : students[pending.index];
-            if (!obj) return;
-            const metrics = getFinancialMetrics(obj, pending.type);
-            const remaining = metrics.unpaidMonth;
-            document.getElementById('appDialogTitle').innerText = 'تأكيد دفع الشهر بالكامل';
-            document.getElementById('appDialogMsg').innerText =
-                `سيتم تسجيل سداد المتبقي من حساب الشهر بالكامل (${remaining} ج). هل تريد الاستمرار؟`;
-            document.getElementById('appDialogActions').innerHTML = `
-                <button type="button" class="btn-3d btn-red-3d" onclick="executeFullMonthPayment()">نعم، دفع بالكامل</button>
-                <button type="button" class="btn-3d" onclick="openMonthPaymentDialog('${pending.type}', ${pending.index})">رجوع</button>
-            `;
-        }
-
-        function executeFullMonthPayment() {
-            const pending = window.pendingMonthPayment;
-            if (!pending) return;
-            const obj = pending.type === 'group' ? groups[pending.index] : students[pending.index];
-            if (!obj) return;
-            const metrics = getFinancialMetrics(obj, pending.type);
-            const amount = metrics.unpaidMonth;
-            if (amount <= 0 || !recordMonthPayment(obj, amount, pending.type)) return;
-            window.pendingMonthPayment = null;
-            saveData();
-            closeAppDialog();
-            if (pending.type === 'group') renderGroupDetail(pending.index);
-            else renderStudentDetail(pending.index);
-            renderFinancialLists();
-            showAppAlert('تم سداد الشهر', 'تم دفع حساب الشهر بالكامل.');
-        }
-
-        function openPartialMonthPayment() {
-            const pending = window.pendingMonthPayment;
-            if (!pending) return;
-            const obj = pending.type === 'group' ? groups[pending.index] : students[pending.index];
-            if (!obj) return;
-            const remaining = getFinancialMetrics(obj, pending.type).unpaidMonth;
-            document.getElementById('appDialogTitle').innerText = 'دفع جزئي للشهر';
-            document.getElementById('appDialogMsg').innerHTML = `
-                <div>المبلغ المتبقي من حساب الشهر: <strong>${remaining} ج</strong></div>
-                <div style="margin-top:8px;">أدخل الجزء المراد دفعه فقط:</div>
-                <input id="partialMonthPaymentAmount" class="debt-payment-input" type="number" min="0.01" max="${remaining}" step="0.01" inputmode="decimal" placeholder="المبلغ المدفوع">
-            `;
-            document.getElementById('appDialogActions').innerHTML = `
-                <button type="button" class="btn-3d btn-red-3d" onclick="executePartialMonthPayment()">دفع الجزء</button>
-                <button type="button" class="btn-3d" onclick="openMonthPaymentDialog('${pending.type}', ${pending.index})">رجوع</button>
-            `;
-            const input = document.getElementById('partialMonthPaymentAmount');
-            if (input) input.focus();
-        }
-
-        function executePartialMonthPayment() {
-            const pending = window.pendingMonthPayment;
-            const input = document.getElementById('partialMonthPaymentAmount');
-            if (!pending || !input) return;
-            const obj = pending.type === 'group' ? groups[pending.index] : students[pending.index];
-            if (!obj) return;
-            const remaining = getFinancialMetrics(obj, pending.type).unpaidMonth;
-            const amount = parseFloat(input.value);
-            if (!Number.isFinite(amount) || amount <= 0) {
-                showAppAlert('مبلغ غير صحيح', 'أدخل مبلغًا أكبر من صفر.');
-                return;
-            }
-            if (amount >= remaining) {
-                showAppAlert('استخدم الدفع الكامل', 'هذا المبلغ يساوي أو يتجاوز المتبقي من الشهر. اختر «دفع الشهر بالكامل».');
-                return;
-            }
-            if (!recordMonthPayment(obj, amount, pending.type)) return;
-            window.pendingMonthPayment = null;
-            saveData();
-            closeAppDialog();
-            if (pending.type === 'group') renderGroupDetail(pending.index);
-            else renderStudentDetail(pending.index);
-            renderFinancialLists();
-            showAppAlert('تم الدفع الجزئي', `تم تسجيل دفع ${amount} ج، والمتبقي من حساب الشهر ${Math.max(0, getFinancialMetrics(obj, pending.type).unpaidMonth)} ج.`);
+            if (type === 'group') obj.isMonthPaid = paid;
+            else obj.isPaid = paid;
         }
 
         function toggleStudentPayment(idx) {
             const student = students[idx];
             if (!student) return;
-            openMonthPaymentDialog('student', idx);
+            setMonthPaymentState(student, 'student', !getFinancialMetrics(student, 'student').monthPaid);
+            saveData();
         }
 
         // التحقق من طول رقم الهاتف: التنبيه فقط، بدون منع الحفظ أو تعديل الرقم.
@@ -3444,7 +3311,11 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function toggleMonthPayment(index, event) {
-            openMonthPaymentDialog('group', index, event);
+            if (event) event.stopPropagation();
+            const group = groups[index];
+            if (!group) return;
+            setMonthPaymentState(group, 'group', !getFinancialMetrics(group, 'group').monthPaid);
+            saveData();
         }
 
         function openStartMonthModal() {
@@ -3480,8 +3351,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 
                     ensureDebtHistory(group);
                     const groupFinancial = getFinancialMetrics(group, 'group');
-                    if (groupFinancial.unpaidMonth > 0) {
-                        addPreviousDebtEntry(group, 1, groupFinancial.unpaidMonth, `متأخرات ${group.monthKey || 'الشهر السابق'}`);
+                    if (!groupFinancial.monthPaid) {
+                        const totalSessions = groupFinancial.sessions;
+                        addPreviousDebtEntry(group, totalSessions, group.price, `متأخرات ${group.monthKey || 'الشهر السابق'}`);
                     }
 
                     // تثبيت الأيام والوقت، ثم توليد تواريخ الشهر الجديد على نفس أيام الأسبوع.
@@ -3502,8 +3374,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 
                     ensureDebtHistory(student);
                     const studentFinancial = getFinancialMetrics(student, 'student');
-                    if (studentFinancial.unpaidMonth > 0) {
-                        addPreviousDebtEntry(student, 1, studentFinancial.unpaidMonth, `متأخرات ${student.monthKey || 'الشهر السابق'}`);
+                    if (!studentFinancial.monthPaid) {
+                        const totalSessions = studentFinancial.sessions;
+                        addPreviousDebtEntry(student, totalSessions, student.price, `متأخرات ${student.monthKey || 'الشهر السابق'}`);
                     }
 
                     student.scheduleDays = [...scheduleDays];
@@ -3598,289 +3471,237 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 
         // ==================== النسخ الاحتياطي إلى Google Drive ====================
         // Google Identity Services - مناسب للـ PWA/المتصفح
-        const CLIENT_ID = '310650752416-dskh559v6u5vjbc2jih585o35ola5a2p.apps.googleusercontent.com';
-        const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-        let tokenClient = null;
-        let accessToken = null;
-        let backupInProgress = false;
-        let drivePermissionGranted = false;
+        // =========================
+        // المزامنة السحابية الحقيقية عبر Firebase Firestore
+        // =========================
+        // لا توجد هنا عملية Backup/Restore تستبدل البيانات.
+        // localStorage مجرد ذاكرة مؤقتة للعمل دون اتصال، بينما Firestore هو المصدر السحابي للحساب.
+        let cloudSyncReady = false;
+        let cloudSyncApplying = false;
+        let cloudSyncWriting = false;
+        let cloudSyncUserUid = null;
+        let cloudSyncUnsubscribe = null;
+        let cloudSyncPending = false;
+        let cloudSyncBase = {groups: [], students: [], recycle_bin: []};
 
-        function getDrivePermissionKey(uid) {
-            return 'drive_permission_granted_' + (uid || 'guest');
+        function cloneCloudData(data) {
+            try { return JSON.parse(JSON.stringify(data)); } catch (_) { return {groups:[],students:[],recycle_bin:[]}; }
         }
 
-        function loadDrivePermissionState(uid) {
-            drivePermissionGranted = uid ? localStorage.getItem(getDrivePermissionKey(uid)) === 'true' : false;
-            return drivePermissionGranted;
+        function getLocalCloudData() {
+            return {
+                groups: cloneCloudData(groups),
+                students: cloneCloudData(students),
+                recycle_bin: (typeof recycleGet === 'function' ? cloneCloudData(recycleGet()) : [])
+            };
         }
 
-        function markDrivePermissionGranted(uid) {
-            drivePermissionGranted = true;
-            if (uid) localStorage.setItem(getDrivePermissionKey(uid), 'true');
-        }
-
-        function initGoogleDriveAuth() {
-            if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
-                throw new Error('GOOGLE_IDENTITY_SERVICES_UNAVAILABLE');
-            }
-            if (tokenClient) return;
-            tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID,
-                scope: DRIVE_SCOPE,
-                callback: async (response) => {
-                    if (response.error || !response.access_token) {
-                        console.error('Google OAuth error:', response);
-                        showAppAlert('خطأ في صلاحية Google', 'لم يتم منح صلاحية Google Drive. تأكد من السماح للتطبيق بالوصول إلى Drive ثم حاول مرة أخرى.');
-                        return;
-                    }
-                    accessToken = response.access_token;
-                    markDrivePermissionGranted(appUserKey);
-                    await uploadBackupToDrive();
-                }
+        function normalizeCloudData(data) {
+            const normalized = normalizeImportedData({
+                groups: Array.isArray(data?.groups) ? data.groups : [],
+                students: Array.isArray(data?.students) ? data.students : []
             });
+            if (!normalized) return {groups:[], students:[], recycle_bin:[]};
+            return {
+                groups: normalized.groups || [],
+                students: normalized.students || [],
+                recycle_bin: Array.isArray(data?.recycle_bin) ? data.recycle_bin : []
+            };
         }
 
-        async function startGoogleDriveBackup() {
-            if (backupInProgress) return;
+        function cloudObjectKey(item, index) {
+            if (item && item.id !== undefined && item.id !== null) return 'id:' + String(item.id);
+            if (item && item.studentId) return 'studentId:' + String(item.studentId);
+            return 'index:' + index;
+        }
+
+        function mergeCloudArrays(baseArr, localArr, cloudArr) {
+            const baseMap = new Map((Array.isArray(baseArr) ? baseArr : []).map((x,i)=>[cloudObjectKey(x,i), x]));
+            const localMap = new Map((Array.isArray(localArr) ? localArr : []).map((x,i)=>[cloudObjectKey(x,i), x]));
+            const cloudMap = new Map((Array.isArray(cloudArr) ? cloudArr : []).map((x,i)=>[cloudObjectKey(x,i), x]));
+            const keys = new Set([...baseMap.keys(), ...localMap.keys(), ...cloudMap.keys()]);
+            const result = [];
+            for (const key of keys) {
+                const base = baseMap.get(key);
+                const local = localMap.get(key);
+                const cloud = cloudMap.get(key);
+                if (!base) {
+                    if (local !== undefined) result.push(local);
+                    else if (cloud !== undefined) result.push(cloud);
+                    continue;
+                }
+                if (local === undefined && cloud === undefined) continue;
+                if (local === undefined) { result.push(cloud); continue; }
+                if (cloud === undefined) { result.push(local); continue; }
+                const baseJson = JSON.stringify(base);
+                const localJson = JSON.stringify(local);
+                const cloudJson = JSON.stringify(cloud);
+                if (localJson === baseJson) result.push(cloud);
+                else if (cloudJson === baseJson) result.push(local);
+                else if (localJson === cloudJson) result.push(local);
+                else result.push(local);
+            }
+            return result;
+        }
+
+        function mergeCloudData(localData, cloudData) {
+            return {
+                groups: mergeCloudArrays(cloudSyncBase.groups, localData.groups, cloudData.groups),
+                students: mergeCloudArrays(cloudSyncBase.students, localData.students, cloudData.students),
+                recycle_bin: mergeCloudArrays(cloudSyncBase.recycle_bin, localData.recycle_bin, cloudData.recycle_bin)
+            };
+        }
+
+        function persistLocalCloudData(data) {
+            groups = data.groups || [];
+            students = data.students || [];
+            if (typeof recycleSave === 'function') recycleSave(data.recycle_bin || []);
+            dataNormalizationDone = false;
+            ensureStudentIds();
             try {
-                initGoogleDriveAuth();
-                if (accessToken) {
-                    await uploadBackupToDrive();
-                    return;
-                }
-                // Google يرفض الطلب قبل ظهور نافذة الاختيار إذا كان Origin غير مسجل.
-                // في هذه الحالة نستخدم حساب Google المرتبط بـ Firebase كمسار احتياطي للـPWA.
-                try {
-                    // طلب الإذن مرة واحدة فقط طوال استخدام البرنامج
-                tokenClient.requestAccessToken({ prompt: drivePermissionGranted ? '' : 'consent' });
-                } catch (err) {
-                    console.error('Google GIS request error:', err);
-                    if (window.firebaseDriveAuth) {
-                        const fallbackToken = await window.firebaseDriveAuth();
-                        if (fallbackToken) {
-                            accessToken = fallbackToken;
-                            await uploadBackupToDrive();
-                            return;
-                        }
-                    }
-                    throw err;
-                }
-            } catch (err) {
-                console.error('Google Drive auth init error:', err);
-                const origin = location.origin || (location.protocol + '//' + location.host);
-                if (String(err?.message || '').toLowerCase().includes('origin') || String(err?.error || '').toLowerCase().includes('origin')) {
-                    showAppAlert('Google رفض الاتصال', 'خطأ 400: origin_mismatch\n\nأصل التطبيق الحالي هو:\n' + origin + '\n\nأضف هذا العنوان في Google Cloud ضمن Authorized JavaScript origins لنفس Client ID.');
-                } else {
-                    showAppAlert('تعذر تشغيل Google Drive', 'تعذر الحصول على صلاحية Google Drive. تأكد من اتصال الإنترنت وإعداد OAuth ثم حاول مرة أخرى.');
-                }
-            }
+                localStorage.setItem(userStorageKey('teacher_groups_local'), JSON.stringify(groups));
+                localStorage.setItem(userStorageKey('teacher_students_local'), JSON.stringify(students));
+            } catch (err) { console.error('Cloud local cache error:', err); }
+            selectedGroupIndex = null;
+            selectedStudentIndex = null;
+            calculateSummaryTotals();
+            renderTodaySessions();
+            renderMiniCards();
+            renderStudentMiniCards();
+            if (document.getElementById('page6')?.classList.contains('active')) renderFinancialLists();
         }
 
-        async function driveFetch(url, options = {}) {
-            if (!accessToken) throw new Error('NO_DRIVE_TOKEN');
-            const response = await fetch(url, {
-                ...options,
-                headers: {
-                    ...(options.headers || {}),
-                    'Authorization': `Bearer ${accessToken}`
-                }
-            });
-            if (response.status === 401) {
-                accessToken = null;
-                throw new Error('DRIVE_UNAUTHORIZED');
-            }
-            return response;
-        }
-
-        async function getDriveError(response) {
-            let body = '';
-            try { body = await response.text(); } catch (_) {}
-            let message = '';
-            try { message = JSON.parse(body)?.error?.message || ''; } catch (_) {}
-            return `HTTP ${response.status}${message ? `: ${message}` : ''}`;
-        }
-
-        async function findDriveBackupFile(fileName = null) {
-            const q = fileName
-                ? `name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`
-                : "name contains 'backup_drosak_' and trashed = false";
-            const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
-                '&spaces=drive&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime desc&pageSize=100';
-            const response = await driveFetch(url);
-            if (!response.ok) throw new Error('DRIVE_LIST_FAILED: ' + await getDriveError(response));
-            const data = await response.json();
-            const files = Array.isArray(data.files) ? data.files : [];
-            if (fileName) return files.find(f => f.name === fileName) || null;
-            return files.find(f => /^backup_drosak_\d{4}-\d{2}-\d{2}\.json$/i.test(f.name)) || null;
-        }
-
-        function formatDriveBackupTime(dateValue) {
-            if (!dateValue) return 'لم يتم العثور على نسخة احتياطية';
-            const d = new Date(dateValue);
-            if (Number.isNaN(d.getTime())) return 'غير معروف';
-            return d.toLocaleString('ar-EG', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-            });
-        }
-
-        function setLastDriveBackupTime(dateValue) {
+        function cloudSyncStatus(text) {
             const el = document.getElementById('lastDriveBackupTime');
-            if (el) el.textContent = formatDriveBackupTime(dateValue);
-            if (dateValue) localStorage.setItem('last_drive_backup_time', dateValue);
+            if (el) el.textContent = text;
         }
 
-        function loadSavedDriveBackupTime() {
-            const saved = localStorage.getItem('last_drive_backup_time');
-            const el = document.getElementById('lastDriveBackupTime');
-            if (el && saved) el.textContent = formatDriveBackupTime(saved);
-        }
-
-        async function refreshDriveBackupStatus() {
-            loadSavedDriveBackupTime();
-            if (!accessToken || typeof findDriveBackupFile !== 'function') return;
+        function saveCloudSyncState() {
             try {
-                const existing = await findDriveBackupFile();
-                if (existing?.modifiedTime) {
-                    setLastDriveBackupTime(existing.modifiedTime);
-                } else {
-                    const el = document.getElementById('lastDriveBackupTime');
-                    if (el && !localStorage.getItem('last_drive_backup_time')) {
-                        el.textContent = 'لا توجد نسخة احتياطية';
-                    }
-                }
-            } catch (err) {
-                console.warn('Could not refresh Drive backup status:', err);
+                localStorage.setItem(userStorageKey('cloud_sync_pending'), cloudSyncPending ? '1' : '0');
+                localStorage.setItem(userStorageKey('cloud_sync_base'), JSON.stringify(cloudSyncBase));
+            } catch (_) {}
+        }
+
+        function loadCloudSyncState() {
+            try {
+                cloudSyncPending = localStorage.getItem(userStorageKey('cloud_sync_pending')) === '1';
+                const raw = localStorage.getItem(userStorageKey('cloud_sync_base'));
+                cloudSyncBase = raw ? normalizeCloudData(JSON.parse(raw)) : {groups:[],students:[],recycle_bin:[]};
+            } catch (_) {
+                cloudSyncPending = false;
+                cloudSyncBase = {groups:[],students:[],recycle_bin:[]};
             }
         }
 
-        async function uploadBackupToDrive() {
-            if (!accessToken || backupInProgress) return false;
-            backupInProgress = true;
+        async function writeCloudData(silent=false) {
+            if (!cloudSyncReady || !window.cloudFirestoreSetDoc || !cloudSyncUserUid || cloudSyncWriting) return false;
+            cloudSyncWriting = true;
             try {
-                const backupData = {
-                    teacher_groups_local: JSON.parse(localStorage.getItem(userStorageKey('teacher_groups_local')) || '[]'),
-                    teacher_students_local: JSON.parse(localStorage.getItem(userStorageKey('teacher_students_local')) || '[]')
-                };
-                const fileName = `backup_drosak_${new Date().toISOString().slice(0,10)}.json`;
-                const fileContent = JSON.stringify(backupData, null, 2);
-                const existing = await findDriveBackupFile(fileName);
-                let response;
-
-                if (existing?.id) {
-                    // تحديث محتوى النسخة الموجودة اليوم فقط.
-                    response = await driveFetch(
-                        'https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(existing.id) + '?uploadType=media',
-                        {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: fileContent
-                        }
-                    );
-                } else {
-                    // إنشاء الملف كملف JSON في Drive.
-                    const form = new FormData();
-                    form.append('metadata', new Blob([
-                        JSON.stringify({name: fileName, mimeType: 'application/json'})
-                    ], {type: 'application/json'}));
-                    form.append('file', new Blob([fileContent], {type: 'application/json'}));
-                    response = await driveFetch(
-                        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
-                        {method: 'POST', body: form}
-                    );
-                }
-
-                if (!response.ok) {
-                    const detail = await getDriveError(response);
-                    console.error('Google Drive upload error:', detail);
-                    showAppAlert('فشل النسخ الاحتياطي',
-                        response.status === 403
-                            ? 'Google رفض العملية (403). غالبًا Google Drive API غير مفعّل أو صلاحية Drive غير مضافة لهذا العميل.'
-                            : `تعذر رفع النسخة إلى Google Drive. ${detail}`
-                    );
-                    return false;
-                }
-
-                const backupCompletedAt = new Date().toISOString();
-                setLastDriveBackupTime(backupCompletedAt);
-                showAppAlert('تم النسخ الاحتياطي', 'تم حفظ النسخة الاحتياطية بنجاح داخل Google Drive.');
+                const data = getLocalCloudData();
+                await window.cloudFirestoreSetDoc(data);
+                cloudSyncBase = cloneCloudData(data);
+                cloudSyncPending = false;
+                saveCloudSyncState();
+                cloudSyncStatus('متزامنة مع السحابة');
                 return true;
             } catch (err) {
-                console.error('Google Drive backup error:', err);
-                const msg = String(err?.message || err);
-                if (msg.includes('DRIVE_UNAUTHORIZED')) {
-                    showAppAlert('انتهت صلاحية Google Drive', 'اضغط النسخ الاحتياطي مرة أخرى لمنح الصلاحية من جديد.');
-                } else if (msg.includes('DRIVE_LIST_FAILED')) {
-                    showAppAlert('تعذر الوصول إلى Google Drive', 'تعذر قراءة ملفات Drive. تأكد من تفعيل Google Drive API ومنح التطبيق صلاحية Drive.');
-                } else {
-                    showAppAlert('خطأ أثناء الرفع', 'حدث خطأ أثناء رفع النسخة الاحتياطية إلى Google Drive. افتح التطبيق من HTTPS وتأكد من اتصال الإنترنت.');
-                }
+                console.error('Cloud sync write error:', err);
+                cloudSyncPending = true;
+                saveCloudSyncState();
+                cloudSyncStatus('غير متصلة — البيانات محفوظة محليًا مؤقتًا');
+                if (!silent) showAppAlert('تعذر المزامنة', 'تعذر رفع آخر تعديلات إلى السحابة الآن. لن يتم حذف بياناتك، وستتم المحاولة تلقائيًا عند عودة الاتصال.');
                 return false;
-            } finally {
-                backupInProgress = false;
-            }
+            } finally { cloudSyncWriting = false; }
         }
 
-        async function triggerRestoreFileInput() {
-            if (backupInProgress) return;
+        async function startCloudSync(options={}) {
+            if (!cloudSyncReady || !cloudSyncUserUid || !window.cloudFirestoreGetDoc) {
+                if (!options.silent) showAppAlert('المزامنة السحابية', 'سجّل الدخول أولًا وانتظر اكتمال الاتصال بالسحابة.');
+                return false;
+            }
             try {
-                initGoogleDriveAuth();
-                if (!accessToken) {
-                    // طلب الإذن مرة واحدة فقط طوال استخدام البرنامج
-                tokenClient.requestAccessToken({ prompt: drivePermissionGranted ? '' : 'consent' });
-                    showAppAlert('السماح بالوصول', 'اسمح للتطبيق بالوصول إلى Google Drive، ثم اضغط استعادة النسخة الاحتياطية مرة أخرى.');
-                    return;
-                }
-                backupInProgress = true;
-                const existing = await findDriveBackupFile();
-                if (!existing?.id) {
-                    showAppAlert('لا توجد نسخة احتياطية', 'لم يتم العثور على نسخة احتياطية للتطبيق على Google Drive.');
-                    return;
-                }
-                const response = await driveFetch(
-                    'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(existing.id) + '?alt=media'
-                );
-                if (!response.ok) throw new Error('DRIVE_DOWNLOAD_FAILED: ' + await getDriveError(response));
-                const importedData = normalizeImportedData(JSON.parse(await response.text()));
-                if (!importedData) {
-                    showAppAlert('خطأ', 'النسخة الاحتياطية الموجودة على Google Drive غير صالحة.');
-                    return;
-                }
-                showAppConfirm('استعادة النسخة الاحتياطية', 'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية بالبيانات الموجودة في النسخة الاحتياطية.', function () {
-                    groups = importedData.groups;
-                    students = importedData.students;
-                    selectedGroupIndex = null;
-                    selectedStudentIndex = null;
-                    dataNormalizationDone = false;
-                    saveData();
-                    showAppAlert('تم بنجاح', 'تمت استعادة النسخة الاحتياطية من Google Drive بنجاح!');
-                    navigateTo('page1');
-                });
+                loadCloudSyncState();
+                const cloudRaw = await window.cloudFirestoreGetDoc();
+                const localData = getLocalCloudData();
+                const cloudData = cloudRaw ? normalizeCloudData(cloudRaw) : {groups:[],students:[],recycle_bin:[]};
+                const localHasData = localData.groups.length || localData.students.length || localData.recycle_bin.length;
+                const cloudHasData = cloudData.groups.length || cloudData.students.length || cloudData.recycle_bin.length;
+                let merged;
+                if (!cloudHasData && localHasData) merged = localData;
+                else if (cloudHasData && !localHasData) merged = cloudData;
+                else if (cloudHasData && localHasData) merged = mergeCloudData(localData, cloudData);
+                else merged = {groups:[],students:[],recycle_bin:[]};
+                cloudSyncApplying = true;
+                persistLocalCloudData(merged);
+                cloudSyncBase = cloneCloudData(merged);
+                cloudSyncPending = false;
+                saveCloudSyncState();
+                cloudSyncApplying = false;
+                await writeCloudData(true);
+                cloudSyncStatus('متزامنة مع السحابة');
+                return true;
             } catch (err) {
-                console.error('Google Drive restore error:', err);
-                showAppAlert('تعذر الاستعادة', 'تعذر قراءة النسخة الاحتياطية من Google Drive. تأكد من الصلاحيات واتصال الإنترنت ثم حاول مرة أخرى.');
-            } finally {
-                backupInProgress = false;
+                cloudSyncApplying = false;
+                console.error('Cloud sync initial error:', err);
+                cloudSyncStatus('تعذر الاتصال — البيانات المحلية محفوظة');
+                if (!options.silent) showAppAlert('تعذر المزامنة', 'تعذر الاتصال بقاعدة البيانات السحابية. بياناتك الحالية لن تُحذف.');
+                return false;
             }
         }
 
-        // إعداد التشغيل الأولي والتنقل عند تحميل الصفحة
-        document.addEventListener('DOMContentLoaded', () => {
-            ensureStudentIds();
-            saveData();
-            buildDaySelector('groupDaySelector', []);
-            buildDaySelector('studentDaySelector', []);
-            renderTodaySessions();
-            calculateSummaryTotals();
-            setThemeButton(document.body.classList.contains('dark-mode'));
-            loadSavedDriveBackupTime();
-        });
-            window.addEventListener('resize', syncFixedContentOffsets);
-        window.addEventListener('load', syncFixedContentOffsets);
+        async function startCloudSyncNow() {
+            if (!navigator.onLine) {
+                showAppAlert('لا يوجد اتصال بالإنترنت', 'البيانات الحالية محفوظة على الجهاز مؤقتًا. اتصل بالإنترنت ثم أعد المزامنة.');
+                return;
+            }
+            await startCloudSync({silent:false});
+        }
+
+        window.startCloudSync = startCloudSync;
+        window.startCloudSyncNow = startCloudSyncNow;
+
+        window.initCloudSync = async function(uid) {
+            if (!uid || !window.cloudFirestoreInit) return;
+            if (cloudSyncUnsubscribe) { try { cloudSyncUnsubscribe(); } catch (_) {} cloudSyncUnsubscribe = null; }
+            cloudSyncUserUid = uid;
+            cloudSyncReady = false;
+            loadCloudSyncState();
+            try {
+                await window.cloudFirestoreInit(uid);
+                cloudSyncReady = true;
+                await startCloudSync({silent:true});
+                cloudSyncUnsubscribe = window.cloudFirestoreListen((cloudData)=>{
+                    if (!cloudData || cloudSyncWriting) return;
+                    try {
+                        const incoming = normalizeCloudData(cloudData);
+                        const localData = getLocalCloudData();
+                        const merged = mergeCloudData(localData, incoming);
+                        const incomingJson = JSON.stringify(incoming);
+                        const mergedJson = JSON.stringify(merged);
+                        if (incomingJson === JSON.stringify(cloudSyncBase) && !cloudSyncPending) return;
+                        cloudSyncApplying = true;
+                        persistLocalCloudData(merged);
+                        cloudSyncBase = cloneCloudData(merged);
+                        cloudSyncPending = mergedJson !== incomingJson;
+                        saveCloudSyncState();
+                        cloudSyncApplying = false;
+                        if (cloudSyncPending) writeCloudData(true);
+                        else cloudSyncStatus('متزامنة مع السحابة');
+                    } catch (err) {
+                        cloudSyncApplying = false;
+                        console.error('Cloud realtime sync error:', err);
+                    }
+                });
+                cloudSyncStatus('متزامنة مع السحابة');
+            } catch (err) {
+                console.error('Cloud sync init error:', err);
+                cloudSyncReady = false;
+                cloudSyncStatus('تعذر الاتصال بالسحابة');
+            }
+        };
+
+        window.addEventListener('online', ()=>{ if (cloudSyncReady) scheduleCloudSync(); });
 
 </script>
 
@@ -3905,54 +3726,35 @@ document.body.classList.add('firebase-auth-pending');
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
 import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",storageBucket:"your-works-1aea7.firebasestorage.app",messagingSenderId:"1084540974820",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1",measurementId:"G-RYZPVNLKZQ"};
 const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider();
-provider.addScope('https://www.googleapis.com/auth/drive.file');
-window.firebaseDriveAuth=async function(){
-  try{
-    const r=await signInWithPopup(auth,provider);
-    const c=GoogleAuthProvider.credentialFromResult(r);
-    return c?.accessToken||null;
-  }catch(e){
-    if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){
-      sessionStorage.setItem('drive_auth_pending','1');
-      await signInWithRedirect(auth,provider);
-      return null;
-    }
-    throw e;
-  }
-};
-
+const db=getFirestore(app);
+window.cloudFirestoreInit=async function(uid){ if(!uid) throw new Error("NO_USER"); };
+window.cloudFirestoreGetDoc=async function(){ const snap=await getDoc(doc(db,"users",auth.currentUser.uid,"appData","main")); return snap.exists()?snap.data():null; };
+window.cloudFirestoreSetDoc=async function(data){ await setDoc(doc(db,"users",auth.currentUser.uid,"appData","main"), {...data, schemaVersion:2, updatedAt:Date.now()}, {merge:false}); };
+window.cloudFirestoreListen=function(cb){ return onSnapshot(doc(db,"users",auth.currentUser.uid,"appData","main"), snap=>{ if(snap.exists()) cb(snap.data()); }); };
 const loginScreen=document.getElementById('loginScreen'),googleLoginButton=document.getElementById('googleLoginButton'),loginMessage=document.getElementById('loginMessage');
 function msg(x){if(loginMessage) loginMessage.textContent=x||''}
 function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')} function hide(){loginScreen.hidden=true;document.body.classList.remove('login-locked')}
 function friendly(e){const m={'auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google؛ سيتم فتح تسجيل الدخول بالطريقة البديلة.','auth/account-exists-with-different-credential':'هذا الحساب مرتبط بطريقة تسجيل دخول مختلفة.','auth/operation-not-allowed':'يجب تفعيل تسجيل الدخول بحساب Google من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول بحساب Google. تأكد من الإنترنت وإعدادات Firebase.'}
 async function loginWithGoogle(){try{const r=await signInWithPopup(auth,provider);return{user:r.user}}catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null}throw e}}
 googleLoginButton.addEventListener('click',async()=>{msg('جارٍ فتح تسجيل الدخول بحساب Google...');googleLoginButton.disabled=true;try{await loginWithGoogle()}catch(e){console.error('خطأ في Google:',e);msg(friendly(e))}finally{googleLoginButton.disabled=false}});
-getRedirectResult(auth).then(r=>{if(r){const c=GoogleAuthProvider.credentialFromResult(r);if(c?.accessToken){window.pendingDriveAccessToken=c.accessToken;window.dispatchEvent(new CustomEvent('drive-auth-ready'));}if(sessionStorage.getItem('drive_auth_pending')==='1'){sessionStorage.removeItem('drive_auth_pending');setTimeout(()=>{if(window.pendingDriveAccessToken){window.dispatchEvent(new CustomEvent('drive-auth-ready'));}},150);}}return r}).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
+getRedirectResult(auth).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
 const authLoading=document.getElementById('authLoading');
 onAuthStateChanged(auth,user=>{
 if(user){ 
   switchAppUser(user.uid);
-  if(typeof loadDrivePermissionState==='function') loadDrivePermissionState(user.uid);
+  if(typeof window.initCloudSync==='function') window.initCloudSync(user.uid);
   if(authLoading) authLoading.hidden=true;
   document.body.classList.remove('firebase-auth-pending');
   document.documentElement.classList.remove('firebase-startup-pending');
   hide();
-  // عند تسجيل الدخول بالبريد الإلكتروني: اطلب صلاحية Google Drive مرة واحدة فقط.
-  if(user.providerData?.some(p=>p.providerId==='password') && !drivePermissionGranted){
-    setTimeout(()=>{
-      try{
-        initGoogleDriveAuth();
-        if(tokenClient) tokenClient.requestAccessToken({prompt:'consent'});
-      }catch(err){
-        console.warn('Drive permission request skipped:', err);
-      }
-    }, 500);
-  }
 }else{
+  if(cloudSyncUnsubscribe){try{cloudSyncUnsubscribe();}catch(_){} cloudSyncUnsubscribe=null;}
+  cloudSyncReady=false;
+  cloudSyncUserUid=null;
   switchAppUser('guest');
-  loadDrivePermissionState(null);
   if(authLoading) authLoading.hidden=true;
   document.body.classList.remove('firebase-auth-pending');
   document.documentElement.classList.remove('firebase-startup-pending');
@@ -4024,7 +3826,7 @@ function buildPDFExportReport(){
         const monthMoney = pdfMoney(metrics.monthMoney);
         const debt = pdfMoney(metrics.previousDebt);
         const required = metrics.totalRequired;
-        groupsMonth += metrics.unpaidMonth;
+        groupsMonth += metrics.monthPaid ? 0 : monthMoney;
         groupsDebt += metrics.debtPaid ? 0 : debt;
         if (metrics.isFullyPaid) groupsPaid += 1; else groupsUnpaid += 1;
         groupRows.push({group,sessions,monthMoney,debt,required});
@@ -4038,7 +3840,7 @@ function buildPDFExportReport(){
         const monthMoney = pdfMoney(financial.monthMoney);
         const debt = pdfMoney(financial.previousDebt);
         const required = financial.totalRequired;
-        studentsMonth += financial.unpaidMonth;
+        studentsMonth += financial.monthPaid ? 0 : monthMoney;
         studentsDebt += financial.debtPaid ? 0 : debt;
         if (financial.isFullyPaid) studentsPaid += 1; else studentsUnpaid += 1;
         studentRows.push({student,metrics,sessions,monthMoney,debt,required});
