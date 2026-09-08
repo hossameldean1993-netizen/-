@@ -3808,7 +3808,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebas
 import { getAuth, setPersistence, indexedDBLocalPersistence, browserLocalPersistence, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1"};
 const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider();
-setPersistence(auth,indexedDBLocalPersistence).catch(()=>setPersistence(auth,browserLocalPersistence)).catch(()=>{});
+const authPersistenceReady=setPersistence(auth,indexedDBLocalPersistence).catch(()=>setPersistence(auth,browserLocalPersistence)).catch(()=>{});
 const loginScreen=document.getElementById('loginScreen'),googleLoginButton=document.getElementById('googleLoginButton'),loginMessage=document.getElementById('loginMessage');
 function msg(x){if(loginMessage)loginMessage.textContent=x||''}
 function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')}
@@ -3824,7 +3824,8 @@ async function loginWithGoogle(){
 googleLoginButton.addEventListener('click',async()=>{if(googleLoginBusy)return;msg('جارٍ فتح Google...');googleLoginButton.disabled=true;const old=googleLoginButton.textContent;googleLoginButton.textContent='جارٍ فتح Google...';try{await loginWithGoogle();}catch(e){console.error(e);msg(friendly(e));}finally{googleLoginButton.disabled=false;googleLoginButton.textContent=old;}});
 getRedirectResult(auth).catch(e=>{console.error(e);msg(friendly(e))});
 const authLoading=document.getElementById('authLoading');
-onAuthStateChanged(auth,user=>{
+authPersistenceReady.then(()=>{
+ onAuthStateChanged(auth,user=>{
  if(user){
    localStorage.setItem('app_user_key',user.uid);
    switchAppUser(user.uid);
@@ -3841,6 +3842,7 @@ onAuthStateChanged(auth,user=>{
    document.documentElement.classList.remove('firebase-startup-pending');
    show();
  }
+ });
 });
 window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>showAppConfirm('هل تريد تسجيل الخروج ؟','',()=>signOut(auth));
 </script>
