@@ -1332,6 +1332,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             localStorage.setItem('app_user_key', appUserKey);
             groups = loadStoredArray('teacher_groups_local');
             students = loadStoredArray('teacher_students_local');
+            clearFutureSessionStatuses();
             groups.forEach(migratePaymentHistory);
             students.forEach(migratePaymentHistory);
             dataNormalizationDone = false;
@@ -1862,6 +1863,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             // التطبيع/ترقية البيانات يتم مرة واحدة فقط بدل إعادة المرور على كل السجلات عند كل نقرة.
             if (!dataNormalizationDone) {
                 ensureStudentIds();
+                clearFutureSessionStatuses();
                 migrateScheduleTimes();
                 groups.forEach(migratePaymentHistory);
                 students.forEach(migratePaymentHistory);
@@ -2195,6 +2197,22 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const now = new Date();
             const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
             return String(dateKey) > todayKey;
+        }
+
+        // أي حصة تاريخها لم يأتِ بعد يجب أن تظل غير محددة دائمًا.
+        // هذا يصلح أيضًا بيانات قديمة كانت قد سجلت الحالة تلقائيًا قبل هذا الإصلاح.
+        function clearFutureSessionStatuses() {
+            const normalize = obj => {
+                if (!obj || !Array.isArray(obj.daysData)) return;
+                obj.daysData.forEach(day => {
+                    if (day && isFutureDateKey(day.dateKey)) {
+                        day.status = '';
+                        day.sessionsCount = 0;
+                    }
+                });
+            };
+            groups.forEach(normalize);
+            students.forEach(normalize);
         }
 
         function showFutureDayWarning(day) {
@@ -3683,6 +3701,7 @@ let localEditRevision = 0;
         }
         function applyDriveLocalData(data) {
             groups=driveClone(data.groups); students=driveClone(data.students);
+            clearFutureSessionStatuses();
             if(typeof recycleSave==='function') recycleSave(driveClone(data.recycle_bin||[]));
             dataNormalizationDone=false; selectedGroupIndex=null; selectedStudentIndex=null; ensureStudentIds();
             try{
