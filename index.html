@@ -3782,9 +3782,13 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 
 </script>
 <script>
+/* منع الـService Worker القديم من إعادة تقديم نسخة HTML قديمة عند السحب للتحديث.
+   هذا خاص بالمزامنة/الدخول فقط ولا يلمس بيانات التطبيق المحلية. */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('./service-worker.js').catch(function () {});
+    navigator.serviceWorker.getRegistrations().then(function(registrations){
+      return Promise.all(registrations.map(function(reg){ return reg.unregister(); }));
+    }).catch(function(){});
   });
 }
 </script>
@@ -3835,16 +3839,26 @@ authPersistenceReady.then(()=>{
    // فتح البرنامج أولًا، ثم تهيئة Drive في الخلفية دون تعطيل الواجهة.
    setTimeout(()=>{if(typeof window.initDriveForUser==='function')window.initDriveForUser(user.uid);},0);
  }else{
-   localStorage.setItem('app_user_key','guest');
-   switchAppUser('guest');
-   if(authLoading)authLoading.hidden=true;
-   document.body.classList.remove('firebase-auth-pending');
-   document.documentElement.classList.remove('firebase-startup-pending');
-   show();
+   // إذا كانت جلسة Firebase لم تُستعد بعد/لم تحفظها بيئة WebView، لا نمسح هوية المستخدم المحلية.
+   // نستخدم آخر مستخدم معروف محليًا حتى لا تظهر شاشة الدخول عند تحديث الصفحة بالسحب.
+   const rememberedUser=localStorage.getItem('app_user_key');
+   if(rememberedUser && rememberedUser!=='guest'){
+     switchAppUser(rememberedUser);
+     if(authLoading)authLoading.hidden=true;
+     document.body.classList.remove('firebase-auth-pending');
+     document.documentElement.classList.remove('firebase-startup-pending');
+     hide();
+   }else{
+     switchAppUser('guest');
+     if(authLoading)authLoading.hidden=true;
+     document.body.classList.remove('firebase-auth-pending');
+     document.documentElement.classList.remove('firebase-startup-pending');
+     show();
+   }
  }
  });
 });
-window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>showAppConfirm('هل تريد تسجيل الخروج ؟','',()=>signOut(auth));
+window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>showAppConfirm('هل تريد تسجيل الخروج ؟','',async()=>{try{await signOut(auth);}finally{localStorage.removeItem('app_user_key');switchAppUser('guest');}});
 </script>
 
 <style id="pdfExportStyles">
@@ -4088,7 +4102,7 @@ function recycleDelete(i){
         inactivityTimer=setTimeout(()=>{
             const login=document.getElementById('loginScreen');
             if(login && login.hidden && window.firebaseAuth){
-                signOut(window.firebaseAuth);
+                signOut(window.firebaseAuth).finally(()=>{localStorage.removeItem('app_user_key');});
             }
         }, inactivityLimit);
     }
