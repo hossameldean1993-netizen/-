@@ -144,8 +144,7 @@ html, body, button, input, select, textarea, option {
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
 }
-.safe-emoji-icon { display:inline-flex; width:1.15em; height:1.15em; vertical-align:-0.18em; align-items:center; justify-content:center; }
-.safe-emoji-icon svg { width:1em; height:1em; display:block; }
+
 .nav-icon, .emoji, .emoji-text {
     font-family: "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", system-ui, sans-serif;
     font-variant-emoji: emoji;
@@ -356,11 +355,8 @@ html, body, button, input, select, textarea, option {
         .stats-item span { display: block; font-weight: 800; font-size: .78rem; margin-top: 1px; color: #ffffff; }
 
         .search-input { width: 100%; padding: 10px 14px; border-radius: 12px; border: 2px solid var(--border-color); background: var(--card-bg-light); color: var(--text-dark); font-size: 0.9rem; outline: none; text-align: center; }
-        
-        .filter-panel { display: none; margin-top: 8px; padding: 10px; background: var(--card-bg-light); border: 2px solid var(--border-color); border-radius: 12px; flex-direction: column; gap: 8px; }
+
         .filter-panel.active { display: flex; }
-        .filter-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-        .filter-row select { padding: 8px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg); color: var(--text-dark); font-size: 0.8rem; font-weight: 700; outline: none; }
 
         .btn-3d { width: 100%; background: var(--btn-cyan-top); color: #ffffff; padding: 10px 12px; font-size: 0.88rem; font-weight: 800; border-radius: 12px; border: none; box-shadow: 0 2px 5px rgba(0,0,0,.08); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
         .btn-3d:active { transform: translateY(3px) !important; box-shadow: 0 1px 0px var(--btn-cyan-shadow) !important; }
@@ -414,8 +410,6 @@ html, body, button, input, select, textarea, option {
             box-shadow: 0 1px 0 var(--btn-red-shadow), 0 3px 6px rgba(0,0,0,.10) !important;
         }
         .btn-full { width: 100%; }
-        .grid-2-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        .add-btn { padding: 11px; font-size: 0.95rem; }
 
         .groups-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
          .mini-card { 
@@ -449,8 +443,6 @@ html, body, button, input, select, textarea, option {
         .group-header { background: var(--group-card-bg); color: var(--group-card-text); padding: 12px 10px; user-select: none; }
         .group-title { font-size: 1.15rem; font-weight: 800; color: #ffffff; }
         .group-subtitle { font-size: 0.82rem; color: var(--group-subtext); margin-top: 4px; line-height: 1.5; font-weight: 600; }
-        .math-expr { font-weight: 800; color: #ffffff; background: var(--math-expr-bg); padding: 3px 8px; border-radius: 6px; display: inline-block; margin-top: 4px; font-size: 0.8rem; }
-        .debt-tag { color: var(--debt-tag-color); background-color: var(--debt-tag-bg); border: 1px solid var(--debt-tag-border); padding: 3px 8px; border-radius: 6px; font-weight: 800; font-size: 0.78rem; display: inline-block; margin-top: 4px; }
 
         .group-details { padding: 12px 10px; border-top: 2px solid var(--border-color); background: var(--group-details-bg); }
         .days-container { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
@@ -487,17 +479,14 @@ html, body, button, input, select, textarea, option {
         .student-notes-container label { font-size: 0.72rem; color: var(--text-muted); font-weight: 700; display: block; margin-bottom: 2px; }
         .student-notes-container input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--card-bg-light); color: var(--text-dark); font-weight: 600; font-size: 0.82rem; outline: none; }
 
-        .debt-input-container { background: var(--day-row-bg); border: 1px solid var(--day-row-border); padding: 10px; border-radius: 10px; margin: 10px 0; display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
-        .debt-input-container label { display: block; font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-bottom: 2px; font-weight: 700; }
-        .debt-input-container input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--card-bg-light); color: var(--text-dark); font-weight: 700; font-size: 0.82rem; outline: none; text-align: center; }
+        
 
         .payment-toggle { margin: 6px 0; padding: 8px 10px; background: var(--day-row-bg); border: 1px solid var(--day-row-border); border-radius: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; font-weight: 700; }
         .pay-btn { padding: 6px 10px; border-radius: 8px; border: none; cursor: pointer; font-weight: 800; font-size: 0.75rem; }
         .pay-btn.is-paid { background: var(--paid-btn-bg); color: white; box-shadow: 0 2px 4px rgba(0,0,0,.08); }
         .pay-btn.not-paid { background: var(--unpaid-btn-bg); color: white; box-shadow: 0 2px 4px rgba(0,0,0,.08); }
 
-        .group-footer { display: flex; flex-direction: column; gap: 8px; align-items: center; padding-top: 10px; border-top: 1px solid var(--day-row-border); margin-top: 10px; font-weight: 800; font-size: 0.88rem; }
-        .footer-action-btns { display: flex; gap: 6px; width: 100%; flex-wrap: wrap; }
+        
 
         /* عند طي تفاصيل التلميذ لا يتم تمرير الصفحة تلقائيًا؛ الرأس والتقرير يبقيان ضمن نفس الكارت. */
 #singleStudentDetail {
@@ -601,7 +590,7 @@ html, body, button, input, select, textarea, option {
         .schedule-time-row .schedule-period-btn { font-size: .70rem; }
         .schedule-time-grid input:focus, .schedule-time-row input:focus { border-color: var(--card-blue); }
         .schedule-period-btn.active { background: var(--card-blue); color: #fff; border-color: var(--card-blue); }
-        .schedule-time-hint { display: none !important; }
+        
         .schedule-time-rows { display:flex; flex-direction:column; gap:7px; width:100%; }
 
         @media (max-width: 360px) {
@@ -623,12 +612,7 @@ html, body, button, input, select, textarea, option {
             gap:6px;
             width:100%;
         }
-        .schedule-time-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr 1fr;
-            gap: 5px;
-            width: 100%;
-        }
+        
         .schedule-time-grid input, .schedule-time-grid button, .schedule-time-row input, .schedule-time-row button {
             width: 100%;
             height: 38px;
@@ -657,7 +641,6 @@ html, body, button, input, select, textarea, option {
         .empty-state .empty-add-link { display: flex; width: 100%; box-sizing: border-box; flex-direction: row; align-items: center; justify-content: center; gap: 8px; background: transparent; border: 0; box-shadow: none; padding: 10px 14px; color: var(--text-muted); opacity: .72; font-size: .95rem; font-weight: 800; white-space: nowrap; }
         .empty-state .empty-add-plus { display: inline-block; font-size: 1.1rem; font-weight: 900; line-height: 1; flex: 0 0 auto; }
         .empty-state .empty-add-link:active { opacity: .9; }
-
 
         /* شريط التنقل السفلي */
         .bottom-nav {
@@ -883,7 +866,6 @@ html, body, button, input, select, textarea, option {
             .schedule-time-row .schedule-period-btn { font-size: .56rem; }
         }
 
-    
         /* AppsGeyser: prevent Android/WebView automatic dark-mode colors
            from overriding the app's own theme. */
         html.dark-mode,
@@ -891,7 +873,6 @@ html, body, button, input, select, textarea, option {
             color-scheme: only light;
             background-color: #1c2025 !important;
         }
-
 
         @media (min-width: 520px) {
             .financial-list-full {
@@ -986,7 +967,6 @@ html, body, button, input, select, textarea, option {
             width: 100%;
         }
 
-        .debt-input-container > div { flex:1 1 180px; }
         .debt-input-container .btn-3d { flex:0 0 auto; min-width:80px; }
 </style>
 
@@ -1015,11 +995,6 @@ html, body, button, input, select, textarea, option {
 
 <style id="blue-group-student-headers-only">
 .group-header { background:#2196f3 !important; }
-</style>
-
-<style id="accounts-sort-spacing-only">
-/* تقليل المسافة أسفل زر فرز الحسابات فقط */
-.accounts-sort { margin-bottom: 10px !important; }
 </style>
 
 <style id="unify-section-title-and-border-colors">
@@ -1051,15 +1026,14 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 </style>
 
 <!-- Login UI -->
-<style>#loginScreen{position:fixed;inset:0;z-index:99999;background:var(--bg,#f5f7fa);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;direction:rtl}#loginScreen[hidden]{display:none!important}.login-card{width:min(100%,390px);background:var(--card-bg-light,#fff);border:2px solid var(--card-blue,#0284c7);border-radius:18px;padding:22px 18px;box-sizing:border-box;box-shadow:0 8px 24px rgba(0,0,0,.10);text-align:center}.login-card h2{margin:0 0 8px;color:var(--card-blue,#0284c7);font-size:1.35rem}.login-card p{margin:0 0 18px;color:var(--text-muted,#667085);font-weight:700}.login-card input{width:100%;box-sizing:border-box;margin:6px 0;padding:12px;border:1px solid var(--border-color,#d0d5dd);border-radius:10px;background:#fff;color:inherit;font-size:1rem;outline:none}.login-card button{width:100%;border:0;border-radius:10px;padding:12px;margin-top:9px;font-weight:800;font-size:1rem;cursor:pointer}.login-primary{background:#0284c7;color:#fff}.login-google{background:#fff;color:#222;border:1px solid #ccc!important}.login-secondary{background:transparent;color:#0284c7}.login-divider{display:flex;align-items:center;gap:8px;margin:13px 0;color:#98a2b3;font-weight:700}.login-divider:before,.login-divider:after{content:'';height:1px;background:#d0d5dd;flex:1}#loginMessage{min-height:22px;margin-top:10px;color:#d92d20;font-weight:800;font-size:.9rem}body.login-locked{overflow:hidden}</style>
+<style>#loginScreen{position:fixed;inset:0;z-index:99999;background:var(--bg,#f5f7fa);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;direction:rtl}#loginScreen[hidden]{display:none!important}.login-card{width:min(100%,390px);background:var(--card-bg-light,#fff);border:2px solid var(--card-blue,#0284c7);border-radius:18px;padding:22px 18px;box-sizing:border-box;box-shadow:0 8px 24px rgba(0,0,0,.10);text-align:center}.login-card h2{margin:0 0 8px;color:var(--card-blue,#0284c7);font-size:1.35rem}.login-card p{margin:0 0 18px;color:var(--text-muted,#667085);font-weight:700}.login-card button{width:100%;border:0;border-radius:10px;padding:12px;margin-top:9px;font-weight:800;font-size:1rem;cursor:pointer}.login-primary{background:#0284c7;color:#fff}#loginMessage{min-height:22px;margin-top:10px;color:#d92d20;font-weight:800;font-size:.9rem}body.login-locked{overflow:hidden}</style>
 <style>#authLoading{position:fixed;inset:0;z-index:100000;background:var(--bg,#f5f7fa);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;direction:rtl}#authLoading[hidden]{display:none!important}.auth-loading-card{width:min(100%,390px);background:var(--card-bg-light,#fff);border:2px solid var(--card-blue,#0284c7);border-radius:18px;padding:22px 18px;box-sizing:border-box;box-shadow:0 8px 24px rgba(0,0,0,.10);text-align:center;color:var(--text-muted,#667085);font-weight:800}.auth-loading-card .auth-loading-title{color:var(--card-blue,#0284c7);font-size:1.15rem;margin-bottom:8px}.auth-loading-card .auth-loading-text{font-size:.95rem}.auth-loading-spinner{width:24px;height:24px;margin:14px auto 0;border:3px solid #d0d5dd;border-top-color:#0284c7;border-radius:50%;animation:authSpin .8s linear infinite}@keyframes authSpin{to{transform:rotate(360deg)}}
 </style>
     
 </head>
 <body>
 <div id="authLoading"><div class="auth-loading-card"><div class="auth-loading-title">نظم دروسك</div><div class="auth-loading-text">جارٍ التحقق من تسجيل الدخول...</div><div class="auth-loading-spinner" aria-hidden="true"></div></div></div>
-<div id="loginScreen" hidden><div class="login-card"><h2 id="loginTitle">تسجيل الدخول إلى نظم دروسك</h2><p id="loginSubtitle">سجّل الدخول باستخدام حساب Google</p><button class="login-primary" type="button" id="googleLoginButton">تسجيل الدخول بحساب Google</button><div id="loginMessage" role="alert"></div></div><div class="login-card" id="registerInfoPage" hidden><h2>إنشاء حساب جديد</h2><p>أنشئ حسابك للبدء باستخدام نظم دروسك</p><ul style="text-align:right;line-height:1.9;padding-right:20px"><li>اكتب اسم مستخدم جديد.</li><li>اختر رقم سر لا يقل عن 6 أحرف أو أرقام.</li><li>بعد إنشاء الحساب سيتم حفظ بياناتك بشكل مستقل.</li></ul><button class="login-primary" type="button" id="startRegister">متابعة إنشاء الحساب</button><button class="login-secondary" type="button" id="backLogin">العودة لتسجيل الدخول</button></div></div>
-
+<div id="loginScreen" hidden><div class="login-card"><h2>تسجيل الدخول إلى نظم دروسك</h2><p>سجّل الدخول باستخدام حساب Google</p><button class="login-primary" type="button" id="googleLoginButton">تسجيل الدخول بحساب Google</button><div id="loginMessage" role="alert"></div></div></div>
 
     <header>
         <h1 class="app-title">نظم دروسك</h1>
@@ -2211,7 +2185,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             showAppAlert('تم الدفع الجزئي', `تم تسجيل دفع ${amount} ج، والمتبقي من المتأخرات ${Math.max(0, parseFloat(obj.previousDebt) || 0)} ج.`);
         }
 
-
         // اليوم الحالي مسموح بالتسجيل، وأي تاريخ بعد اليوم يظل ظاهرًا لكنه غير قابل للاختيار.
         function isFutureDateKey(dateKey) {
             if (!dateKey) return false;
@@ -3067,7 +3040,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             if (icon) icon.textContent = hidden ? '⌃' : '⌄';
         }
 
-
         function toggleReportSection(headerEl) {
             const card = headerEl.closest('.student-report-card');
             if (!card) return;
@@ -3402,7 +3374,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             });
         }
 
-
         function openModal() {
             document.getElementById('modalTitle').innerText = 'إضافة مجموعة جديدة';
             document.getElementById('editGroupId').value = '';
@@ -3729,12 +3700,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     driveBaseData=driveClone(local); driveSyncPending=false; driveLastRemoteModified=r.headers.get('Last-Modified')||new Date().toISOString(); saveDriveState(); markDriveSynced(new Date().toISOString()); return true;
                 }
                 const remote=await readDriveFile(file.id);
-                const remoteUpdated=Date.parse(remote.meta.updatedAt||'')||0;
-                const localLast=Date.parse(localStorage.getItem(getDriveStateKey('last_sync'))||'')||0;
                 const localChanged=!sameJson(local,driveBaseData) || driveSyncPending;
                 let finalData;
                 if(!localChanged) finalData=remote.payload;
-                else if(remoteUpdated<=localLast || !localLast) finalData=mergeDriveData(driveBaseData,local,remote.payload);
                 else finalData=mergeDriveData(driveBaseData,local,remote.payload);
                 // لا نكتب نسخة فارغة فوق نسخة غير فارغة نتيجة خطأ محلي.
                 const localHas=local.groups.length||local.students.length;
@@ -3809,7 +3777,7 @@ body.firebase-auth-pending #authLoading { visibility: visible !important; }
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
 import { getAuth, setPersistence, browserLocalPersistence, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",storageBucket:"your-works-1aea7.firebasestorage.app",messagingSenderId:"1084540974820",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1",measurementId:"G-RYZPVNLKZQ"};
+const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1"};
 const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider();
 setPersistence(auth,browserLocalPersistence).catch(()=>{});
 const loginScreen=document.getElementById('loginScreen'),googleLoginButton=document.getElementById('googleLoginButton'),loginMessage=document.getElementById('loginMessage');
