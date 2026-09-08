@@ -3,6 +3,8 @@
 <head>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
     <meta charset="UTF-8">
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://accounts.google.com" crossorigin>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="format-detection" content="telephone=no">
     <!-- Emoji compatibility for Android WebView / APK -->
@@ -3957,21 +3959,32 @@ if ('serviceWorker' in navigator) {
 </script>
 
 <style id="firebase-startup-guard">
-/* منع أي وميض لمحتوى التطبيق قبل اكتمال Firebase Auth */
+/* في الزيارة الأولى نمنع وميض التطبيق حتى يتم تحديد حالة الدخول.
+   المستخدم الذي سبق له تسجيل الدخول يرى التطبيق فورًا بينما Firebase يتحقق في الخلفية. */
 body.firebase-auth-pending > *:not(#authLoading) { visibility: hidden !important; }
 body.firebase-auth-pending #authLoading { visibility: visible !important; }
 </style>
 <script>
-/* يُفعّل الحماية قبل بدء تحميل Firebase حتى لا يظهر التطبيق لحظةً أثناء التحقق */
-document.documentElement.classList.add('firebase-startup-pending');
-document.body.classList.add('firebase-auth-pending');
+(function(){
+  var rememberedUser = localStorage.getItem('app_user_key');
+  if (rememberedUser && rememberedUser !== 'guest') {
+    document.documentElement.classList.remove('firebase-startup-pending');
+    document.body.classList.remove('firebase-auth-pending');
+    var fastLoading = document.getElementById('authLoading');
+    if (fastLoading) fastLoading.hidden = true;
+  } else {
+    document.documentElement.classList.add('firebase-startup-pending');
+    document.body.classList.add('firebase-auth-pending');
+  }
+})();
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { getAuth, setPersistence, browserLocalPersistence, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",storageBucket:"your-works-1aea7.firebasestorage.app",messagingSenderId:"1084540974820",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1",measurementId:"G-RYZPVNLKZQ"};
 const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider();
+setPersistence(auth,browserLocalPersistence).catch(()=>{});
 const db=getFirestore(app);
 window.cloudFirestoreInit=async function(uid){ if(!uid) throw new Error("NO_USER"); };
 window.cloudFirestoreGetDoc=async function(){ const snap=await getDoc(doc(db,"users",auth.currentUser.uid,"appData","main")); return snap.exists()?snap.data():null; };
@@ -4018,8 +4031,10 @@ async function loginWithGoogle(){
 }
 googleLoginButton.addEventListener('click',async()=>{
   if (googleLoginBusy) return;
-  msg('جارٍ فتح نافذة Google...');
+  msg('جارٍ فتح Google...');
   googleLoginButton.disabled=true;
+  const oldText = googleLoginButton.textContent;
+  googleLoginButton.textContent = 'جارٍ فتح Google...';
   try {
     await loginWithGoogle();
   } catch(e) {
@@ -4027,12 +4042,14 @@ googleLoginButton.addEventListener('click',async()=>{
     msg(friendly(e));
   } finally {
     googleLoginButton.disabled=false;
+    googleLoginButton.textContent = oldText;
   }
 });
 getRedirectResult(auth).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
 const authLoading=document.getElementById('authLoading');
 onAuthStateChanged(auth,user=>{
 if(user){ 
+  localStorage.setItem('app_user_key', user.uid);
   switchAppUser(user.uid);
   if(typeof window.initCloudSync==='function') window.initCloudSync(user.uid);
   if(authLoading) authLoading.hidden=true;
@@ -4040,6 +4057,7 @@ if(user){
   document.documentElement.classList.remove('firebase-startup-pending');
   hide();
 }else{
+  localStorage.setItem('app_user_key', 'guest');
   if(cloudSyncUnsubscribe){try{cloudSyncUnsubscribe();}catch(_){} cloudSyncUnsubscribe=null;}
   cloudSyncReady=false;
   cloudSyncUserUid=null;
