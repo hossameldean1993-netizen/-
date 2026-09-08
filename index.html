@@ -1392,8 +1392,17 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function ensureStudentIds() {
+            const used = new Set();
             students.forEach(student => {
-                if (!student.studentId) student.studentId = generateStudentId(student.name, student.phone);
+                let id = String(student.studentId || '').trim();
+                if (!id || used.has(id)) {
+                    const base = generateStudentId(student.name, student.phone);
+                    id = base || ('S-' + Date.now() + '-' + Math.random().toString(36).slice(2,8));
+                    let n = 2;
+                    while (used.has(id)) id = `${base}-${n++}`;
+                    student.studentId = id;
+                }
+                used.add(id);
             });
         }
 
@@ -2264,11 +2273,13 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             return newDays.map(newDay => {
                 const oldDay = oldMap.get(newDay.dateStr);
                 if (!oldDay) return createEmptyDayFromTemplate(newDay);
+                const dateKey = newDay.dateKey || oldDay.dateKey || '';
+                const future = isFutureDateKey(dateKey);
                 return {
                     ...newDay,
-                    dateKey: oldDay.dateKey || newDay.dateKey || '',
-                    status: oldDay.status || newDay.status,
-                    sessionsCount: oldDay.sessionsCount !== undefined ? oldDay.sessionsCount : newDay.sessionsCount,
+                    dateKey,
+                    status: future ? '' : (oldDay.status || newDay.status || ''),
+                    sessionsCount: future ? 0 : (oldDay.sessionsCount !== undefined ? oldDay.sessionsCount : newDay.sessionsCount),
                     homeworkGrade: oldDay.homeworkGrade !== undefined ? oldDay.homeworkGrade : '',
                     sessionGrade: oldDay.sessionGrade !== undefined ? oldDay.sessionGrade : '',
                     examGrade: oldDay.examGrade !== undefined ? oldDay.examGrade : '',
@@ -2411,20 +2422,32 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             if (!obj) return false;
             const history = getPaymentHistoryForWrite(obj);
             const currentMonthKey = getCollectionMonthKey();
+            const targetType = type || 'month';
+            let removed = false;
             for (let i = history.length - 1; i >= 0; i--) {
                 const item = history[i];
-                if (item && item.monthKey === currentMonthKey && item.type === (type || 'month')) {
+                if (item && item.monthKey === currentMonthKey && item.type === targetType) {
                     history.splice(i, 1);
-                    return true;
+                    removed = true;
                 }
             }
-            return false;
+            return removed;
         }
 
         function getCollectedPaymentsTotal(obj) {
             const currentMonthKey = getCollectionMonthKey();
             return getPaymentHistory(obj).reduce((sum, item) => {
                 if (item && item.monthKey === currentMonthKey) {
+                    return sum + Math.max(0, parseFloat(item.amount) || 0);
+                }
+                return sum;
+            }, 0);
+        }
+
+        function getCurrentMonthCollected(obj, type = 'month') {
+            const currentMonthKey = getCollectionMonthKey();
+            return getPaymentHistory(obj).reduce((sum, item) => {
+                if (item && item.monthKey === currentMonthKey && item.type === type) {
                     return sum + Math.max(0, parseFloat(item.amount) || 0);
                 }
                 return sum;
@@ -2444,17 +2467,16 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const price = Math.max(0, parseFloat(obj.price) || 0);
             const monthMoney = sessions * price;
             const previousDebt = Math.max(0, parseFloat(obj.previousDebt) || 0);
-            const monthPaidFlag = isGroup ? !!obj.isMonthPaid : !!obj.isPaid;
-            const debtPaidFlag = !!obj.isDebtPaid;
-            const monthPaid = monthPaidFlag || monthMoney === 0;
-            const debtPaid = debtPaidFlag || previousDebt === 0;
-            const unpaidMonth = monthPaid ? 0 : monthMoney;
+            const monthCollected = getCurrentMonthCollected(obj, 'month');
+            const monthPaid = monthMoney === 0 || monthCollected >= monthMoney;
+            const debtPaid = previousDebt === 0 || !!obj.isDebtPaid;
+            const unpaidMonth = Math.max(0, monthMoney - monthCollected);
             const unpaidDebt = debtPaid ? 0 : previousDebt;
             const totalRequired = unpaidMonth + unpaidDebt;
             const collectedAmount = getCollectedPaymentsTotal(obj);
             return {
                 sessions, monthMoney, previousDebt, totalRequired,
-                monthPaid, debtPaid, collectedAmount, unpaidMonth, unpaidDebt,
+                monthPaid, debtPaid, collectedAmount, monthCollected, unpaidMonth, unpaidDebt,
                 isFullyPaid: totalRequired === 0,
                 hasDebt: unpaidDebt > 0,
                 isUnpaid: totalRequired > 0
@@ -3546,9 +3568,13 @@ let localEditRevision = 0;
             };
         }
         function driveKey(item, index) {
-            if (item && item.id !== undefined && item.id !== null) return 'id:' + String(item.id);
+            if (item && item.id !== undefined && item.id !== null && String(item.id).trim() !== '') return 'id:' + String(item.id);
             if (item && item.studentId) return 'studentId:' + String(item.studentId);
-            return 'index:' + index;
+            // للبيانات القديمة التي لا تحمل معرفًا ثابتًا: الاسم الفريد أفضل من رقم العنصر.
+            // هذا يمنع تبدل ترتيب القائمة من ربط سجل بشخص/مجموعة أخرى.
+            const name = normalizeName(item && item.name);
+            if (name) return 'name:' + name;
+            return 'legacy:' + index;
         }
         function sameJson(a,b) { return JSON.stringify(a) === JSON.stringify(b); }
         function mergeDriveArray(baseArr, localArr, remoteArr) {
