@@ -3801,19 +3801,38 @@ body.firebase-auth-pending #authLoading { visibility: visible !important; }
 <script>
 /* هوية دخول ثابتة إضافية عبر Cookie حتى لا تعتمد شاشة البداية على Firebase أو localStorage وحدهما. */
 (function(){
+  function recoverUserKey(){
+    try{
+      const direct=localStorage.getItem('app_user_key');
+      if(direct&&direct!=='guest')return direct;
+      const m=document.cookie.match(/(?:^|;\s*)nazzem_login_uid=([^;]+)/);
+      const cookie=m?decodeURIComponent(m[1]):'';
+      if(cookie&&cookie!=='guest')return cookie;
+      const session=sessionStorage.getItem('app_user_key');
+      if(session&&session!=='guest')return session;
+      for(let i=0;i<localStorage.length;i++){
+        const k=localStorage.key(i)||'';
+        const hit=k.match(/^teacher_(?:groups|students)_local_(.+)$/);
+        if(hit&&hit[1]&&hit[1]!=='guest')return hit[1];
+      }
+    }catch(_){}
+    return '';
+  }
   function getLoginCookie(){
-    const m=document.cookie.match(/(?:^|;\s*)nazzem_login_uid=([^;]+)/);
-    return m?decodeURIComponent(m[1]):'';
+    const recovered=recoverUserKey();
+    return recovered||'';
   }
   function setLoginCookie(uid){
     if(!uid||uid==='guest')return;
-    document.cookie='nazzem_login_uid='+encodeURIComponent(uid)+'; max-age=31536000; path=/; SameSite=Lax';
+    try{document.cookie='nazzem_login_uid='+encodeURIComponent(uid)+'; max-age=31536000; path=/; SameSite=Lax';}catch(_){}
+    try{sessionStorage.setItem('app_user_key',uid);}catch(_){}
   }
   window.getLoginCookie=getLoginCookie;
   window.setLoginCookie=setLoginCookie;
-  const rememberedUser=localStorage.getItem('app_user_key')||getLoginCookie();
+  const rememberedUser=recoverUserKey();
   if(rememberedUser && rememberedUser!=='guest'){
-    localStorage.setItem('app_user_key',rememberedUser);
+    try{localStorage.setItem('app_user_key',rememberedUser);}catch(_){}
+    try{sessionStorage.setItem('app_user_key',rememberedUser);}catch(_){}
     document.body.classList.remove('firebase-auth-pending');
     const l=document.getElementById('authLoading'); if(l) l.hidden=true;
   }else document.body.classList.add('firebase-auth-pending');
@@ -3854,7 +3873,7 @@ authPersistenceReady.then(()=>{
  }else{
    // إذا كانت جلسة Firebase لم تُستعد بعد/لم تحفظها بيئة WebView، لا نمسح هوية المستخدم المحلية.
    // نستخدم آخر مستخدم معروف محليًا حتى لا تظهر شاشة الدخول عند تحديث الصفحة بالسحب.
-   const rememberedUser=localStorage.getItem('app_user_key') || (window.getLoginCookie?window.getLoginCookie():'');
+   const rememberedUser=localStorage.getItem('app_user_key') || (window.getLoginCookie?window.getLoginCookie():'') || (()=>{try{return sessionStorage.getItem('app_user_key')||''}catch(_){return ''}})();
    if(rememberedUser && rememberedUser!=='guest'){
      switchAppUser(rememberedUser);
      if(authLoading)authLoading.hidden=true;
@@ -3871,7 +3890,7 @@ authPersistenceReady.then(()=>{
  }
  });
 });
-window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>showAppConfirm('هل تريد تسجيل الخروج ؟','',async()=>{try{await signOut(auth);}finally{localStorage.removeItem('app_user_key');document.cookie='nazzem_login_uid=; max-age=0; path=/; SameSite=Lax';switchAppUser('guest');}});
+window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>showAppConfirm('هل تريد تسجيل الخروج ؟','',async()=>{try{await signOut(auth);}finally{localStorage.removeItem('app_user_key');try{sessionStorage.removeItem('app_user_key');}catch(_){};document.cookie='nazzem_login_uid=; max-age=0; path=/; SameSite=Lax';switchAppUser('guest');}});
 </script>
 
 <style id="pdfExportStyles">
