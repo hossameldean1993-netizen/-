@@ -1085,14 +1085,14 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             <div class="settings-page-title">الإعدادات</div>
                 <div id="driveBackupStatus" class="drive-backup-status" aria-live="polite">
                     <span class="drive-backup-status-icon">☁️</span>
-                    <span><b>حالة المزامنة السحابية:</b> <span id="lastDriveBackupTime">لم يتم التحقق بعد</span></span>
+                    <span><b>حالة المزامنة:</b> <span id="lastDriveBackupTime">لم يتم التحقق بعد</span></span>
                 </div>
             <div class="control-buttons-wrapper">
                 <button class="btn-3d btn-red-3d settings-btn" onclick="openStartMonthModal()">بدء شهر جديد</button>
                 <button class="btn-3d btn-red-3d settings-btn" onclick="deleteAllData()">حذف جميع البيانات</button>
-                <button class="btn-3d settings-btn" onclick="startCloudSyncNow()">مزامنة البيانات سحابيًا</button>
-                <button class="btn-3d settings-btn" onclick="createCloudSafetyBackup()">إنشاء نسخة أمان</button>
-                <button class="btn-3d settings-btn" onclick="openCloudSafetyBackups()">سجل نسخ الأمان</button>
+                <button class="btn-3d settings-btn" onclick="startDriveSyncNow()">مزامنة الآن</button>
+                <button class="btn-3d settings-btn" onclick="createLocalSafetyBackup()">نسخة أمان محلية</button>
+                <button class="btn-3d settings-btn" onclick="restoreFromDrive()">استعادة من Google Drive</button>
                 
                 <button class="btn-3d settings-btn" onclick="exportPDFReport()">تصدير PDF</button>
                 <button class="btn-3d settings-btn" onclick="openRecycleBin()">سلة المحذوفات</button>
@@ -1433,8 +1433,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             } else if (pageId === 'page6') {
                 document.getElementById('navAccounts').classList.add('active');
             } else if (pageId === 'page7') {
-                loadCloudSyncState();
-                refreshDriveBackupStatus();
+                loadDriveState();
+                loadSavedDriveStatus();
                 document.getElementById('navSettings').classList.add('active');
             }
         }
@@ -1980,51 +1980,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             if (document.getElementById('page6').classList.contains('active')) renderFinancialLists();
 
             // مزامنة سحابية تلقائية بعد أي عملية حفظ ناجحة. localStorage يبقى ذاكرة مؤقتة فقط للعمل دون إنترنت.
-            if (typeof scheduleCloudSync === 'function') scheduleCloudSync();
+            if (typeof scheduleDriveSync === 'function') scheduleDriveSync();
             return true;
-        }
-
-        let cloudSyncTimer = null;
-        let cloudSyncRetryTimer = null;
-        const CLOUD_SYNC_RETRY_MS = 10000;
-        const CLOUD_SYNC_TIMEOUT_MS = 15000;
-
-        function clearCloudSyncRetry() {
-            if (cloudSyncRetryTimer) {
-                clearTimeout(cloudSyncRetryTimer);
-                cloudSyncRetryTimer = null;
-            }
-        }
-
-        function scheduleCloudSync(delay = 1200) {
-            if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
-            cloudSyncTimer = setTimeout(async () => {
-                cloudSyncTimer = null;
-                if (typeof window.startCloudSync === 'function') {
-                    await window.startCloudSync({silent:true});
-                }
-            }, Math.max(0, Number(delay) || 0));
-        }
-
-        function scheduleCloudSyncRetry() {
-            if (cloudSyncRetryTimer || !cloudSyncPending || !cloudSyncReady) return;
-            cloudSyncRetryTimer = setTimeout(async () => {
-                cloudSyncRetryTimer = null;
-                if (!cloudSyncReady || !cloudSyncPending) return;
-                await startCloudSync({silent:true});
-                if (cloudSyncPending) scheduleCloudSyncRetry();
-            }, CLOUD_SYNC_RETRY_MS);
-        }
-
-        function cloudSyncWithTimeout(promise, label='Cloud Sync') {
-            return Promise.race([
-                promise,
-                new Promise((_, reject) => setTimeout(() => {
-                    const err = new Error(label + '_TIMEOUT');
-                    err.code = 'CLOUD_SYNC_TIMEOUT';
-                    reject(err);
-                }, CLOUD_SYNC_TIMEOUT_MS))
-            ]);
         }
 
         function generateDatesForGroup(day1Name, day2Name, startDateStr, defaultStatus = 'present', day3Name = '', day4Name = '', ...extraDayNames) {
@@ -2368,14 +2325,13 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function deleteAllData() {
-            showAppConfirm('تحذير', 'سيتم حذف جميع البيانات بالكامل (المجموعات والتلاميذ)! سيتم أولًا حفظ نسخة أمان تلقائية إذا كان الاتصال السحابي متاحًا.', async function() {
+            showAppConfirm('تحذير', 'سيتم حذف جميع البيانات بالكامل (المجموعات والتلاميذ)! سيتم أولًا حفظ نسخة أمان محلية من الحالة الحالية.', function() {
                 try {
-                    if (cloudSyncReady && navigator.onLine && typeof cloudCreateSafetyBackup === 'function') {
-                        await cloudCreateSafetyBackup(getLocalCloudData(), 'نسخة أمان تلقائية قبل حذف جميع البيانات');
-                    } else if (cloudSyncReady) {
-                        showAppAlert('تم إلغاء الحذف', 'لا يوجد اتصال بالسحابة لإنشاء نسخة الأمان الإلزامية. لم يتم حذف أي بيانات.');
-                        return;
-                    }
+                    const safetyKey = getDriveStateKey('local_safety');
+                    const current = getDriveLocalData();
+                    const list = JSON.parse(localStorage.getItem(safetyKey) || '[]');
+                    list.unshift({createdAt:new Date().toISOString(), data:current});
+                    localStorage.setItem(safetyKey, JSON.stringify(list.slice(0,5)));
                     groups = [];
                     students = [];
                     localStorage.removeItem(userStorageKey('teacher_groups_local'));
@@ -2386,7 +2342,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     renderStudentMiniCards();
                     saveData();
                     navigateTo('page6');
-                    showAppAlert('تم الحذف بأمان', 'تم حذف البيانات بعد حفظ نسخة أمان تلقائية من الحالة السابقة.');
+                    showAppAlert('تم الحذف بأمان', 'تم حذف البيانات بعد حفظ نسخة أمان محلية من الحالة السابقة.');
                 } catch (err) {
                     console.error('Delete-all safety backup error:', err);
                     showAppAlert('تم إلغاء الحذف', 'تعذر إنشاء نسخة الأمان قبل الحذف، لذلك لم يتم حذف أي بيانات.');
@@ -3522,434 +3478,312 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             saveData(); closeGroupModal(); if (editId !== '') renderGroupDetail(parseInt(editId, 10)); else navigateTo('page2');
         }
 
-        // ==================== النسخ الاحتياطي إلى Google Drive ====================
-        // Google Identity Services - مناسب للـ PWA/المتصفح
-        // =========================
-        // المزامنة السحابية الحقيقية عبر Firebase Firestore
-        // =========================
-        // لا توجد هنا عملية Backup/Restore تستبدل البيانات.
-        // localStorage مجرد ذاكرة مؤقتة للعمل دون اتصال، بينما Firestore هو المصدر السحابي للحساب.
-        let cloudSyncReady = false;
-        let cloudSyncApplying = false;
-        let cloudSyncWriting = false;
-        let cloudSyncUserUid = null;
-        let cloudSyncUnsubscribe = null;
-        let cloudSyncPending = false;
-        let cloudSyncBase = {groups: [], students: [], recycle_bin: []};
+        // ==================== مزامنة Google Drive الآمنة ====================
+        // Google Drive هو التخزين السحابي الوحيد للبيانات.
+        // Firebase يُستخدم لتسجيل الدخول فقط، ولا تدخل Firestore في تشغيل التطبيق أو المزامنة.
+        const DRIVE_CLIENT_ID = '310650752416-dskh559v6u5vjbc2jih585o35ola5a2p.apps.googleusercontent.com';
+        const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+        const DRIVE_SYNC_VERSION = 3;
+        const DRIVE_SYNC_PREFIX = 'drosak_sync_';
+        const DRIVE_SYNC_DEBOUNCE_MS = 1200;
+        const DRIVE_SYNC_RETRY_MS = 12000;
+        let driveTokenClient = null;
+        let driveAccessToken = null;
+        let driveSyncTimer = null;
+        let driveRetryTimer = null;
+        let driveSyncBusy = false;
+        let driveTokenBusy = false;
+        let driveSyncPending = false;
+        let driveBaseData = {groups:[], students:[], recycle_bin:[]};
+        let driveLastRemoteModified = '';
 
-        function cloneCloudData(data) {
-            try { return JSON.parse(JSON.stringify(data)); } catch (_) { return {groups:[],students:[],recycle_bin:[]}; }
+        function driveClone(data) {
+            try { return JSON.parse(JSON.stringify(data)); }
+            catch (_) { return {groups:[],students:[],recycle_bin:[]}; }
         }
-
-        function getLocalCloudData() {
+        function getDriveLocalData() {
             return {
-                groups: cloneCloudData(groups),
-                students: cloneCloudData(students),
-                recycle_bin: (typeof recycleGet === 'function' ? cloneCloudData(recycleGet()) : [])
+                groups: driveClone(Array.isArray(groups) ? groups : []),
+                students: driveClone(Array.isArray(students) ? students : []),
+                recycle_bin: typeof recycleGet === 'function' ? driveClone(recycleGet()) : []
             };
         }
-
-        function normalizeCloudData(data) {
+        function normalizeDriveData(data) {
             const normalized = normalizeImportedData({
                 groups: Array.isArray(data?.groups) ? data.groups : [],
                 students: Array.isArray(data?.students) ? data.students : []
             });
-            if (!normalized) return {groups:[], students:[], recycle_bin:[]};
+            if (!normalized) throw new Error('DRIVE_INVALID_DATA');
             return {
                 groups: normalized.groups || [],
                 students: normalized.students || [],
                 recycle_bin: Array.isArray(data?.recycle_bin) ? data.recycle_bin : []
             };
         }
-
-        function cloudObjectKey(item, index) {
+        function driveKey(item, index) {
             if (item && item.id !== undefined && item.id !== null) return 'id:' + String(item.id);
             if (item && item.studentId) return 'studentId:' + String(item.studentId);
             return 'index:' + index;
         }
-
-        function mergeCloudArrays(baseArr, localArr, cloudArr) {
-            const baseMap = new Map((Array.isArray(baseArr) ? baseArr : []).map((x,i)=>[cloudObjectKey(x,i), x]));
-            const localMap = new Map((Array.isArray(localArr) ? localArr : []).map((x,i)=>[cloudObjectKey(x,i), x]));
-            const cloudMap = new Map((Array.isArray(cloudArr) ? cloudArr : []).map((x,i)=>[cloudObjectKey(x,i), x]));
-            const keys = new Set([...baseMap.keys(), ...localMap.keys(), ...cloudMap.keys()]);
-            const result = [];
-            for (const key of keys) {
-                const base = baseMap.get(key);
-                const local = localMap.get(key);
-                const cloud = cloudMap.get(key);
-                if (!base) {
-                    if (local !== undefined) result.push(local);
-                    else if (cloud !== undefined) result.push(cloud);
-                    continue;
-                }
-                if (local === undefined && cloud === undefined) continue;
-                if (local === undefined) { result.push(cloud); continue; }
-                if (cloud === undefined) { result.push(local); continue; }
-                const baseJson = JSON.stringify(base);
-                const localJson = JSON.stringify(local);
-                const cloudJson = JSON.stringify(cloud);
-                if (localJson === baseJson) result.push(cloud);
-                else if (cloudJson === baseJson) result.push(local);
-                else if (localJson === cloudJson) result.push(local);
-                else result.push(local);
+        function sameJson(a,b) { return JSON.stringify(a) === JSON.stringify(b); }
+        function mergeDriveArray(baseArr, localArr, remoteArr) {
+            const bm=new Map((Array.isArray(baseArr)?baseArr:[]).map((x,i)=>[driveKey(x,i),x]));
+            const lm=new Map((Array.isArray(localArr)?localArr:[]).map((x,i)=>[driveKey(x,i),x]));
+            const rm=new Map((Array.isArray(remoteArr)?remoteArr:[]).map((x,i)=>[driveKey(x,i),x]));
+            const keys=new Set([...bm.keys(),...lm.keys(),...rm.keys()]);
+            const out=[];
+            for(const key of keys){
+                const b=bm.get(key), l=lm.get(key), r=rm.get(key);
+                if(!b){ if(l!==undefined) out.push(l); else if(r!==undefined) out.push(r); continue; }
+                if(l===undefined && r===undefined) continue;
+                if(l===undefined){ out.push(sameJson(r,b)?undefined:r); continue; }
+                if(r===undefined){ out.push(sameJson(l,b)?undefined:l); continue; }
+                if(sameJson(l,b)) out.push(r);
+                else if(sameJson(r,b)) out.push(l);
+                else out.push(l); // تعارض حقيقي: تعديل الجهاز الحالي له الأولوية ولا نحذف بياناته.
             }
-            return result;
+            return out.filter(x=>x!==undefined);
         }
-
-        function mergeCloudData(localData, cloudData) {
+        function mergeDriveData(base, local, remote) {
             return {
-                groups: mergeCloudArrays(cloudSyncBase.groups, localData.groups, cloudData.groups),
-                students: mergeCloudArrays(cloudSyncBase.students, localData.students, cloudData.students),
-                recycle_bin: mergeCloudArrays(cloudSyncBase.recycle_bin, localData.recycle_bin, cloudData.recycle_bin)
+                groups: mergeDriveArray(base.groups, local.groups, remote.groups),
+                students: mergeDriveArray(base.students, local.students, remote.students),
+                recycle_bin: mergeDriveArray(base.recycle_bin, local.recycle_bin, remote.recycle_bin)
             };
         }
-
-        function persistLocalCloudData(data) {
-            groups = data.groups || [];
-            students = data.students || [];
-            if (typeof recycleSave === 'function') recycleSave(data.recycle_bin || []);
-            dataNormalizationDone = false;
-            ensureStudentIds();
-            try {
-                localStorage.setItem(userStorageKey('teacher_groups_local'), JSON.stringify(groups));
-                localStorage.setItem(userStorageKey('teacher_students_local'), JSON.stringify(students));
-            } catch (err) { console.error('Cloud local cache error:', err); }
-            selectedGroupIndex = null;
-            selectedStudentIndex = null;
-            calculateSummaryTotals();
-            renderTodaySessions();
-            renderMiniCards();
-            renderStudentMiniCards();
-            if (document.getElementById('page6')?.classList.contains('active')) renderFinancialLists();
+        function getDriveFileName() {
+            return DRIVE_SYNC_PREFIX + String(appUserKey || 'guest').replace(/[^a-zA-Z0-9_-]/g,'_') + '.json';
         }
-
-        function cloudSyncStatus(text) {
-            const el = document.getElementById('lastDriveBackupTime');
-            if (el) el.textContent = text;
-        }
-
-        function saveCloudSyncState() {
+        function getDriveStateKey(name) { return userStorageKey('drive_sync_' + name); }
+        function loadDriveState() {
             try {
-                localStorage.setItem(userStorageKey('cloud_sync_pending'), cloudSyncPending ? '1' : '0');
-                localStorage.setItem(userStorageKey('cloud_sync_base'), JSON.stringify(cloudSyncBase));
+                driveSyncPending = localStorage.getItem(getDriveStateKey('pending')) === '1';
+                const raw = localStorage.getItem(getDriveStateKey('base'));
+                driveBaseData = raw ? normalizeDriveData(JSON.parse(raw)) : {groups:[],students:[],recycle_bin:[]};
+                driveLastRemoteModified = localStorage.getItem(getDriveStateKey('remote_modified')) || '';
+            } catch (_) {
+                driveSyncPending = false;
+                driveBaseData = {groups:[],students:[],recycle_bin:[]};
+                driveLastRemoteModified = '';
+            }
+        }
+        function saveDriveState() {
+            try {
+                localStorage.setItem(getDriveStateKey('pending'), driveSyncPending ? '1' : '0');
+                localStorage.setItem(getDriveStateKey('base'), JSON.stringify(driveBaseData));
+                if(driveLastRemoteModified) localStorage.setItem(getDriveStateKey('remote_modified'), driveLastRemoteModified);
             } catch (_) {}
         }
-
-        function loadCloudSyncState() {
-            try {
-                cloudSyncPending = localStorage.getItem(userStorageKey('cloud_sync_pending')) === '1';
-                const raw = localStorage.getItem(userStorageKey('cloud_sync_base'));
-                cloudSyncBase = raw ? normalizeCloudData(JSON.parse(raw)) : {groups:[],students:[],recycle_bin:[]};
-            } catch (_) {
-                cloudSyncPending = false;
-                cloudSyncBase = {groups:[],students:[],recycle_bin:[]};
-            }
+        function setDriveStatus(text) {
+            const el=document.getElementById('lastDriveBackupTime');
+            if(el) el.textContent=text;
         }
-
-        async function writeCloudData(silent=false) {
-            if (!cloudSyncReady || !window.cloudFirestoreSetDoc || !cloudSyncUserUid || cloudSyncWriting) return false;
-            cloudSyncWriting = true;
-            try {
-                const data = getLocalCloudData();
-                const json = JSON.stringify(data);
-                const bytes = new TextEncoder().encode(json).length;
-                if (bytes > 900 * 1024) {
-                    const err = new Error('CLOUD_DATA_TOO_LARGE');
-                    err.code = 'CLOUD_DATA_TOO_LARGE';
-                    throw err;
+        function setDriveStatusTime(value) {
+            if(!value){ setDriveStatus('لم تتم المزامنة بعد'); return; }
+            const d=new Date(value);
+            setDriveStatus(Number.isNaN(d.getTime()) ? 'غير معروف' : d.toLocaleString('ar-EG',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:true}));
+        }
+        function loadSavedDriveStatus() {
+            const saved=localStorage.getItem(getDriveStateKey('last_sync'));
+            setDriveStatusTime(saved || driveLastRemoteModified);
+        }
+        function markDriveSynced(value) {
+            const v=value || new Date().toISOString();
+            localStorage.setItem(getDriveStateKey('last_sync'),v);
+            setDriveStatusTime(v);
+        }
+        function initGoogleDriveAuth() {
+            if(typeof google==='undefined' || !google.accounts || !google.accounts.oauth2) throw new Error('GOOGLE_IDENTITY_SERVICES_UNAVAILABLE');
+            if(driveTokenClient) return;
+            driveTokenClient=google.accounts.oauth2.initTokenClient({
+                client_id: DRIVE_CLIENT_ID,
+                scope: DRIVE_SCOPE,
+                callback: response => {
+                    driveTokenBusy=false;
+                    if(response.error || !response.access_token){
+                        driveAccessToken=null;
+                        setDriveStatus('لم تُمنح صلاحية Google Drive');
+                        return;
+                    }
+                    driveAccessToken=response.access_token;
+                    localStorage.setItem(getDriveStateKey('permission'),'1');
+                    scheduleDriveSync(150);
                 }
-
-                await cloudSyncWithTimeout(window.cloudFirestoreSetDoc(data), 'CLOUD_SYNC_WRITE');
-                cloudSyncBase = cloneCloudData(data);
-                cloudSyncPending = false;
-                saveCloudSyncState();
-                clearCloudSyncRetry();
-                cloudSyncStatus('متزامنة مع السحابة');
+            });
+        }
+        function requestDriveToken(forceConsent=false) {
+            try {
+                initGoogleDriveAuth();
+                if(driveTokenBusy) return false;
+                driveTokenBusy=true;
+                const granted=localStorage.getItem(getDriveStateKey('permission'))==='1';
+                driveTokenClient.requestAccessToken({prompt: forceConsent || !granted ? 'consent' : ''});
                 return true;
-            } catch (err) {
-                console.error('Cloud sync write error:', err);
-                cloudSyncPending = true;
-                saveCloudSyncState();
-
-                if (err?.code === 'CLOUD_DATA_TOO_LARGE') {
-                    cloudSyncStatus('حجم البيانات أكبر من حد السحابة');
-                    if (!silent) showAppAlert('تعذر المزامنة', 'حجم البيانات كبير جدًا لملف سحابي واحد. لم يتم حذف أو تعديل أي بيانات.');
-                    return false;
-                }
-
-                cloudSyncStatus('جارٍ إعادة المزامنة تلقائيًا...');
-                scheduleCloudSyncRetry();
-                if (!silent) showAppAlert('تعذر المزامنة مؤقتًا', 'لم يتم حذف أي بيانات. ستتم إعادة المحاولة تلقائيًا.');
-                return false;
-            } finally { cloudSyncWriting = false; }
-        }
-
-        async function startCloudSync(options={}) {
-            if (!cloudSyncReady || !cloudSyncUserUid || !window.cloudFirestoreGetDoc) {
-                if (!options.silent) showAppAlert('المزامنة السحابية', 'سجّل الدخول أولًا وانتظر اكتمال الاتصال بالسحابة.');
-                return false;
-            }
-            try {
-                loadCloudSyncState();
-                const cloudRaw = await cloudSyncWithTimeout(window.cloudFirestoreGetDoc(), 'CLOUD_SYNC_READ');
-                const localData = getLocalCloudData();
-                const cloudData = cloudRaw ? normalizeCloudData(cloudRaw) : {groups:[],students:[],recycle_bin:[]};
-                const localHasData = localData.groups.length || localData.students.length || localData.recycle_bin.length;
-                const cloudHasData = cloudData.groups.length || cloudData.students.length || cloudData.recycle_bin.length;
-                let merged;
-                if (!cloudHasData && localHasData) merged = localData;
-                else if (cloudHasData && !localHasData) merged = cloudData;
-                else if (cloudHasData && localHasData) merged = mergeCloudData(localData, cloudData);
-                else merged = {groups:[],students:[],recycle_bin:[]};
-                cloudSyncApplying = true;
-                persistLocalCloudData(merged);
-                cloudSyncBase = cloneCloudData(merged);
-                cloudSyncPending = false;
-                saveCloudSyncState();
-                cloudSyncApplying = false;
-                const written = await writeCloudData(true);
-                if (!written && cloudSyncPending) scheduleCloudSyncRetry();
-                if (written) cloudSyncStatus('متزامنة مع السحابة');
-                return written;
-            } catch (err) {
-                cloudSyncApplying = false;
-                console.error('Cloud sync initial error:', err);
-                cloudSyncPending = true;
-                saveCloudSyncState();
-                cloudSyncStatus('جارٍ إعادة المزامنة تلقائيًا...');
-                scheduleCloudSyncRetry();
-                if (!options.silent) showAppAlert('تعذر المزامنة', 'تعذر الاتصال بقاعدة البيانات السحابية الآن. لم يتم حذف أي بيانات، وستتم إعادة المحاولة تلقائيًا.');
+            } catch(e) {
+                driveTokenBusy=false;
+                console.error('Drive token error:',e);
+                setDriveStatus('تعذر الاتصال بـ Google Drive');
                 return false;
             }
         }
-
-        // =========================
-        // نسخ أمان تاريخية غير مدمرة
-        // النسخة لا تستبدل البيانات الحالية تلقائيًا. الاستعادة لا تتم إلا بطلب صريح،
-        // وقبلها تُنشأ نسخة أمان تلقائية من الحالة الحالية حتى يمكن الرجوع إليها.
-        // =========================
-        let cloudSafetyBackupBusy = false;
-        const CLOUD_SAFETY_MAX_BYTES = 900 * 1024;
-        const CLOUD_SAFETY_LIST_LIMIT = 20;
-
-        function safetyBackupPayload(data) {
+        async function driveFetch(url, options={}) {
+            if(!driveAccessToken) throw new Error('DRIVE_NO_TOKEN');
+            const response=await fetch(url,{...options,headers:{...(options.headers||{}),Authorization:'Bearer '+driveAccessToken}});
+            if(response.status===401){ driveAccessToken=null; localStorage.removeItem(getDriveStateKey('permission')); throw new Error('DRIVE_UNAUTHORIZED'); }
+            return response;
+        }
+        async function driveError(response){
+            let body=''; try{body=await response.text();}catch(_){ }
+            let msg=''; try{msg=JSON.parse(body)?.error?.message||'';}catch(_){ }
+            return 'HTTP '+response.status+(msg?': '+msg:'');
+        }
+        async function findDriveFile() {
+            const name=getDriveFileName();
+            const q="name = '"+name.replace(/'/g,"\\'")+"' and trashed = false";
+            const url='https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&spaces=drive&fields=files(id,name,mimeType,modifiedTime,size,version)&orderBy=modifiedTime desc&pageSize=10';
+            const r=await driveFetch(url);
+            if(!r.ok) throw new Error('DRIVE_LIST_FAILED: '+await driveError(r));
+            const data=await r.json();
+            return Array.isArray(data.files) && data.files.length ? data.files[0] : null;
+        }
+        async function readDriveFile(id) {
+            const r=await driveFetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media');
+            if(!r.ok) throw new Error('DRIVE_READ_FAILED: '+await driveError(r));
+            let data; try{data=JSON.parse(await r.text());}catch(_){throw new Error('DRIVE_INVALID_JSON');}
+            if(data.ownerKey && String(data.ownerKey)!==String(appUserKey||'guest')) throw new Error('DRIVE_WRONG_USER');
+            return {payload:normalizeDriveData(data),meta:data};
+        }
+        function buildDrivePayload(data) {
+            const now=new Date().toISOString();
             return {
-                groups: cloneCloudData(data.groups || []),
-                students: cloneCloudData(data.students || []),
-                recycle_bin: cloneCloudData(data.recycle_bin || []),
-                schemaVersion: 2,
-                backupType: 'manual-safety-backup',
-                createdAt: Date.now()
+                syncVersion:DRIVE_SYNC_VERSION,
+                ownerKey:String(appUserKey||'guest'),
+                updatedAt:now,
+                revision:(typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():Date.now()+'-'+Math.random(),
+                groups:data.groups,
+                students:data.students,
+                recycle_bin:data.recycle_bin
             };
         }
-
-        function safetyBackupSizeBytes(data) {
-            try {
-                return new TextEncoder().encode(JSON.stringify(data)).length;
-            } catch (_) {
-                return Infinity;
-            }
+        async function createDriveFile(payload) {
+            const form=new FormData();
+            form.append('metadata',new Blob([JSON.stringify({name:getDriveFileName(),mimeType:'application/json'})],{type:'application/json'}));
+            form.append('file',new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
+            return driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime',{method:'POST',body:form});
         }
-
-        async function cloudCreateSafetyBackup(data, label='نسخة أمان') {
-            if (!cloudSyncReady || !cloudSyncUserUid || !window.cloudFirestoreCreateBackup) {
-                throw new Error('CLOUD_BACKUP_NOT_READY');
-            }
-            const payload = safetyBackupPayload(data || getLocalCloudData());
-            if (safetyBackupSizeBytes(payload) > CLOUD_SAFETY_MAX_BYTES) {
-                throw new Error('CLOUD_BACKUP_TOO_LARGE');
-            }
-            return await window.cloudFirestoreCreateBackup(payload, label);
+        async function updateDriveFile(id,payload) {
+            return driveFetch('https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(id)+'?uploadType=media&fields=id,name,modifiedTime',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload,null,2)});
         }
-
-        async function createCloudSafetyBackup() {
-            if (cloudSafetyBackupBusy) return;
-            if (!navigator.onLine) {
-                showAppAlert('لا يوجد اتصال بالإنترنت', 'لا يمكن إنشاء نسخة أمان سحابية بدون اتصال. بياناتك الحالية لن تتأثر.');
-                return;
-            }
-            cloudSafetyBackupBusy = true;
-            try {
-                // أولًا نُسوّي الحالة الحالية مع السحابة، دون استبدالها بشكل أعمى.
-                const synced = await startCloudSync({silent:true});
-                if (!synced) throw new Error('SYNC_BEFORE_BACKUP_FAILED');
-                const id = await cloudCreateSafetyBackup(getLocalCloudData(), 'نسخة أمان يدوية');
-                showAppAlert('تم إنشاء نسخة الأمان', `تم حفظ نسخة أمان مستقلة برقم ${id}. النسخة الحالية لم يتم استبدالها أو حذفها.`);
-            } catch (err) {
-                console.error('Safety backup error:', err);
-                const message = err?.message === 'CLOUD_BACKUP_TOO_LARGE'
-                    ? 'حجم البيانات كبير جدًا لنسخة Firestore واحدة. لم يتم حذف أو تعديل أي بيانات.'
-                    : 'تعذر إنشاء نسخة الأمان الآن. لم يتم حذف أو استبدال بياناتك.';
-                showAppAlert('تعذر إنشاء نسخة الأمان', message);
-            } finally {
-                cloudSafetyBackupBusy = false;
-            }
+        function applyDriveLocalData(data) {
+            groups=driveClone(data.groups); students=driveClone(data.students);
+            if(typeof recycleSave==='function') recycleSave(driveClone(data.recycle_bin||[]));
+            dataNormalizationDone=false; selectedGroupIndex=null; selectedStudentIndex=null; ensureStudentIds();
+            try{
+                localStorage.setItem(userStorageKey('teacher_groups_local'),JSON.stringify(groups));
+                localStorage.setItem(userStorageKey('teacher_students_local'),JSON.stringify(students));
+            }catch(e){throw new Error('LOCAL_SAVE_FAILED');}
+            calculateSummaryTotals(); renderTodaySessions(); renderMiniCards(); renderStudentMiniCards();
+            if(document.getElementById('page6')?.classList.contains('active')) renderFinancialLists();
         }
-
-        async function openCloudSafetyBackups() {
-            if (!cloudSyncReady || !cloudSyncUserUid || !window.cloudFirestoreListBackups) {
-                showAppAlert('نسخ الأمان', 'سجّل الدخول وانتظر اكتمال الاتصال بالسحابة أولًا.');
-                return;
-            }
+        function createLocalSafetyBackup() {
             try {
-                const list = await window.cloudFirestoreListBackups(CLOUD_SAFETY_LIST_LIMIT);
-                const old = document.getElementById('cloudSafetyBackupsModal');
-                if (old) old.remove();
-                const box = document.createElement('div');
-                box.id = 'cloudSafetyBackupsModal';
-                box.className = 'modal';
-                box.style.display = 'flex';
-                const rows = list.length ? list.map((x,i) => {
-                    const d = x.createdAt ? new Date(x.createdAt).toLocaleString('ar-EG') : 'تاريخ غير معروف';
-                    const label = escapeHtml(x.label || 'نسخة أمان');
-                    return `<div style="padding:10px;border:1px solid #ccc;border-radius:8px;margin:7px 0">`+
-                        `<strong>${label}</strong><br><small>${escapeHtml(d)}</small>`+
-                        `<div style="display:flex;gap:7px;margin-top:8px;flex-wrap:wrap">`+
-                        `<button class="btn-3d" data-safety-restore="${escapeHtml(x.id)}">استعادة آمنة</button>`+
-                        `</div></div>`;
-                }).join('') : '<p style="text-align:center">لا توجد نسخ أمان محفوظة.</p>';
-                box.innerHTML = `<div class="modal-content" style="max-height:80vh;overflow:auto">`+
-                    `<h3 style="text-align:center">سجل نسخ الأمان</h3>`+
-                    `<p style="font-size:.9rem;text-align:center">النسخ هنا تاريخية ومستقلة، ولا تُستخدم تلقائيًا. عند الاستعادة تُحفظ الحالة الحالية أولًا كنسخة أمان.</p>`+
-                    rows + `<button class="btn-3d" data-close-safety>إغلاق</button></div>`;
-                document.body.appendChild(box);
-                box.querySelector('[data-close-safety]').onclick = () => box.remove();
-                box.querySelectorAll('[data-safety-restore]').forEach(btn => {
-                    btn.onclick = () => requestCloudSafetyRestore(btn.dataset.safetyRestore);
+                const key=getDriveStateKey('local_safety');
+                const current=getDriveLocalData();
+                const list=JSON.parse(localStorage.getItem(key)||'[]');
+                list.unshift({createdAt:new Date().toISOString(),data:current});
+                localStorage.setItem(key,JSON.stringify(list.slice(0,5)));
+                showAppAlert('تم إنشاء نسخة أمان','تم حفظ نسخة أمان محلية من بياناتك الحالية.');
+            } catch(e) { showAppAlert('تعذر إنشاء نسخة الأمان','لم يتم تعديل أو حذف أي بيانات.'); }
+        }
+        async function restoreFromDrive() {
+            if(!navigator.onLine){showAppAlert('لا يوجد اتصال بالإنترنت','لا يمكن الاستعادة بدون اتصال. بيانات الجهاز لم تتأثر.');return;}
+            if(!driveAccessToken){ requestDriveToken(); showAppAlert('السماح لـ Google Drive','اسمح بالوصول إلى Google Drive، ثم اضغط الاستعادة مرة أخرى.'); return; }
+            if(driveSyncBusy) return;
+            driveSyncBusy=true;
+            try{
+                const file=await findDriveFile();
+                if(!file?.id){showAppAlert('لا توجد بيانات سحابية','لم يتم العثور على بيانات محفوظة في Google Drive.');return;}
+                const remote=await readDriveFile(file.id);
+                const current=getDriveLocalData();
+                const safetyKey=getDriveStateKey('local_safety');
+                const safetyList=JSON.parse(localStorage.getItem(safetyKey)||'[]');
+                safetyList.unshift({createdAt:new Date().toISOString(),data:current});
+                localStorage.setItem(safetyKey,JSON.stringify(safetyList.slice(0,5)));
+                showAppConfirm('استعادة من Google Drive','سيتم استبدال بيانات الجهاز بالنسخة الموجودة في Google Drive. تم حفظ نسخة أمان محلية من بيانات الجهاز أولًا. هل تريد المتابعة؟',()=>{
+                    try{applyDriveLocalData(remote.payload); driveBaseData=driveClone(remote.payload); driveSyncPending=false; driveLastRemoteModified=file.modifiedTime||''; saveDriveState(); markDriveSynced(file.modifiedTime||new Date().toISOString()); showAppAlert('تمت الاستعادة','تمت استعادة البيانات من Google Drive بنجاح.');}
+                    catch(e){showAppAlert('فشلت الاستعادة','لم يتم استبدال بيانات الجهاز.');}
                 });
-            } catch (err) {
-                console.error('List safety backups error:', err);
-                showAppAlert('تعذر فتح نسخ الأمان', 'لم أستطع قراءة سجل النسخ الآن. بياناتك الحالية لم تتأثر.');
-            }
+            }catch(e){console.error('Drive restore error',e);showAppAlert('تعذر الاستعادة','تعذر قراءة بيانات Google Drive. لم يتم حذف أو استبدال بيانات الجهاز.');}
+            finally{driveSyncBusy=false;}
         }
-
-        async function requestCloudSafetyRestore(backupId) {
-            if (!backupId || cloudSafetyBackupBusy) return;
-            showAppConfirm(
-                'استعادة نسخة أمان',
-                'سيتم أولًا حفظ بياناتك الحالية كنسخة أمان تلقائية، ثم استبدال الحالة الحالية بالنسخة التي اخترتها. لا يتم ذلك إلا بعد تأكيدك، وإذا فشل حفظ النسخة الحالية فلن تبدأ الاستعادة.',
-                async function() { await restoreCloudSafetyBackup(backupId); }
-            );
-        }
-
-        async function restoreCloudSafetyBackup(backupId) {
-            if (cloudSafetyBackupBusy) return;
-            if (!navigator.onLine) {
-                showAppAlert('لا يوجد اتصال بالإنترنت', 'لا يمكن تنفيذ الاستعادة بدون اتصال بالسحابة. بياناتك الحالية لم تتأثر.');
-                return;
-            }
-            cloudSafetyBackupBusy = true;
-            const oldTimer = cloudSyncTimer;
-            if (oldTimer) clearTimeout(oldTimer);
-            cloudSyncApplying = true;
-            try {
-                const backup = await window.cloudFirestoreGetBackup(backupId);
-                if (!backup) throw new Error('BACKUP_NOT_FOUND');
-                const restored = normalizeCloudData(backup);
-                const hasBackupData = restored.groups.length || restored.students.length || restored.recycle_bin.length;
-                if (!hasBackupData) throw new Error('EMPTY_BACKUP');
-                const current = getLocalCloudData();
-                // نقطة أمان إلزامية قبل أي استبدال.
-                await cloudCreateSafetyBackup(current, 'نسخة أمان تلقائية قبل الاستعادة');
-                // نكتب النسخة المختارة إلى السحابة أولًا. إذا فشلت الكتابة، لا نلمس البيانات المحلية.
-                await window.cloudFirestoreSetDoc(restored);
-                persistLocalCloudData(restored);
-                cloudSyncBase = cloneCloudData(restored);
-                cloudSyncPending = false;
-                saveCloudSyncState();
-                cloudSyncStatus('تمت الاستعادة بأمان');
-                showAppAlert('تمت الاستعادة', 'تمت استعادة النسخة المختارة بنجاح، وتم حفظ الحالة السابقة تلقائيًا كنسخة أمان.');
-                const box = document.getElementById('cloudSafetyBackupsModal');
-                if (box) box.remove();
-            } catch (err) {
-                console.error('Safety restore error:', err);
-                const message = err?.message === 'BACKUP_NOT_FOUND'
-                    ? 'النسخة المطلوبة غير موجودة.'
-                    : 'فشلت الاستعادة قبل إتمامها. بياناتك الحالية لم يتم استبدالها.';
-                showAppAlert('تعذر الاستعادة', message);
-            } finally {
-                cloudSyncApplying = false;
-                cloudSafetyBackupBusy = false;
-            }
-        }
-
-        async function startCloudSyncNow() {
-            if (!navigator.onLine) {
-                showAppAlert('لا يوجد اتصال بالإنترنت', 'البيانات الحالية محفوظة على الجهاز مؤقتًا. اتصل بالإنترنت ثم أعد المزامنة.');
-                return;
-            }
-            await startCloudSync({silent:false});
-        }
-
-        window.startCloudSync = startCloudSync;
-        window.startCloudSyncNow = startCloudSyncNow;
-
-        window.initCloudSync = async function(uid) {
-            if (!uid || !window.cloudFirestoreInit) return;
-            if (cloudSyncUnsubscribe) { try { cloudSyncUnsubscribe(); } catch (_) {} cloudSyncUnsubscribe = null; }
-            cloudSyncUserUid = uid;
-            cloudSyncReady = false;
-            loadCloudSyncState();
-            try {
-                await window.cloudFirestoreInit(uid);
-                cloudSyncReady = true;
-                const initialSynced = await startCloudSync({silent:true});
-                if (!initialSynced && cloudSyncPending) scheduleCloudSyncRetry();
-                cloudSyncUnsubscribe = window.cloudFirestoreListen((cloudData)=>{
-                    if (!cloudData || cloudSyncWriting) return;
-                    try {
-                        const incoming = normalizeCloudData(cloudData);
-                        const localData = getLocalCloudData();
-                        const merged = mergeCloudData(localData, incoming);
-                        const incomingJson = JSON.stringify(incoming);
-                        const mergedJson = JSON.stringify(merged);
-                        if (incomingJson === JSON.stringify(cloudSyncBase) && !cloudSyncPending) return;
-                        cloudSyncApplying = true;
-                        persistLocalCloudData(merged);
-                        cloudSyncBase = cloneCloudData(merged);
-                        cloudSyncPending = mergedJson !== incomingJson;
-                        saveCloudSyncState();
-                        cloudSyncApplying = false;
-                        if (cloudSyncPending) writeCloudData(true);
-                        else cloudSyncStatus('متزامنة مع السحابة');
-                    } catch (err) {
-                        cloudSyncApplying = false;
-                        console.error('Cloud realtime sync error:', err);
-                    }
-                });
-                if (!cloudSyncPending) cloudSyncStatus('متزامنة مع السحابة');
-                else {
-                    cloudSyncStatus('جارٍ إعادة المزامنة تلقائيًا...');
-                    scheduleCloudSyncRetry();
+        async function syncWithDrive() {
+            if(driveSyncBusy || !navigator.onLine || !driveAccessToken) return false;
+            driveSyncBusy=true; setDriveStatus('جارٍ المزامنة...');
+            try{
+                loadDriveState();
+                const local=getDriveLocalData();
+                const file=await findDriveFile();
+                if(!file?.id){
+                    const payload=buildDrivePayload(local);
+                    const r=await createDriveFile(payload); if(!r.ok) throw new Error('DRIVE_CREATE_FAILED: '+await driveError(r));
+                    driveBaseData=driveClone(local); driveSyncPending=false; driveLastRemoteModified=r.headers.get('Last-Modified')||new Date().toISOString(); saveDriveState(); markDriveSynced(new Date().toISOString()); return true;
                 }
-            } catch (err) {
-                console.error('Cloud sync init error:', err);
-                cloudSyncReady = false;
-                cloudSyncStatus('تعذر الاتصال بالسحابة');
-            }
-        };
-
-        window.addEventListener('online', ()=>{
-            if (cloudSyncReady) {
-                clearCloudSyncRetry();
-                scheduleCloudSync(300);
-            }
-        });
-
-        document.addEventListener('visibilitychange', ()=>{
-            if (document.visibilityState === 'visible' && cloudSyncReady) {
-                scheduleCloudSync(300);
-                if (cloudSyncPending) scheduleCloudSyncRetry();
-            }
-        });
-
-        window.addEventListener('beforeunload', ()=>{
-            if (cloudSyncPending) saveCloudSyncState();
-        });
+                const remote=await readDriveFile(file.id);
+                const remoteUpdated=Date.parse(remote.meta.updatedAt||'')||0;
+                const localLast=Date.parse(localStorage.getItem(getDriveStateKey('last_sync'))||'')||0;
+                const localChanged=!sameJson(local,driveBaseData) || driveSyncPending;
+                let finalData;
+                if(!localChanged) finalData=remote.payload;
+                else if(remoteUpdated<=localLast || !localLast) finalData=mergeDriveData(driveBaseData,local,remote.payload);
+                else finalData=mergeDriveData(driveBaseData,local,remote.payload);
+                // لا نكتب نسخة فارغة فوق نسخة غير فارغة نتيجة خطأ محلي.
+                const localHas=local.groups.length||local.students.length;
+                const finalHas=finalData.groups.length||finalData.students.length;
+                const remoteHas=remote.payload.groups.length||remote.payload.students.length;
+                if(remoteHas && !finalHas && localHas) throw new Error('DRIVE_EMPTY_MERGE_BLOCKED');
+                if(!sameJson(finalData,remote.payload) || localChanged){
+                    const payload=buildDrivePayload(finalData);
+                    const r=await updateDriveFile(file.id,payload); if(!r.ok) throw new Error('DRIVE_UPDATE_FAILED: '+await driveError(r));
+                    applyDriveLocalData(finalData); driveBaseData=driveClone(finalData); driveSyncPending=false;
+                }else if(!sameJson(local,remote.payload)){
+                    applyDriveLocalData(remote.payload); driveBaseData=driveClone(remote.payload); driveSyncPending=false;
+                }else{driveBaseData=driveClone(remote.payload);driveSyncPending=false;}
+                driveLastRemoteModified=file.modifiedTime||new Date().toISOString(); saveDriveState(); markDriveSynced(new Date().toISOString()); return true;
+            }catch(e){
+                console.error('Drive sync error',e); driveSyncPending=true; saveDriveState();
+                if(e.message==='DRIVE_UNAUTHORIZED') setDriveStatus('انتهت صلاحية Google Drive'); else if(e.message==='DRIVE_EMPTY_MERGE_BLOCKED') setDriveStatus('تم إيقاف المزامنة لحماية البيانات'); else setDriveStatus('تعذر المزامنة — ستتم إعادة المحاولة');
+                scheduleDriveRetry(); return false;
+            }finally{driveSyncBusy=false;}
+        }
+        function scheduleDriveSync(delay=DRIVE_SYNC_DEBOUNCE_MS){
+            if(driveSyncTimer) clearTimeout(driveSyncTimer);
+            driveSyncTimer=setTimeout(()=>{driveSyncTimer=null;if(driveAccessToken) syncWithDrive();},Math.max(0,delay));
+            driveSyncPending=true; saveDriveState();
+        }
+        function scheduleDriveRetry(){
+            if(driveRetryTimer||!driveSyncPending) return;
+            driveRetryTimer=setTimeout(()=>{driveRetryTimer=null;if(driveAccessToken&&navigator.onLine) syncWithDrive();},DRIVE_SYNC_RETRY_MS);
+        }
+        async function startDriveSyncNow(){
+            if(!navigator.onLine){showAppAlert('لا يوجد اتصال بالإنترنت','بياناتك محفوظة على الجهاز. اتصل بالإنترنت ثم اضغط مزامنة الآن.');return;}
+            if(!driveAccessToken){requestDriveToken();showAppAlert('السماح لـ Google Drive','اسمح للتطبيق بالوصول إلى Google Drive، ثم اضغط مزامنة الآن مرة أخرى.');return;}
+            await syncWithDrive();
+        }
+        function initDriveForUser(uid){
+            loadDriveState(); loadSavedDriveStatus();
+            if(!uid || uid==='guest') return;
+            try{initGoogleDriveAuth();}catch(e){console.warn('Drive auth unavailable',e);}
+            // نبدأ المزامنة فقط إذا سبق منح صلاحية Drive؛ لا نوقف فتح البرنامج بسببها.
+            if(localStorage.getItem(getDriveStateKey('permission'))==='1'){ driveSyncPending=true; saveDriveState(); requestDriveToken(false); }
+        }
+        window.startDriveSyncNow=startDriveSyncNow;
+        window.createLocalSafetyBackup=createLocalSafetyBackup;
+        window.restoreFromDrive=restoreFromDrive;
+        window.initDriveForUser=initDriveForUser;
+        window.addEventListener('online',()=>{if(driveSyncPending&&driveAccessToken) scheduleDriveRetry();});
+        document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&driveSyncPending&&driveAccessToken) scheduleDriveRetry();});
 
 </script>
-
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {
@@ -3959,119 +3793,60 @@ if ('serviceWorker' in navigator) {
 </script>
 
 <style id="firebase-startup-guard">
-/* في الزيارة الأولى نمنع وميض التطبيق حتى يتم تحديد حالة الدخول.
-   المستخدم الذي سبق له تسجيل الدخول يرى التطبيق فورًا بينما Firebase يتحقق في الخلفية. */
+/* تسجيل الدخول لا ينتظر Google Drive أو أي قاعدة بيانات. */
 body.firebase-auth-pending > *:not(#authLoading) { visibility: hidden !important; }
 body.firebase-auth-pending #authLoading { visibility: visible !important; }
 </style>
 <script>
 (function(){
-  var rememberedUser = localStorage.getItem('app_user_key');
-  if (rememberedUser && rememberedUser !== 'guest') {
-    document.documentElement.classList.remove('firebase-startup-pending');
+  var rememberedUser=localStorage.getItem('app_user_key');
+  if(rememberedUser && rememberedUser!=='guest'){
     document.body.classList.remove('firebase-auth-pending');
-    var fastLoading = document.getElementById('authLoading');
-    if (fastLoading) fastLoading.hidden = true;
-  } else {
-    document.documentElement.classList.add('firebase-startup-pending');
-    document.body.classList.add('firebase-auth-pending');
-  }
+    var l=document.getElementById('authLoading'); if(l) l.hidden=true;
+  }else document.body.classList.add('firebase-auth-pending');
 })();
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
 import { getAuth, setPersistence, browserLocalPersistence, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",storageBucket:"your-works-1aea7.firebasestorage.app",messagingSenderId:"1084540974820",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1",measurementId:"G-RYZPVNLKZQ"};
 const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider();
 setPersistence(auth,browserLocalPersistence).catch(()=>{});
-const db=getFirestore(app);
-window.cloudFirestoreInit=async function(uid){ if(!uid) throw new Error("NO_USER"); };
-window.cloudFirestoreGetDoc=async function(){ const snap=await getDoc(doc(db,"users",auth.currentUser.uid,"appData","main")); return snap.exists()?snap.data():null; };
-window.cloudFirestoreSetDoc=async function(data){ await setDoc(doc(db,"users",auth.currentUser.uid,"appData","main"), {...data, schemaVersion:2, updatedAt:Date.now()}, {merge:false}); };
-window.cloudFirestoreListen=function(cb){ return onSnapshot(doc(db,"users",auth.currentUser.uid,"appData","main"), snap=>{ if(snap.exists()) cb(snap.data()); }); };
-window.cloudFirestoreCreateBackup=async function(data,label){
-  if(!auth.currentUser) throw new Error("NO_USER");
-  const backupId = new Date().toISOString().replace(/[-:.TZ]/g,'') + '_' + Math.random().toString(36).slice(2,8);
-  const payload = {...data, label: label || 'نسخة أمان', createdAt: Date.now(), backupId};
-  await setDoc(doc(db,"users",auth.currentUser.uid,"appBackups",backupId), payload, {merge:false});
-  return backupId;
-};
-window.cloudFirestoreListBackups=async function(max=20){
-  if(!auth.currentUser) throw new Error("NO_USER");
-  const q = query(collection(db,"users",auth.currentUser.uid,"appBackups"), orderBy("createdAt","desc"), limit(Math.min(50, Math.max(1, Number(max)||20)));
-  const snap = await getDocs(q);
-  return snap.docs.map(d=>({id:d.id,...d.data()}));
-};
-window.cloudFirestoreGetBackup=async function(backupId){
-  if(!auth.currentUser || !backupId) throw new Error("NO_BACKUP");
-  const snap = await getDoc(doc(db,"users",auth.currentUser.uid,"appBackups",String(backupId)));
-  return snap.exists()?snap.data():null;
-};
 const loginScreen=document.getElementById('loginScreen'),googleLoginButton=document.getElementById('googleLoginButton'),loginMessage=document.getElementById('loginMessage');
-function msg(x){if(loginMessage) loginMessage.textContent=x||''}
-function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')} function hide(){loginScreen.hidden=true;document.body.classList.remove('login-locked')}
-function friendly(e){const m={'auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google؛ سيتم فتح تسجيل الدخول بالطريقة البديلة.','auth/account-exists-with-different-credential':'هذا الحساب مرتبط بطريقة تسجيل دخول مختلفة.','auth/operation-not-allowed':'يجب تفعيل تسجيل الدخول بحساب Google من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول بحساب Google. تأكد من الإنترنت وإعدادات Firebase.'}
-let googleLoginBusy = false;
+function msg(x){if(loginMessage)loginMessage.textContent=x||''}
+function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')}
+function hide(){loginScreen.hidden=true;document.body.classList.remove('login-locked')}
+function friendly(e){const m={'auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google؛ سيتم فتح تسجيل الدخول بالطريقة البديلة.','auth/operation-not-allowed':'يجب تفعيل تسجيل الدخول بحساب Google من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول بحساب Google. تأكد من الإنترنت وإعدادات Firebase.'}
+let googleLoginBusy=false;
 async function loginWithGoogle(){
-  if (googleLoginBusy) return null;
-  googleLoginBusy = true;
-  try {
-    const r = await signInWithPopup(auth,provider);
-    return {user:r.user};
-  } catch(e) {
-    if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled') {
-      await signInWithRedirect(auth,provider);
-      return null;
-    }
-    throw e;
-  } finally {
-    googleLoginBusy = false;
-  }
+ if(googleLoginBusy)return null; googleLoginBusy=true;
+ try{return {user:(await signInWithPopup(auth,provider)).user};}
+ catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null;}throw e;}
+ finally{googleLoginBusy=false;}
 }
-googleLoginButton.addEventListener('click',async()=>{
-  if (googleLoginBusy) return;
-  msg('جارٍ فتح Google...');
-  googleLoginButton.disabled=true;
-  const oldText = googleLoginButton.textContent;
-  googleLoginButton.textContent = 'جارٍ فتح Google...';
-  try {
-    await loginWithGoogle();
-  } catch(e) {
-    console.error('خطأ في Google:',e);
-    msg(friendly(e));
-  } finally {
-    googleLoginButton.disabled=false;
-    googleLoginButton.textContent = oldText;
-  }
-});
-getRedirectResult(auth).catch(e=>{console.error('خطأ في العودة من Google:',e);msg(friendly(e))});
+googleLoginButton.addEventListener('click',async()=>{if(googleLoginBusy)return;msg('جارٍ فتح Google...');googleLoginButton.disabled=true;const old=googleLoginButton.textContent;googleLoginButton.textContent='جارٍ فتح Google...';try{await loginWithGoogle();}catch(e){console.error(e);msg(friendly(e));}finally{googleLoginButton.disabled=false;googleLoginButton.textContent=old;}});
+getRedirectResult(auth).catch(e=>{console.error(e);msg(friendly(e))});
 const authLoading=document.getElementById('authLoading');
 onAuthStateChanged(auth,user=>{
-if(user){ 
-  localStorage.setItem('app_user_key', user.uid);
-  switchAppUser(user.uid);
-  if(typeof window.initCloudSync==='function') window.initCloudSync(user.uid);
-  if(authLoading) authLoading.hidden=true;
-  document.body.classList.remove('firebase-auth-pending');
-  document.documentElement.classList.remove('firebase-startup-pending');
-  hide();
-}else{
-  localStorage.setItem('app_user_key', 'guest');
-  if(cloudSyncUnsubscribe){try{cloudSyncUnsubscribe();}catch(_){} cloudSyncUnsubscribe=null;}
-  cloudSyncReady=false;
-  cloudSyncUserUid=null;
-  switchAppUser('guest');
-  if(authLoading) authLoading.hidden=true;
-  document.body.classList.remove('firebase-auth-pending');
-  document.documentElement.classList.remove('firebase-startup-pending');
-  show();
-}
-}); window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>{
- showAppConfirm("هل تريد تسجيل الخروج ؟", "", function(){ signOut(auth); });
-};
+ if(user){
+   localStorage.setItem('app_user_key',user.uid);
+   switchAppUser(user.uid);
+   hide(); if(authLoading)authLoading.hidden=true;
+   document.body.classList.remove('firebase-auth-pending');
+   document.documentElement.classList.remove('firebase-startup-pending');
+   // فتح البرنامج أولًا، ثم تهيئة Drive في الخلفية دون تعطيل الواجهة.
+   setTimeout(()=>{if(typeof window.initDriveForUser==='function')window.initDriveForUser(user.uid);},0);
+ }else{
+   localStorage.setItem('app_user_key','guest');
+   switchAppUser('guest');
+   if(authLoading)authLoading.hidden=true;
+   document.body.classList.remove('firebase-auth-pending');
+   document.documentElement.classList.remove('firebase-startup-pending');
+   show();
+ }
+});
+window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>showAppConfirm('هل تريد تسجيل الخروج ؟','',()=>signOut(auth));
 </script>
-
 
 <style id="pdfExportStyles">
 @media print {
