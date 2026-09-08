@@ -3795,8 +3795,8 @@ if ('serviceWorker' in navigator) {
 
 <style id="firebase-startup-guard">
 /* تسجيل الدخول لا ينتظر Google Drive أو أي قاعدة بيانات. */
-body.firebase-auth-pending > *:not(#authLoading) { visibility: hidden !important; }
-body.firebase-auth-pending #authLoading { visibility: visible !important; }
+body.firebase-auth-pending > *:not(#authLoading) { visibility: visible !important; }
+body.firebase-auth-pending #authLoading { visibility: hidden !important; }
 </style>
 <script>
 /* هوية دخول ثابتة إضافية عبر Cookie حتى لا تعتمد شاشة البداية على Firebase أو localStorage وحدهما. */
@@ -3881,16 +3881,18 @@ authPersistenceReady.then(()=>{
      document.documentElement.classList.remove('firebase-startup-pending');
      hide();
    }else{
-     switchAppUser('guest');
+     // لا نعيد المستخدم لشاشة الدخول لمجرد أن Firebase لم يستعد الجلسة بعد التحديث.
+     const localUser=localStorage.getItem('app_user_key') || 'guest';
+     switchAppUser(localUser);
      if(authLoading)authLoading.hidden=true;
      document.body.classList.remove('firebase-auth-pending');
      document.documentElement.classList.remove('firebase-startup-pending');
-     show();
+     hide();
    }
  }
  });
 });
-window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>showAppConfirm('هل تريد تسجيل الخروج ؟','',async()=>{try{await signOut(auth);}finally{localStorage.removeItem('app_user_key');try{sessionStorage.removeItem('app_user_key');}catch(_){};document.cookie='nazzem_login_uid=; max-age=0; path=/; SameSite=Lax';switchAppUser('guest');}});
+window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>showAppConfirm('هل تريد تسجيل الخروج ؟','',async()=>{try{await signOut(auth);}finally{localStorage.removeItem('app_user_key');try{sessionStorage.removeItem('app_user_key');}catch(_){};document.cookie='nazzem_login_uid=; max-age=0; path=/; SameSite=Lax';switchAppUser('guest');show();}});
 </script>
 
 <style id="pdfExportStyles">
