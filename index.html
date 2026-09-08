@@ -2208,13 +2208,29 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             return String(dateKey) > todayKey;
         }
 
-        // أي حصة تاريخها لم يأتِ بعد يجب أن تظل غير محددة دائمًا.
+        // التاريخ وحده لا يكفي: إذا كانت الحصة اليوم لكن موعد بدايتها لم يأتِ بعد،
+        // تظل غير قابلة للتسجيل. وإذا لم يوجد وقت محدد، نرجع لقاعدة التاريخ فقط.
+        function isFutureSession(obj, dayObj, now = new Date()) {
+            if (!dayObj) return false;
+            const dateKey = getDayDateKey(obj, dayObj);
+            if (!dateKey) return false;
+            if (isFutureDateKey(dateKey)) return true;
+
+            const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            if (dateKey !== todayKey) return false;
+
+            const startMinutes = getScheduleTimeMinutes(obj, false);
+            if (startMinutes === null) return false;
+            return getCurrentTimeMinutes(now) < startMinutes;
+        }
+
+        // أي حصة موعدها لم يأتِ بعد يجب أن تظل غير محددة دائمًا.
         // هذا يصلح أيضًا بيانات قديمة كانت قد سجلت الحالة تلقائيًا قبل هذا الإصلاح.
         function clearFutureSessionStatuses() {
             const normalize = obj => {
                 if (!obj || !Array.isArray(obj.daysData)) return;
                 obj.daysData.forEach(day => {
-                    if (day && isFutureDateKey(day.dateKey)) {
+                    if (day && isFutureSession(obj, day)) {
                         day.status = '';
                         day.sessionsCount = 0;
                     }
@@ -2337,8 +2353,13 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     localStorage.setItem(safetyKey, JSON.stringify(list.slice(0,5)));
                     groups = [];
                     students = [];
+                    // الحذف هنا متعمد، لذلك نضع علامة منفصلة حتى لا تعتبر المزامنة
+                    // الفراغ المحلي خطأً وتعيد البيانات السحابية مرة أخرى.
+                    driveClearRequested = true;
+                    driveSyncPending = true;
                     localStorage.removeItem(userStorageKey('teacher_groups_local'));
                     localStorage.removeItem(userStorageKey('teacher_students_local'));
+                    saveDriveState();
                     calculateSummaryTotals();
                     renderTodaySessions();
                     renderMiniCards();
@@ -2699,8 +2720,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             let daysHTML = '';
             (group.daysData || []).forEach((dayObj, i) => {
                 const currentStatus = dayObj.status || '';
-                const isFutureDay = isFutureDateKey(dayObj.dateKey);
-                const futureDisabled = '';
+                const isFutureDay = isFutureSession(group, dayObj);
+                const futureDisabled = isFutureDay ? ' disabled' : ''
                 const currentSessionsCount = Math.max(1, parseInt(dayObj.sessionsCount, 10) || 1);
                 let sessionCountBtns = '';
                 for (let opt = 1; opt <= 6; opt++) {
@@ -2763,7 +2784,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const day = group.daysData[dIdx];
             if (!day) return;
             if (!['present','absent','canceled'].includes(status)) return;
-            if (isFutureDateKey(day.dateKey)) {
+            if (isFutureSession(group, day)) {
                 showFutureDayWarning(day);
                 return;
             }
@@ -2779,7 +2800,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         function updateGroupDaySessionsCount(gIdx, dIdx, val) {
             const day = groups[gIdx].daysData[dIdx];
             if (!day) return;
-            if (isFutureDateKey(day.dateKey)) {
+            if (isFutureSession(groups[gIdx], day)) {
                 showFutureDayWarning(day);
                 return;
             }
@@ -2971,8 +2992,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             let daysHTML = '';
             student.daysData.forEach((dayObj, i) => {
                 const currentStatus = dayObj.status || '';
-                const isFutureDay = isFutureDateKey(dayObj.dateKey);
-                const futureDisabled = '';
+                const isFutureDay = isFutureSession(student, dayObj);
+                const futureDisabled = isFutureDay ? ' disabled' : ''
                 
                 let hwOptions = `<option value="">--</option>`;
                 let sessionGradeOptions = `<option value="">--</option>`;
@@ -3124,7 +3145,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         function updateStudentEvalData(sIdx, dIdx, key, val) {
             const day = students[sIdx].daysData[dIdx];
             if (!day) return;
-            if (isFutureDateKey(day.dateKey)) {
+            if (isFutureSession(students[sIdx], day)) {
                 showFutureDayWarning(day);
                 return;
             }
@@ -3236,7 +3257,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             const day = student.daysData[dIdx];
             if (!day) return;
             if (!['present','absent','canceled'].includes(status)) return;
-            if (isFutureDateKey(day.dateKey)) {
+            if (isFutureSession(student, day)) {
                 showFutureDayWarning(day);
                 return;
             }
@@ -3541,6 +3562,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         let driveSyncPending = false;
         let driveBaseData = {groups:[], students:[], recycle_bin:[]};
         let driveLastRemoteModified = '';
+// علامة صريحة تفصل الحذف المتعمد عن الحالة الفارغة الناتجة عن خطأ محلي.
+let driveClearRequested = false;
 // رقم إصدار محلي لحماية تسجيل الحصة من أن تستبدله مزامنة بدأت قبل النقرة.
 let localEditRevision = 0;
 
@@ -3612,10 +3635,12 @@ let localEditRevision = 0;
                 const raw = localStorage.getItem(getDriveStateKey('base'));
                 driveBaseData = raw ? normalizeDriveData(JSON.parse(raw)) : {groups:[],students:[],recycle_bin:[]};
                 driveLastRemoteModified = localStorage.getItem(getDriveStateKey('remote_modified')) || '';
+                driveClearRequested = localStorage.getItem(getDriveStateKey('clear_requested')) === '1';
             } catch (_) {
                 driveSyncPending = false;
                 driveBaseData = {groups:[],students:[],recycle_bin:[]};
                 driveLastRemoteModified = '';
+                driveClearRequested = false;
             }
         }
         function saveDriveState() {
@@ -3623,6 +3648,8 @@ let localEditRevision = 0;
                 localStorage.setItem(getDriveStateKey('pending'), driveSyncPending ? '1' : '0');
                 localStorage.setItem(getDriveStateKey('base'), JSON.stringify(driveBaseData));
                 if(driveLastRemoteModified) localStorage.setItem(getDriveStateKey('remote_modified'), driveLastRemoteModified);
+                if(driveClearRequested) localStorage.setItem(getDriveStateKey('clear_requested'), '1');
+                else localStorage.removeItem(getDriveStateKey('clear_requested'));
             } catch (_) {}
         }
         function setDriveStatus(text) {
@@ -3762,7 +3789,7 @@ let localEditRevision = 0;
                 safetyList.unshift({createdAt:new Date().toISOString(),data:current});
                 localStorage.setItem(safetyKey,JSON.stringify(safetyList.slice(0,5)));
                 showAppConfirm('استعادة من Google Drive','سيتم استبدال بيانات الجهاز بالنسخة الموجودة في Google Drive. تم حفظ نسخة أمان محلية من بيانات الجهاز أولًا. هل تريد المتابعة؟',()=>{
-                    try{applyDriveLocalData(remote.payload); driveBaseData=driveClone(remote.payload); driveSyncPending=false; driveLastRemoteModified=file.modifiedTime||''; saveDriveState(); markDriveSynced(file.modifiedTime||new Date().toISOString()); showAppAlert('تمت الاستعادة','تمت استعادة البيانات من Google Drive بنجاح.');}
+                    try{applyDriveLocalData(remote.payload); driveBaseData=driveClone(remote.payload); driveClearRequested=false; driveSyncPending=false; driveLastRemoteModified=file.modifiedTime||''; saveDriveState(); markDriveSynced(file.modifiedTime||new Date().toISOString()); showAppAlert('تمت الاستعادة','تمت استعادة البيانات من Google Drive بنجاح.');}
                     catch(e){showAppAlert('فشلت الاستعادة','لم يتم استبدال بيانات الجهاز.');}
                 });
             }catch(e){console.error('Drive restore error',e);showAppAlert('تعذر الاستعادة','تعذر قراءة بيانات Google Drive. لم يتم حذف أو استبدال بيانات الجهاز.');}
@@ -3776,6 +3803,46 @@ let localEditRevision = 0;
                 const syncRevision = localEditRevision;
                 const local=getDriveLocalData();
                 const file=await findDriveFile();
+
+                // حذف سحابي متعمد: لا نستخدم merge هنا ولا نسمح للنسخة البعيدة
+                // بإعادة البيانات التي طلب المستخدم حذفها. يتم التنفيذ فقط إذا لم
+                // تتغير البيانات محليًا أثناء انتظار الشبكة.
+                if (driveClearRequested) {
+                    if (syncRevision !== localEditRevision) {
+                        driveSyncPending = true;
+                        saveDriveState();
+                        scheduleDriveRetry();
+                        return false;
+                    }
+                    const clearData = getDriveLocalData();
+                    if (file?.id) {
+                        const payload = buildDrivePayload({groups:[], students:[], recycle_bin:clearData.recycle_bin});
+                        const r = await updateDriveFile(file.id, payload);
+                        if (!r.ok) throw new Error('DRIVE_CLEAR_FAILED: '+await driveError(r));
+                        if (syncRevision !== localEditRevision) {
+                            driveSyncPending = true;
+                            saveDriveState();
+                            scheduleDriveRetry();
+                            return false;
+                        }
+                        driveBaseData = driveClone(payload);
+                        driveClearRequested = false;
+                        driveSyncPending = false;
+                        driveLastRemoteModified = new Date().toISOString();
+                        saveDriveState();
+                        markDriveSynced(driveLastRemoteModified);
+                        return true;
+                    }
+                    // لا يوجد ملف سحابي أصلًا؛ إذن الحذف السحابي متحقق بالفعل.
+                    driveBaseData = driveClone(clearData);
+                    driveClearRequested = false;
+                    driveSyncPending = false;
+                    driveLastRemoteModified = new Date().toISOString();
+                    saveDriveState();
+                    markDriveSynced(driveLastRemoteModified);
+                    return true;
+                }
+
                 if(!file?.id){
                     if (syncRevision !== localEditRevision) {
                         driveSyncPending = true;
