@@ -1066,6 +1066,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <button class="btn-3d btn-red-3d settings-btn" onclick="deleteAllData()">حذف جميع البيانات</button>
                 <button class="btn-3d settings-btn" onclick="startDriveSyncNow()">مزامنة الآن</button>
                 <button class="btn-3d settings-btn" onclick="createLocalSafetyBackup()">نسخة أمان محلية</button>
+                <button class="btn-3d settings-btn" onclick="restoreLocalSafetyBackup()">استعادة نسخة الأمان</button>
                 <button class="btn-3d settings-btn" onclick="restoreFromDrive()">استعادة من Google Drive</button>
                 
                 <button class="btn-3d settings-btn" onclick="exportPDFReport()">تصدير PDF</button>
@@ -3774,6 +3775,68 @@ let localEditRevision = 0;
                 showAppAlert('تم إنشاء نسخة أمان','تم حفظ نسخة أمان محلية من بياناتك الحالية.');
             } catch(e) { showAppAlert('تعذر إنشاء نسخة الأمان','لم يتم تعديل أو حذف أي بيانات.'); }
         }
+        function restoreLocalSafetyBackup() {
+            try {
+                const key = getDriveStateKey('local_safety');
+                const raw = localStorage.getItem(key) || '[]';
+                const list = JSON.parse(raw);
+                if (!Array.isArray(list) || !list.length || !list[0] || !list[0].data) {
+                    showAppAlert('لا توجد نسخة أمان', 'لا توجد نسخة أمان محلية محفوظة يمكن استعادتها.');
+                    return;
+                }
+
+                const target = driveClone(list[0]);
+                const targetData = target.data;
+                const restoredGroups = Array.isArray(targetData.groups) ? driveClone(targetData.groups) : [];
+                const restoredStudents = Array.isArray(targetData.students) ? driveClone(targetData.students) : [];
+                const restoredRecycle = Array.isArray(targetData.recycle_bin) ? driveClone(targetData.recycle_bin) : [];
+
+                const stamp = target.createdAt ? new Date(target.createdAt) : null;
+                const stampText = stamp && !Number.isNaN(stamp.getTime())
+                    ? stamp.toLocaleString('ar-EG', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:true})
+                    : 'النسخة الأخيرة';
+
+                showAppConfirm(
+                    'استعادة نسخة الأمان',
+                    'سيتم استبدال بيانات الجهاز بالنسخة المحلية المحفوظة بتاريخ ' + stampText + '. سيتم حفظ الحالة الحالية كنسخة أمان جديدة أولًا، ولن يتم تعديل Google Drive مباشرة. هل تريد المتابعة؟',
+                    function() {
+                        try {
+                            // نحتفظ بالنسخة المستهدفة قبل إضافة نسخة الأمان الجديدة حتى لا تتغير النسخة التي سنستعيدها.
+                            const current = getDriveLocalData();
+                            const updatedList = Array.isArray(list) ? list.slice() : [];
+                            updatedList.unshift({createdAt:new Date().toISOString(), data:current});
+                            localStorage.setItem(key, JSON.stringify(updatedList.slice(0,5)));
+
+                            groups = restoredGroups;
+                            students = restoredStudents;
+                            if (typeof recycleSave === 'function') recycleSave(restoredRecycle);
+
+                            dataNormalizationDone = false;
+                            selectedGroupIndex = null;
+                            selectedStudentIndex = null;
+
+                            localStorage.setItem(userStorageKey('teacher_groups_local'), JSON.stringify(groups));
+                            localStorage.setItem(userStorageKey('teacher_students_local'), JSON.stringify(students));
+
+                            calculateSummaryTotals();
+                            renderTodaySessions();
+                            renderMiniCards();
+                            renderStudentMiniCards();
+                            if (document.getElementById('page6')?.classList.contains('active')) renderFinancialLists();
+
+                            showAppAlert('تمت الاستعادة', 'تمت استعادة آخر نسخة أمان محلية بنجاح. Google Drive لم يتم تغييره مباشرة.');
+                        } catch (err) {
+                            console.error('Local safety restore error:', err);
+                            showAppAlert('فشلت الاستعادة', 'لم يتم استبدال بيانات الجهاز.');
+                        }
+                    }
+                );
+            } catch (err) {
+                console.error('Local safety list error:', err);
+                showAppAlert('تعذر قراءة نسخة الأمان', 'لم يتم تعديل أو حذف أي بيانات.');
+            }
+        }
+
         async function restoreFromDrive() {
             if(!navigator.onLine){showAppAlert('لا يوجد اتصال بالإنترنت','لا يمكن الاستعادة بدون اتصال. بيانات الجهاز لم تتأثر.');return;}
             if(!driveAccessToken){ requestDriveToken(); showAppAlert('السماح لـ Google Drive','اسمح بالوصول إلى Google Drive، ثم اضغط الاستعادة مرة أخرى.'); return; }
