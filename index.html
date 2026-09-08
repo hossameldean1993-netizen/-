@@ -1961,6 +1961,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function generateDatesForGroup(day1Name, day2Name, startDateStr, defaultStatus = 'present', day3Name = '', day4Name = '', ...extraDayNames) {
+            // الحصة الجديدة لا تكون لها حالة مختارة تلقائيًا؛ تسجيل الحالة يتم يدويًا فقط.
             const dates = [];
             const inputDate = startDateStr ? new Date(`${startDateStr}T00:00:00`) : new Date();
             const year = inputDate.getFullYear();
@@ -1975,7 +1976,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const match = targets.find(item => item.index === d);
                 if (match) {
                     const formattedDate = `${cur.getDate()}/${cur.getMonth() + 1}`;
-                    dates.push({ label: match.day, dateStr: formattedDate, dateKey: `${year}-${String(month + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`, status: defaultStatus, sessionsCount: defaultStatus === 'present' ? 1 : 0, homeworkGrade: '', sessionGrade: '', examGrade: '', notes: '' });
+                    dates.push({ label: match.day, dateStr: formattedDate, dateKey: `${year}-${String(month + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`, status: defaultStatus || '', sessionsCount: defaultStatus === 'present' ? 1 : 0, homeworkGrade: '', sessionGrade: '', examGrade: '', notes: '' });
                 }
                 cur.setDate(cur.getDate() + 1);
             }
@@ -3862,6 +3863,7 @@ const authLoading=document.getElementById('authLoading');
 authPersistenceReady.then(()=>{
  onAuthStateChanged(auth,user=>{
  if(user){
+   localStorage.removeItem('nazzem_login_required');
    localStorage.setItem('app_user_key',user.uid);
    if(window.setLoginCookie)window.setLoginCookie(user.uid);
    switchAppUser(user.uid);
@@ -3871,28 +3873,19 @@ authPersistenceReady.then(()=>{
    // فتح البرنامج أولًا، ثم تهيئة Drive في الخلفية دون تعطيل الواجهة.
    setTimeout(()=>{if(typeof window.initDriveForUser==='function')window.initDriveForUser(user.uid);},0);
  }else{
-   // إذا كانت جلسة Firebase لم تُستعد بعد/لم تحفظها بيئة WebView، لا نمسح هوية المستخدم المحلية.
-   // نستخدم آخر مستخدم معروف محليًا حتى لا تظهر شاشة الدخول عند تحديث الصفحة بالسحب.
+   // لا تظهر شاشة الدخول بسبب تحديث الصفحة أو تأخر Firebase.
+   // تظهر فقط إذا طلب المستخدم تسجيل الخروج صراحةً.
    const rememberedUser=localStorage.getItem('app_user_key') || (window.getLoginCookie?window.getLoginCookie():'') || (()=>{try{return sessionStorage.getItem('app_user_key')||''}catch(_){return ''}})();
-   if(rememberedUser && rememberedUser!=='guest'){
-     switchAppUser(rememberedUser);
-     if(authLoading)authLoading.hidden=true;
-     document.body.classList.remove('firebase-auth-pending');
-     document.documentElement.classList.remove('firebase-startup-pending');
-     hide();
-   }else{
-     // لا نعيد المستخدم لشاشة الدخول لمجرد أن Firebase لم يستعد الجلسة بعد التحديث.
-     const localUser=localStorage.getItem('app_user_key') || 'guest';
-     switchAppUser(localUser);
-     if(authLoading)authLoading.hidden=true;
-     document.body.classList.remove('firebase-auth-pending');
-     document.documentElement.classList.remove('firebase-startup-pending');
-     hide();
-   }
+   const localUser=rememberedUser && rememberedUser!=='guest' ? rememberedUser : (localStorage.getItem('app_user_key') || 'guest');
+   switchAppUser(localUser);
+   if(authLoading)authLoading.hidden=true;
+   document.body.classList.remove('firebase-auth-pending');
+   document.documentElement.classList.remove('firebase-startup-pending');
+   if(localStorage.getItem('nazzem_login_required')==='1') show(); else hide();
  }
  });
 });
-window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>showAppConfirm('هل تريد تسجيل الخروج ؟','',async()=>{try{await signOut(auth);}finally{localStorage.removeItem('app_user_key');try{sessionStorage.removeItem('app_user_key');}catch(_){};document.cookie='nazzem_login_uid=; max-age=0; path=/; SameSite=Lax';switchAppUser('guest');show();}});
+window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>showAppConfirm('هل تريد تسجيل الخروج ؟','',async()=>{try{await signOut(auth);}finally{localStorage.removeItem('app_user_key');localStorage.setItem('nazzem_login_required','1');try{sessionStorage.removeItem('app_user_key');}catch(_){};document.cookie='nazzem_login_uid=; max-age=0; path=/; SameSite=Lax';switchAppUser('guest');show();}});
 </script>
 
 <style id="pdfExportStyles">
@@ -4136,7 +4129,7 @@ function recycleDelete(i){
         inactivityTimer=setTimeout(()=>{
             const login=document.getElementById('loginScreen');
             if(login && login.hidden && window.firebaseAuth){
-                signOut(window.firebaseAuth).finally(()=>{localStorage.removeItem('app_user_key');document.cookie='nazzem_login_uid=; max-age=0; path=/; SameSite=Lax';});
+                signOut(window.firebaseAuth).finally(()=>{localStorage.removeItem('app_user_key');localStorage.setItem('nazzem_login_required','1');document.cookie='nazzem_login_uid=; max-age=0; path=/; SameSite=Lax';});
             }
         }, inactivityLimit);
     }
