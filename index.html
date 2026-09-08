@@ -1892,6 +1892,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const studentsJson = JSON.stringify(students);
                 localStorage.setItem(userStorageKey('teacher_groups_local'), groupsJson);
                 localStorage.setItem(userStorageKey('teacher_students_local'), studentsJson);
+                localEditRevision++;
             } catch (err) {
                 console.error('Save data error:', err);
                 showAppAlert('تعذر حفظ البيانات', 'مساحة التخزين في الهاتف ممتلئة أو غير متاحة. بياناتك الحالية لم تُحذف من الذاكرة. يُفضّل الاتصال بالسحابة عند عودة الإنترنت ثم إعادة المزامنة.');
@@ -2208,8 +2209,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             (group && group.daysData || []).forEach(day => {
                 if (day.status === 'present') {
                     total += Math.max(1, parseInt(day.sessionsCount, 10) || 1);
-                } else if (!day.status && (day.count || 0) > 0) {
-                    total += 1;
                 }
             });
             return total;
@@ -2221,7 +2220,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             if (Array.isArray(student.daysData)) {
                 return student.daysData.reduce((total, day) => {
                     if (day.status === 'present') return total + 1;
-                    if (!day.status && (day.count || 0) > 0) return total + 1;
                     return total;
                 }, 0);
             }
@@ -2351,7 +2349,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             if (obj.isMonthPaid) {
                 const sessions = Array.isArray(obj.daysData) ? obj.daysData.reduce((n, d) => {
                     if (d.status === 'present') return n + Math.max(1, parseInt(d.sessionsCount, 10) || 1);
-                    if (!d.status && (d.count || 0) > 0) return n + 1;
                     return n;
                 }, 0) : 0;
                 const amount = sessions * (parseFloat(obj.price) || 0);
@@ -2359,7 +2356,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             } else if (obj.isPaid) {
                 const sessions = Array.isArray(obj.daysData) ? obj.daysData.reduce((n, d) => {
                     if (d.status === 'present') return n + 1;
-                    if (!d.status && (d.count || 0) > 0) return n + 1;
                     return n;
                 }, 0) : (parseInt(obj.sessionsCount, 10) || 0);
                 const amount = sessions * (parseFloat(obj.price) || 0);
@@ -2662,7 +2658,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 
             let daysHTML = '';
             (group.daysData || []).forEach((dayObj, i) => {
-                const currentStatus = dayObj.status || (dayObj.count > 0 ? 'present' : '');
+                const currentStatus = dayObj.status || '';
                 const isFutureDay = isFutureDateKey(dayObj.dateKey);
                 const futureDisabled = '';
                 const currentSessionsCount = Math.max(1, parseInt(dayObj.sessionsCount, 10) || 1);
@@ -2677,9 +2673,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                             <span>${currentStatus === 'present' ? 'حصة فعلية' : (currentStatus === 'absent' ? 'غائب' : (currentStatus === 'canceled' ? 'ملغية' : 'غير محدد'))}</span>
                         </div>
                         <div class="status-btns">
-                            <button class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'present')">حاضر</button>
-                            <button class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'absent')">غائب</button>
-                            <button class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="setGroupDayStatus(${groupIndex}, ${i}, 'canceled')">ملغي</button>
+                            <button type="button" class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="event.preventDefault(); event.stopPropagation(); setGroupDayStatus(${groupIndex}, ${i}, 'present')">حاضر</button>
+                            <button type="button" class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="event.preventDefault(); event.stopPropagation(); setGroupDayStatus(${groupIndex}, ${i}, 'absent')">غائب</button>
+                            <button type="button" class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="event.preventDefault(); event.stopPropagation(); setGroupDayStatus(${groupIndex}, ${i}, 'canceled')">ملغي</button>
                         </div>
                         ${currentStatus === 'present' ? `
                         <div class="sessions-count-container">
@@ -2721,13 +2717,17 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function setGroupDayStatus(gIdx, dIdx, status) {
-            const day = groups[gIdx].daysData[dIdx];
+            const group = groups[gIdx];
+            if (!group) return;
+            if (!Array.isArray(group.daysData)) group.daysData = [];
+            const day = group.daysData[dIdx];
             if (!day) return;
+            if (!['present','absent','canceled'].includes(status)) return;
             if (isFutureDateKey(day.dateKey)) {
                 showFutureDayWarning(day);
                 return;
             }
-            day.status = (day.status === status) ? '' : status;
+            day.status = status;
             if(day.status !== 'present') {
                 day.sessionsCount = 0;
             } else {
@@ -2950,9 +2950,9 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                         </div>
                         
                         <div class="status-btns">
-                            <button class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'present')">حاضر</button>
-                            <button class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'absent')">غائب</button>
-                            <button class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="setStudentDayStatus(${studentIndex}, ${i}, 'canceled')">ملغي</button>
+                            <button type="button" class="status-btn ${currentStatus === 'present' ? 'active-present' : ''}"${futureDisabled} onclick="event.preventDefault(); event.stopPropagation(); setStudentDayStatus(${studentIndex}, ${i}, 'present')">حاضر</button>
+                            <button type="button" class="status-btn ${currentStatus === 'absent' ? 'active-absent' : ''}"${futureDisabled} onclick="event.preventDefault(); event.stopPropagation(); setStudentDayStatus(${studentIndex}, ${i}, 'absent')">غائب</button>
+                            <button type="button" class="status-btn ${currentStatus === 'canceled' ? 'active-canceled' : ''}"${futureDisabled} onclick="event.preventDefault(); event.stopPropagation(); setStudentDayStatus(${studentIndex}, ${i}, 'canceled')">ملغي</button>
                         </div>
 
                         ${currentStatus === 'present' ? `
@@ -3190,13 +3190,17 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function setStudentDayStatus(sIdx, dIdx, status) {
-            const day = students[sIdx].daysData[dIdx];
+            const student = students[sIdx];
+            if (!student) return;
+            if (!Array.isArray(student.daysData)) student.daysData = [];
+            const day = student.daysData[dIdx];
             if (!day) return;
+            if (!['present','absent','canceled'].includes(status)) return;
             if (isFutureDateKey(day.dateKey)) {
                 showFutureDayWarning(day);
                 return;
             }
-            day.status = (day.status === status) ? '' : status;
+            day.status = status;
             if(day.status !== 'present') day.sessionsCount = 0;
             saveData();
         }
@@ -3497,6 +3501,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         let driveSyncPending = false;
         let driveBaseData = {groups:[], students:[], recycle_bin:[]};
         let driveLastRemoteModified = '';
+// رقم إصدار محلي لحماية تسجيل الحصة من أن تستبدله مزامنة بدأت قبل النقرة.
+let localEditRevision = 0;
 
         function driveClone(data) {
             try { return JSON.parse(JSON.stringify(data)); }
@@ -3722,14 +3728,28 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             driveSyncBusy=true; setDriveStatus('جارٍ المزامنة...');
             try{
                 loadDriveState();
+                const syncRevision = localEditRevision;
                 const local=getDriveLocalData();
                 const file=await findDriveFile();
                 if(!file?.id){
+                    if (syncRevision !== localEditRevision) {
+                        driveSyncPending = true;
+                        saveDriveState();
+                        scheduleDriveRetry();
+                        return false;
+                    }
                     const payload=buildDrivePayload(local);
                     const r=await createDriveFile(payload); if(!r.ok) throw new Error('DRIVE_CREATE_FAILED: '+await driveError(r));
                     driveBaseData=driveClone(local); driveSyncPending=false; driveLastRemoteModified=r.headers.get('Last-Modified')||new Date().toISOString(); saveDriveState(); markDriveSynced(new Date().toISOString()); return true;
                 }
                 const remote=await readDriveFile(file.id);
+                // إذا تغيّرت البيانات أثناء انتظار الشبكة، لا نستخدم لقطة قديمة في الكتابة أو العرض.
+                if (syncRevision !== localEditRevision) {
+                    driveSyncPending = true;
+                    saveDriveState();
+                    scheduleDriveRetry();
+                    return false;
+                }
                 const localChanged=!sameJson(local,driveBaseData) || driveSyncPending;
                 let finalData;
                 if(!localChanged) finalData=remote.payload;
@@ -3742,6 +3762,12 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 if(!sameJson(finalData,remote.payload) || localChanged){
                     const payload=buildDrivePayload(finalData);
                     const r=await updateDriveFile(file.id,payload); if(!r.ok) throw new Error('DRIVE_UPDATE_FAILED: '+await driveError(r));
+                    if (syncRevision !== localEditRevision) {
+                        driveSyncPending = true;
+                        saveDriveState();
+                        scheduleDriveRetry();
+                        return false;
+                    }
                     applyDriveLocalData(finalData); driveBaseData=driveClone(finalData); driveSyncPending=false;
                 }else if(!sameJson(local,remote.payload)){
                     applyDriveLocalData(remote.payload); driveBaseData=driveClone(remote.payload); driveSyncPending=false;
