@@ -4078,6 +4078,12 @@ googleLoginButton.addEventListener('click',async()=>{if(googleLoginBusy)return;m
  */
 authPersistenceReady.then(()=>{
  onAuthStateChanged(auth,user=>{
+   /*
+    * تسجيل الدخول للتطبيق يُحفظ محليًا بعد أول دخول ناجح.
+    * هذا العلم لا يُمسح عند Refresh أو Pull-to-refresh؛ لا يُمسح إلا من
+    * مسار تسجيل الخروج الصريح بالأسفل. لذلك لا تعتمد شاشة الدخول على
+    * لحظة null المؤقتة التي قد ترسلها Firebase أثناء استعادة الجلسة.
+    */
    if(user){
      localStorage.setItem(LOGIN_MARK,'1');
      localStorage.setItem('app_user_key',user.uid);
@@ -4087,18 +4093,29 @@ authPersistenceReady.then(()=>{
      document.body.classList.remove('firebase-auth-pending');
      document.documentElement.classList.remove('firebase-startup-pending');
      setTimeout(()=>{if(typeof window.initDriveForUser==='function')window.initDriveForUser(user.uid);},0);
+     return;
+   }
+
+   /*
+    * Firebase قد تكون في مرحلة استعادة الجلسة أو قد لا تستطيع استعادتها
+    * داخل بعض WebView/AppGyser. إذا كانت هويتنا المحلية محفوظة، نُبقي
+    * التطبيق مفتوحًا ونستعيد المستخدم محليًا بدل إجباره على Google مرة أخرى.
+    */
+   const rememberedUser = (localStorage.getItem('app_user_key') ||
+     (window.getLoginCookie?window.getLoginCookie(''):'') ||
+     (()=>{try{return sessionStorage.getItem('app_user_key')||''}catch(_){return ''}}) || '').toString();
+   if(rememberedUser && rememberedUser!=='guest'){
+     try{localStorage.setItem(LOGIN_MARK,'1');localStorage.setItem('app_user_key',rememberedUser);}catch(_){}
+     try{sessionStorage.setItem('app_user_key',rememberedUser);}catch(_){}
+     switchAppUser(rememberedUser);
+     hide();
    }else{
-     const rememberedUser=localStorage.getItem('app_user_key') || (window.getLoginCookie?window.getLoginCookie():'') || (()=>{try{return sessionStorage.getItem('app_user_key')||''}catch(_){return ''}})();
-     if(rememberedUser && rememberedUser!=='guest'){
-       try{localStorage.setItem('app_user_key',rememberedUser);}catch(_){}
-       switchAppUser(rememberedUser);
-     }else switchAppUser('guest');
-     if(authLoading)authLoading.hidden=true;
-     document.body.classList.remove('firebase-auth-pending');
-     document.documentElement.classList.remove('firebase-startup-pending');
-     /* لا نظهر الدخول بعد Refresh طالما أن المستخدم سبق له تسجيل الدخول. */
+     switchAppUser('guest');
      if(hasRememberedLogin()) hide(); else show();
    }
+   if(authLoading)authLoading.hidden=true;
+   document.body.classList.remove('firebase-auth-pending');
+   document.documentElement.classList.remove('firebase-startup-pending');
  });
 });
 window.firebaseAuth=auth;
