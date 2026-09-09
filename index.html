@@ -4033,11 +4033,7 @@ body.firebase-auth-pending #authLoading { visibility: hidden !important; }
   window.setLoginCookie=setLoginCookie;
   const rememberedUser=recoverUserKey();
   if(rememberedUser && rememberedUser!=='guest'){
-    try{
-      localStorage.setItem('app_user_key',rememberedUser);
-      // المستخدم سبق له تسجيل الدخول؛ لا تعرض شاشة الدخول بسبب refresh أو pull-to-refresh.
-      localStorage.removeItem('nazzem_login_required');
-    }catch(_){}
+    try{localStorage.setItem('app_user_key',rememberedUser);}catch(_){}
     try{sessionStorage.setItem('app_user_key',rememberedUser);}catch(_){}
     document.body.classList.remove('firebase-auth-pending');
     const l=document.getElementById('authLoading'); if(l) l.hidden=true;
@@ -4046,54 +4042,77 @@ body.firebase-auth-pending #authLoading { visibility: hidden !important; }
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-import { getAuth, setPersistence, indexedDBLocalPersistence, browserLocalPersistence, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { getAuth, setPersistence, indexedDBLocalPersistence, browserLocalPersistence, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1"};
 const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider();
 const authPersistenceReady=setPersistence(auth,indexedDBLocalPersistence).catch(()=>setPersistence(auth,browserLocalPersistence)).catch(()=>{});
-const loginScreen=document.getElementById('loginScreen'),googleLoginButton=document.getElementById('googleLoginButton'),loginMessage=document.getElementById('loginMessage');
+const loginScreen=document.getElementById('loginScreen'),googleLoginButton=document.getElementById('googleLoginButton'),loginMessage=document.getElementById('loginMessage'),authLoading=document.getElementById('authLoading');
+const LOGIN_MARK='nazzem_has_logged_in';
+function hasRememberedLogin(){try{return localStorage.getItem(LOGIN_MARK)==='1' && !!localStorage.getItem('app_user_key') && localStorage.getItem('app_user_key')!=='guest';}catch(_){return false;}}
 function msg(x){if(loginMessage)loginMessage.textContent=x||''}
-function show(){loginScreen.hidden=false;document.body.classList.add('login-locked')}
-function hide(){loginScreen.hidden=true;document.body.classList.remove('login-locked')}
-function friendly(e){const m={'auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google؛ سيتم فتح تسجيل الدخول بالطريقة البديلة.','auth/operation-not-allowed':'يجب تفعيل تسجيل الدخول بحساب Google من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول بحساب Google. تأكد من الإنترنت وإعدادات Firebase.'}
+function show(){if(loginScreen){loginScreen.hidden=false;document.body.classList.add('login-locked')}}
+function hide(){if(loginScreen){loginScreen.hidden=true;document.body.classList.remove('login-locked')}}
+function friendly(e){const m={'auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google. اسمح بالنوافذ المنبثقة ثم اضغط تسجيل الدخول مرة أخرى.','auth/operation-not-allowed':'يجب تفعيل تسجيل الدخول بحساب Google من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول بحساب Google. تأكد من الإنترنت وإعدادات Firebase.'}
 let googleLoginBusy=false;
 async function loginWithGoogle(){
- if(googleLoginBusy)return null; googleLoginBusy=true;
- try{return {user:(await signInWithPopup(auth,provider)).user};}
- catch(e){if(e?.code==='auth/popup-blocked'||e?.code==='auth/popup-cancelled'){await signInWithRedirect(auth,provider);return null;}throw e;}
+ if(googleLoginBusy)return null;
+ googleLoginBusy=true;
+ try{
+   const result=await signInWithPopup(auth,provider);
+   const user=result.user;
+   localStorage.setItem(LOGIN_MARK,'1');
+   localStorage.setItem('app_user_key',user.uid);
+   if(window.setLoginCookie)window.setLoginCookie(user.uid);
+   switchAppUser(user.uid); hide();
+   if(authLoading)authLoading.hidden=true;
+   return {user};
+ }catch(e){throw e}
  finally{googleLoginBusy=false;}
 }
 googleLoginButton.addEventListener('click',async()=>{if(googleLoginBusy)return;msg('جارٍ فتح Google...');googleLoginButton.disabled=true;const old=googleLoginButton.textContent;googleLoginButton.textContent='جارٍ فتح Google...';try{await loginWithGoogle();}catch(e){console.error(e);msg(friendly(e));}finally{googleLoginButton.disabled=false;googleLoginButton.textContent=old;}});
-getRedirectResult(auth).catch(e=>{console.error(e);msg(friendly(e))});
-const authLoading=document.getElementById('authLoading');
+
+/*
+ * مهم: لا نستدعي أي Google redirect عند تحميل الصفحة.
+ * إعادة تحميل الصفحة أو Pull-to-refresh لا يمكنها فتح شاشة اختيار حساب Google.
+ * تسجيل الدخول يتم فقط بعد ضغط المستخدم على زر تسجيل الدخول.
+ */
 authPersistenceReady.then(()=>{
  onAuthStateChanged(auth,user=>{
- if(user){
-   localStorage.removeItem('nazzem_login_required');
-   localStorage.setItem('app_user_key',user.uid);
-   if(window.setLoginCookie)window.setLoginCookie(user.uid);
-   switchAppUser(user.uid);
-   hide(); if(authLoading)authLoading.hidden=true;
-   document.body.classList.remove('firebase-auth-pending');
-   document.documentElement.classList.remove('firebase-startup-pending');
-   // فتح البرنامج أولًا، ثم تهيئة Drive في الخلفية دون تعطيل الواجهة.
-   setTimeout(()=>{if(typeof window.initDriveForUser==='function')window.initDriveForUser(user.uid);},0);
- }else{
-   // إعادة تحميل الصفحة (ومنها السحب للتحديث) لا تعني تسجيل الخروج.
-   // شاشة الدخول لا تظهر إلا بعد تسجيل خروج صريح.
-   const rememberedUser=localStorage.getItem('app_user_key') || (window.getLoginCookie?window.getLoginCookie():'') || (()=>{try{return sessionStorage.getItem('app_user_key')||''}catch(_){return ''}})();
-   const localUser=rememberedUser && rememberedUser!=='guest' ? rememberedUser : 'guest';
-   switchAppUser(localUser);
-   if(authLoading)authLoading.hidden=true;
-   document.body.classList.remove('firebase-auth-pending');
-   document.documentElement.classList.remove('firebase-startup-pending');
-   if(localUser!=='guest'){
-     localStorage.removeItem('nazzem_login_required');
-     hide();
-   }else if(localStorage.getItem('nazzem_login_required')==='1') show();
-   else hide();
- } });
+   if(user){
+     localStorage.setItem(LOGIN_MARK,'1');
+     localStorage.setItem('app_user_key',user.uid);
+     if(window.setLoginCookie)window.setLoginCookie(user.uid);
+     switchAppUser(user.uid); hide();
+     if(authLoading)authLoading.hidden=true;
+     document.body.classList.remove('firebase-auth-pending');
+     document.documentElement.classList.remove('firebase-startup-pending');
+     setTimeout(()=>{if(typeof window.initDriveForUser==='function')window.initDriveForUser(user.uid);},0);
+   }else{
+     const rememberedUser=localStorage.getItem('app_user_key') || (window.getLoginCookie?window.getLoginCookie():'') || (()=>{try{return sessionStorage.getItem('app_user_key')||''}catch(_){return ''}})();
+     if(rememberedUser && rememberedUser!=='guest'){
+       try{localStorage.setItem('app_user_key',rememberedUser);}catch(_){}
+       switchAppUser(rememberedUser);
+     }else switchAppUser('guest');
+     if(authLoading)authLoading.hidden=true;
+     document.body.classList.remove('firebase-auth-pending');
+     document.documentElement.classList.remove('firebase-startup-pending');
+     /* لا نظهر الدخول بعد Refresh طالما أن المستخدم سبق له تسجيل الدخول. */
+     if(hasRememberedLogin()) hide(); else show();
+   }
+ });
 });
-window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFromGoogle=()=>showAppConfirm('هل تريد تسجيل الخروج ؟','',async()=>{try{await signOut(auth);}finally{localStorage.removeItem('app_user_key');localStorage.setItem('nazzem_login_required','1');try{sessionStorage.removeItem('app_user_key');}catch(_){};document.cookie='nazzem_login_uid=; max-age=0; path=/; SameSite=Lax';switchAppUser('guest');show();}});
+window.firebaseAuth=auth;
+window.loginWithGoogle=loginWithGoogle;
+window.logoutFromGoogle=()=>showAppConfirm('هل تريد تسجيل الخروج ؟','',async()=>{
+ try{await signOut(auth);}finally{
+   localStorage.removeItem('app_user_key');
+   localStorage.removeItem(LOGIN_MARK);
+   localStorage.setItem('nazzem_login_required','1');
+   try{sessionStorage.removeItem('app_user_key');}catch(_){}
+   document.cookie='nazzem_login_uid=; max-age=0; path=/; SameSite=Lax';
+   switchAppUser('guest');show();
+ }
+});
 </script>
 
 <style id="pdfExportStyles">
@@ -4133,6 +4152,202 @@ window.firebaseAuth=auth;window.loginWithGoogle=loginWithGoogle;window.logoutFro
 @media (max-width:700px) { .pdf-summary { grid-template-columns:repeat(2,1fr); } }
 </style>
 <div id="pdfExportRoot" aria-hidden="true"></div>
-<script>/* تسجيل الخروج يتم فقط من زر الخروج؛ السحب/التمرير لا يسجل الخروج. */</script>
+<script>
+function pdfEsc(value){
+    if (typeof escapeHtml === 'function') return escapeHtml(value == null ? '' : String(value));
+    return String(value == null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function pdfMoney(value){
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : 0;
+}
+function pdfStatus(paid){ return paid ? '<span class="pdf-status-paid">مسدد</span>' : '<span class="pdf-status-unpaid">غير مسدد</span>'; }
+function buildPDFExportReport(){
+    const root = document.getElementById('pdfExportRoot');
+    if (!root) return;
+    const now = new Date();
+    const dateText = (()=>{ try { return new Intl.DateTimeFormat('ar-EG-u-ca-gregory-nu-arab',{day:'numeric',month:'long',year:'numeric'}).format(now); } catch(e){ return now.toLocaleDateString('ar-EG'); } })();
+    const groupRows = [];
+    let groupsMonth = 0, groupsDebt = 0, groupsPaid = 0, groupsUnpaid = 0;
+    (Array.isArray(groups) ? groups : []).forEach(group => {
+        const metrics = getFinancialMetrics(group, 'group');
+        const sessions = metrics.sessions;
+        const monthMoney = pdfMoney(metrics.monthMoney);
+        const debt = pdfMoney(metrics.previousDebt);
+        const required = metrics.totalRequired;
+        groupsMonth += metrics.monthPaid ? 0 : monthMoney;
+        groupsDebt += metrics.debtPaid ? 0 : debt;
+        if (metrics.isFullyPaid) groupsPaid += 1; else groupsUnpaid += 1;
+        groupRows.push({group,sessions,monthMoney,debt,required});
+    });
+    const studentRows = [];
+    let studentsMonth = 0, studentsDebt = 0, studentsPaid = 0, studentsUnpaid = 0;
+    (Array.isArray(students) ? students : []).forEach(student => {
+        const financial = getFinancialMetrics(student, 'student');
+        const metrics = typeof calculateStudentMetrics === 'function' ? calculateStudentMetrics(student) : {presentSessionsCount:0,totalHeldSessions:0,attendanceRate:0,hwRate:null,sessionRate:null,examRate:null,overallText:'',overallColor:''};
+        const sessions = financial.sessions;
+        const monthMoney = pdfMoney(financial.monthMoney);
+        const debt = pdfMoney(financial.previousDebt);
+        const required = financial.totalRequired;
+        studentsMonth += financial.monthPaid ? 0 : monthMoney;
+        studentsDebt += financial.debtPaid ? 0 : debt;
+        if (financial.isFullyPaid) studentsPaid += 1; else studentsUnpaid += 1;
+        studentRows.push({student,metrics,sessions,monthMoney,debt,required});
+    });
+    const totalRequired = groupsMonth + groupsDebt + studentsMonth + studentsDebt;
+    const totalPeople = groupRows.length + studentRows.length;
+    root.innerHTML = `
+      <div class="pdf-export-wrap">
+        <div class="pdf-cover">
+          <h1>نظم دروسك</h1>
+          <div class="author">تصميم وتنفيذ مستر حسام حَلّيص</div>
+          <div class="meta">تقرير شامل للبيانات المالية والتعليمية — ${pdfEsc(dateText)}</div>
+        </div>
+        <div class="pdf-page-title">الملخص العام</div>
+        <div class="pdf-summary">
+          <div class="pdf-summary-item"><b>إجمالي المطلوب</b><span>${totalRequired} جنيه</span></div>
+          <div class="pdf-summary-item"><b>مطلوب الشهر</b><span>${groupsMonth + studentsMonth} جنيه</span></div>
+          <div class="pdf-summary-item"><b>المتأخرات</b><span>${groupsDebt + studentsDebt} جنيه</span></div>
+          <div class="pdf-summary-item"><b>إجمالي السجلات</b><span>${totalPeople}</span></div>
+        </div>
+
+        <div class="pdf-page-title">المجموعات</div>
+        ${groupRows.length ? groupRows.map(({group,sessions,monthMoney,debt,required}) => `
+          <div class="pdf-group-card">
+            <div class="pdf-card-head"><strong>${pdfEsc(group.name || 'مجموعة بدون اسم')}</strong><span class="pdf-muted">${pdfEsc(getDaysDisplayString(group) || '')}${group.time ? ' — ' + pdfEsc(group.time) : ''}</span></div>
+            <table class="pdf-table"><tr><th>الحصص</th><th>سعر الحصة</th><th>حساب الشهر</th><th>المتأخرات</th><th>المطلوب</th><th>الحالة</th></tr>
+            <tr><td>${sessions}</td><td>${pdfMoney(group.price)} ج</td><td>${monthMoney} ج</td><td>${debt} ج</td><td class="pdf-money">${required} ج</td><td>${required === 0 ? pdfStatus(true) : pdfStatus(false)}</td></tr></table>
+            ${group.phone ? `<div class="pdf-note">الهاتف: ${pdfEsc(group.phone)}</div>` : ''}
+            ${group.debtNote ? `<div class="pdf-note">ملاحظة المتأخرات: ${pdfEsc(group.debtNote)}</div>` : ''}
+          </div>`).join('') : '<div class="pdf-note">لا توجد مجموعات مسجلة.</div>'}
+
+        <div class="pdf-page-title">التلاميذ والتقارير الشهرية</div>
+        ${studentRows.length ? studentRows.map(({student,metrics,sessions,monthMoney,debt,required}) => {
+            const detailRows = (student.daysData || []).filter(d => d.status === 'present' || d.status === 'absent').map(d => {
+                const status = d.status === 'present' ? 'حاضر' : 'غائب';
+                const evals = [];
+                if (d.homeworkGrade !== undefined && d.homeworkGrade !== '') evals.push('الواجب: ' + pdfEsc(d.homeworkGrade) + '/10');
+                if (d.sessionGrade !== undefined && d.sessionGrade !== '') evals.push('التسميع: ' + pdfEsc(d.sessionGrade) + '/10');
+                if (d.examGrade !== undefined && d.examGrade !== '') evals.push('الاختبار: ' + pdfEsc(d.examGrade));
+                if (d.notes) evals.push('ملاحظة: ' + pdfEsc(d.notes));
+                return `<tr><td>${pdfEsc(d.label || '')}</td><td>${pdfEsc(d.dateStr || '')}</td><td>${status}</td><td>${evals.join(' | ') || '—'}</td></tr>`;
+            }).join('');
+            return `
+            <div class="pdf-person-card">
+              <div class="pdf-card-head"><strong>${pdfEsc(student.name || 'تلميذ بدون اسم')}</strong><span class="pdf-muted">${student.grade ? 'الصف: ' + pdfEsc(student.grade) : 'تلميذ فردي'}</span></div>
+              <table class="pdf-table"><tr><th>الحضور</th><th>الواجبات</th><th>التسميع</th><th>الاختبار</th><th>التقييم العام</th></tr>
+              <tr><td>${metrics.attendanceRate}% (${metrics.presentSessionsCount} من ${metrics.totalHeldSessions})</td><td>${metrics.hwRate !== null ? metrics.hwRate + '%' : 'غير مسجل'}</td><td>${metrics.sessionRate !== null ? metrics.sessionRate + '%' : 'غير مسجل'}</td><td>${metrics.examRate !== null ? metrics.examRate + '%' : 'غير مسجل'}</td><td>${pdfEsc(metrics.overallText || 'غير محدد')}</td></tr></table>
+              <table class="pdf-table" style="margin-top:7px"><tr><th>الحصص المحتسبة</th><th>سعر الحصة</th><th>حساب الشهر</th><th>المتأخرات</th><th>المطلوب</th><th>الحالة</th></tr>
+              <tr><td>${sessions}</td><td>${pdfMoney(student.price)} ج</td><td>${monthMoney} ج</td><td>${debt} ج</td><td class="pdf-money">${required} ج</td><td>${required === 0 ? pdfStatus(true) : pdfStatus(false)}</td></tr></table>
+              ${student.phone ? `<div class="pdf-note">الهاتف: ${pdfEsc(student.phone)}</div>` : ''}
+              ${student.debtNote ? `<div class="pdf-note">ملاحظة المتأخرات: ${pdfEsc(student.debtNote)}</div>` : ''}
+              <div class="pdf-page-title" style="font-size:13px;margin-top:12px">سجل الحضور والتقييم</div>
+              ${detailRows ? `<table class="pdf-table"><tr><th>اليوم</th><th>التاريخ</th><th>الحالة</th><th>التقييمات والملاحظات</th></tr>${detailRows}</table>` : '<div class="pdf-note">لا توجد حصص مسجلة.</div>'}
+            </div>`;
+        }).join('') : '<div class="pdf-note">لا توجد تلاميذ مسجلون.</div>'}
+
+        <div class="pdf-footer">تم إنشاء التقرير من بيانات التطبيق الحالية فقط — لا يتم تعديل أو حذف أي بيانات أثناء التصدير.</div>
+      </div>`;
+}
+function exportPDFReport(){
+    try {
+        buildPDFExportReport();
+        const root = document.getElementById('pdfExportRoot');
+        if (!root) throw new Error('PDF_EXPORT_ROOT_NOT_FOUND');
+        document.title = 'تقرير_نظم_دروسك_' + new Date().toISOString().slice(0,10);
+        document.body.classList.add('pdf-exporting');
+        root.setAttribute('aria-hidden','false');
+        setTimeout(() => {
+            window.print();
+            setTimeout(() => {
+                document.body.classList.remove('pdf-exporting');
+                root.setAttribute('aria-hidden','true');
+                document.title = 'نظم دروسك';
+            }, 700);
+        }, 120);
+    } catch (err) {
+        console.error('PDF export error:', err);
+        if (typeof showAppAlert === 'function') showAppAlert('تعذر إنشاء التقرير', 'حدث خطأ أثناء تجهيز تقرير PDF. بياناتك لم تتأثر.');
+    }
+}
+
+function recycleGet(){
+    return JSON.parse(localStorage.getItem(userStorageKey('recycle_bin')) || '[]');
+}
+function recycleSave(data){
+    localStorage.setItem(userStorageKey('recycle_bin'), JSON.stringify(data));
+}
+function recycleAdd(type,item){
+    let a=recycleGet();
+    a.push({type:type,item:item,date:new Date().toLocaleString('ar-EG')});
+    recycleSave(a);
+}
+
+function openRecycleBin(){
+    const old=document.getElementById('recycleBinModal');
+    if(old) old.remove();
+
+    let box=document.createElement('div');
+    box.id='recycleBinModal';
+    box.className='modal';
+    box.style.display='flex';
+
+    let list=recycleGet();
+    box.innerHTML =
+    '<div class="modal-content">'+
+    '<h3 style="text-align:center">سلة المحذوفات</h3>'+
+    (list.length ? list.map((x,i)=>
+        '<div style="padding:8px;border:1px solid #ccc;border-radius:8px;margin:6px 0">'+
+        (x.type==='student'?'تلميذ':'مجموعة')+'<br>'+
+        (x.item.name||'')+'<br>'+
+        '<button class="btn-3d" data-restore="'+i+'">استرجاع</button>'+
+        '<button class="btn-3d btn-red-3d" data-delete="'+i+'">حذف نهائي</button>'+
+        '</div>'
+    ).join('') : '<p style="text-align:center">السلة فارغة</p>')+
+    '<button class="btn-3d" data-close>إغلاق</button>'+
+    '</div>';
+
+    document.body.appendChild(box);
+
+    box.querySelectorAll('[data-restore]').forEach(btn=>{
+        btn.onclick=function(){ recycleRestore(Number(this.dataset.restore)); };
+    });
+    box.querySelectorAll('[data-delete]').forEach(btn=>{
+        btn.onclick=function(){ recycleDelete(Number(this.dataset.delete)); };
+    });
+    box.querySelector('[data-close]').onclick=function(){ box.remove(); };
+}
+
+function recycleRestore(i){
+    let a=recycleGet();
+    let x=a[i];
+    if(!x) return;
+
+    if(x.type==='student') students.push(x.item);
+    else groups.push(x.item);
+
+    a.splice(i,1);
+    recycleSave(a);
+    saveData();
+
+    let box=document.getElementById('recycleBinModal');
+    if(box) box.remove();
+
+    if(typeof renderAll==='function') renderAll();
+}
+
+function recycleDelete(i){
+    let a=recycleGet();
+    a.splice(i,1);
+    recycleSave(a);
+
+    let box=document.getElementById('recycleBinModal');
+    if(box) box.remove();
+
+    openRecycleBin();
+}
+
+// تسجيل الخروج يتم فقط من زر الخروج داخل البرنامج.
+</script>
 </body>
 </html>
