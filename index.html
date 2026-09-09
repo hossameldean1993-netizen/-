@@ -1020,7 +1020,6 @@ html, body, button, input, select, textarea, option {
     <link rel="icon" href="icons/icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
 
-
 <!-- Login UI -->
 <style>#loginScreen{position:fixed;inset:0;z-index:99999;background:var(--bg,#f5f7fa);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;direction:rtl}#loginScreen[hidden]{display:none!important}.login-card{width:min(100%,390px);background:var(--card-bg-light,#fff);border:2px solid var(--card-blue,#0284c7);border-radius:18px;padding:22px 18px;box-sizing:border-box;box-shadow:0 8px 24px rgba(0,0,0,.10);text-align:center}.login-card h2{margin:0 0 8px;color:var(--card-blue,#0284c7);font-size:1.35rem}.login-card p{margin:0 0 18px;color:var(--text-muted,#667085);font-weight:700}.login-card button{width:100%;border:0;border-radius:10px;padding:12px;margin-top:9px;font-weight:800;font-size:1rem;cursor:pointer}.login-primary{background:#0284c7;color:#fff}#loginMessage{min-height:22px;margin-top:10px;color:#d92d20;font-weight:800;font-size:.9rem}body.login-locked{overflow:hidden}</style>
 <style>#authLoading{position:fixed;inset:0;z-index:100000;background:var(--bg,#f5f7fa);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;direction:rtl}#authLoading[hidden]{display:none!important}.auth-loading-card{width:min(100%,390px);background:var(--card-bg-light,#fff);border:2px solid var(--card-blue,#0284c7);border-radius:18px;padding:22px 18px;box-sizing:border-box;box-shadow:0 8px 24px rgba(0,0,0,.10);text-align:center;color:var(--text-muted,#667085);font-weight:800}.auth-loading-card .auth-loading-title{color:var(--card-blue,#0284c7);font-size:1.15rem;margin-bottom:8px}.auth-loading-card .auth-loading-text{font-size:.95rem}.auth-loading-spinner{width:24px;height:24px;margin:14px auto 0;border:3px solid #d0d5dd;border-top-color:#0284c7;border-radius:50%;animation:authSpin .8s linear infinite}@keyframes authSpin{to{transform:rotate(360deg)}}
@@ -1964,7 +1963,7 @@ html, body, button, input, select, textarea, option {
             }
             if (document.getElementById('page6').classList.contains('active')) renderFinancialLists();
 
-            // مزامنة سحابية تلقائية بعد أي عملية حفظ ناجحة. localStorage هو التخزين المحلي لبيانات التطبيق قبل/بين عمليات المزامنة.
+            // مزامنة سحابية تلقائية بعد أي عملية حفظ ناجحة. localStorage يبقى ذاكرة مؤقتة فقط للعمل دون إنترنت.
             if (typeof scheduleDriveSync === 'function') scheduleDriveSync();
             return true;
         }
@@ -3980,8 +3979,8 @@ let localEditRevision = 0;
 
 </script>
 <script>
-/* تنظيف أي Service Worker قديم كان قد ثُبّت في إصدارات سابقة.
-   لا ينشئ Service Worker جديدًا ولا يفعّل تشغيلًا دون اتصال. */
+/* منع الـService Worker القديم من إعادة تقديم نسخة HTML قديمة عند السحب للتحديث.
+   هذا خاص بالمزامنة/الدخول فقط ولا يلمس بيانات التطبيق المحلية. */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {
     navigator.serviceWorker.getRegistrations().then(function(registrations){
