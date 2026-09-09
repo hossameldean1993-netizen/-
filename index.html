@@ -4050,7 +4050,14 @@ const loginScreen=document.getElementById('loginScreen'),googleLoginButton=docum
 const LOGIN_MARK='nazzem_has_logged_in';
 function hasRememberedLogin(){try{return localStorage.getItem(LOGIN_MARK)==='1' && !!localStorage.getItem('app_user_key') && localStorage.getItem('app_user_key')!=='guest';}catch(_){return false;}}
 function msg(x){if(loginMessage)loginMessage.textContent=x||''}
-function show(){if(loginScreen){loginScreen.hidden=false;document.body.classList.add('login-locked')}}
+function show(){
+  /* شاشة الدخول لا تظهر تلقائيًا بعد Refresh/Pull-to-refresh.
+     لا تُفتح إلا بعد طلب خروج صريح من البرنامج. */
+  let required=false;
+  try{required=localStorage.getItem('nazzem_login_required')==='1';}catch(_){required=false;}
+  if(!required)return;
+  if(loginScreen){loginScreen.hidden=false;document.body.classList.add('login-locked')}
+}
 function hide(){if(loginScreen){loginScreen.hidden=true;document.body.classList.remove('login-locked')}}
 function friendly(e){const m={'auth/popup-closed-by-user':'تم إغلاق نافذة Google قبل إتمام الدخول.','auth/popup-blocked':'تم منع نافذة Google. اسمح بالنوافذ المنبثقة ثم اضغط تسجيل الدخول مرة أخرى.','auth/operation-not-allowed':'يجب تفعيل تسجيل الدخول بحساب Google من إعدادات Firebase.'};return m[e?.code]||'تعذر تسجيل الدخول بحساب Google. تأكد من الإنترنت وإعدادات Firebase.'}
 let googleLoginBusy=false;
@@ -4062,6 +4069,7 @@ async function loginWithGoogle(){
    const user=result.user;
    localStorage.setItem(LOGIN_MARK,'1');
    localStorage.setItem('app_user_key',user.uid);
+   localStorage.removeItem('nazzem_login_required');
    if(window.setLoginCookie)window.setLoginCookie(user.uid);
    switchAppUser(user.uid); hide();
    if(authLoading)authLoading.hidden=true;
@@ -4087,6 +4095,7 @@ authPersistenceReady.then(()=>{
    if(user){
      localStorage.setItem(LOGIN_MARK,'1');
      localStorage.setItem('app_user_key',user.uid);
+     localStorage.removeItem('nazzem_login_required');
      if(window.setLoginCookie)window.setLoginCookie(user.uid);
      switchAppUser(user.uid); hide();
      if(authLoading)authLoading.hidden=true;
