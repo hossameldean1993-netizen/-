@@ -1,54 +1,93 @@
-const CACHE_NAME = 'nzm-drosk-pwa-v2';
+const CACHE_NAME = 'nzm-drosk-offline-v1';
 
-const APP_SHELL = [
-  './',
-  './index.html',
-  './manifest.json',
-  './manifest.webmanifest',
-  './icon-192.png',
-  './icon-512.png'
+const APP_FILES = [
+    './',
+    './index.html',
+    './manifest.json',
+    './manifest.webmanifest',
+    './icon-192.png',
+    './icon-512.png'
 ];
 
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting())
-  );
+// تثبيت Service Worker وحفظ ملفات التطبيق الأساسية
+self.addEventListener('install', function (event) {
+    event.waitUntil(
+        caches.open(CACHE_NAME)
+            .then(function (cache) {
+                return cache.addAll(APP_FILES);
+            })
+            .then(function () {
+                return self.skipWaiting();
+            })
+    );
 });
 
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys()
-      .then(keys =>
-        Promise.all(
-          keys
-            .filter(key => key !== CACHE_NAME)
-            .map(key => caches.delete(key))
-        )
-      )
-      .then(() => self.clients.claim())
-  );
+// حذف الإصدارات القديمة من الكاش
+self.addEventListener('activate', function (event) {
+    event.waitUntil(
+        caches.keys()
+            .then(function (cacheNames) {
+                return Promise.all(
+                    cacheNames.map(function (cacheName) {
+                        if (cacheName !== CACHE_NAME) {
+                            return caches.delete(cacheName);
+                        }
+                    })
+                );
+            })
+            .then(function () {
+                return self.clients.claim();
+            })
+    );
 });
 
-self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
+// تشغيل Online أولاً، وإذا لم يوجد إنترنت يتم استخدام النسخة المحفوظة
+self.addEventListener('fetch', function (event) {
 
-  event.respondWith(
-    fetch(event.request)
-      .then(response => {
-        if (response && response.ok) {
-          const copy = response.clone();
+    if (event.request.method !== 'GET') {
+        return;
+    }
 
-          if (new URL(event.request.url).origin === self.location.origin) {
-            caches.open(CACHE_NAME)
-              .then(cache => cache.put(event.request, copy))
-              .catch(() => {});
-          }
-        }
+    event.respondWith(
+        fetch(event.request)
+            .then(function (response) {
 
-        return response;
-      })
-      .catch(() => caches.match(event.request))
-  );
+                // حفظ الملفات المحلية القادمة من نفس الموقع
+                if (
+                    response &&
+                    response.ok &&
+                    new URL(event.request.url).origin === self.location.origin
+                ) {
+                    var responseClone = response.clone();
+
+                    caches.open(CACHE_NAME)
+                        .then(function (cache) {
+                            cache.put(event.request, responseClone);
+                        })
+                        .catch(function () {});
+                }
+
+                return response;
+            })
+            .catch(function () {
+                // في حالة عدم وجود الإنترنت
+                return caches.match(event.request)
+                    .then(function (cachedResponse) {
+
+                        if (cachedResponse) {
+                            return cachedResponse;
+                        }
+
+                        // إذا كان الطلب صفحة ولم توجد في الكاش
+                        if (event.request.mode === 'navigate') {
+                            return caches.match('./index.html');
+                        }
+
+                        return new Response('', {
+                            status: 503,
+                            statusText: 'Offline'
+                        });
+                    });
+            })
+    );
 });
