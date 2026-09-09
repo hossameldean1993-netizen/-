@@ -3972,8 +3972,16 @@ let localEditRevision = 0;
             loadDriveState(); loadSavedDriveStatus();
             if(!uid || uid==='guest') return;
             try{initGoogleDriveAuth();}catch(e){console.warn('Drive auth unavailable',e);}
-            // نبدأ المزامنة فقط إذا سبق منح صلاحية Drive؛ لا نوقف فتح البرنامج بسببها.
-            if(localStorage.getItem(getDriveStateKey('permission'))==='1'){ driveSyncPending=true; saveDriveState(); requestDriveToken(false); }
+            /*
+             * مهم: لا نطلب OAuth/Google Drive Token تلقائيًا عند كل Refresh.
+             * رمز Drive access token مؤقت، وطلبه أثناء بدء الصفحة هو ما قد يعيد
+             * فتح Google Account Chooser بعد السحب للتحديث. نحتفظ بعلامة الصلاحية
+             * محليًا، لكن نطلب token فقط عندما توجد مزامنة فعلية تحتاجه.
+             */
+            if(localStorage.getItem(getDriveStateKey('permission'))==='1'){
+                driveSyncPending=true;
+                saveDriveState();
+            }
         }
         window.startDriveSyncNow=startDriveSyncNow;
         window.createLocalSafetyBackup=createLocalSafetyBackup;
