@@ -7,6 +7,11 @@
     <link rel="preconnect" href="https://accounts.google.com" crossorigin>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#f3f4f6">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="نظم دروسك">
+<link rel="manifest" href="./manifest.webmanifest">
     <!-- Emoji compatibility for Android WebView / APK -->
     <meta name="color-scheme" content="only light">
     <meta name="theme-color" content="#1c2025">
@@ -3984,13 +3989,11 @@ let localEditRevision = 0;
 
 </script>
 <script>
-/* منع الـService Worker القديم من إعادة تقديم نسخة HTML قديمة عند السحب للتحديث.
-   هذا خاص بالمزامنة/الدخول فقط ولا يلمس بيانات التطبيق المحلية. */
+/* تشغيل وضع Offline/PWA فقط.
+   لا يغيّر بيانات التطبيق ولا منطق Google Drive أو تسجيل الدخول. */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {
-    navigator.serviceWorker.getRegistrations().then(function(registrations){
-      return Promise.all(registrations.map(function(reg){ return reg.unregister(); }));
-    }).catch(function(){});
+    navigator.serviceWorker.register('./sw.js', {scope: './'}).catch(function(){});
   });
 }
 </script>
