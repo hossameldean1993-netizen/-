@@ -3968,7 +3968,15 @@ let localEditRevision = 0;
             if(driveSyncTimer) clearTimeout(driveSyncTimer);
             driveSyncTimer=setTimeout(()=>{
                 driveSyncTimer=null;
-                if(!driveAccessToken) return;
+                if(!navigator.onLine) return;
+                if(!driveAccessToken){
+                    // بعد Refresh قد يكون access token المؤقت اختفى رغم بقاء الموافقة.
+                    // نعيد طلب token بدون consent؛ لا نطلب إذنًا جديدًا إذا كانت الموافقة محفوظة.
+                    if(localStorage.getItem(getDriveStateKey('permission'))==='1'){
+                        requestDriveToken(false);
+                    }
+                    return;
+                }
                 if(driveSyncBusy) return;
                 syncWithDrive();
             },Math.max(0,delay));
@@ -3976,7 +3984,15 @@ let localEditRevision = 0;
         }
         function scheduleDriveRetry(){
             if(driveRetryTimer||!driveSyncPending) return;
-            driveRetryTimer=setTimeout(()=>{driveRetryTimer=null;if(driveAccessToken&&navigator.onLine) syncWithDrive();},DRIVE_SYNC_RETRY_MS);
+            driveRetryTimer=setTimeout(()=>{
+                driveRetryTimer=null;
+                if(!navigator.onLine) return;
+                if(!driveAccessToken){
+                    if(localStorage.getItem(getDriveStateKey('permission'))==='1') requestDriveToken(false);
+                    return;
+                }
+                syncWithDrive();
+            },DRIVE_SYNC_RETRY_MS);
         }
         async function startDriveSyncNow(){
             if(!navigator.onLine){showAppAlert('لا يوجد اتصال بالإنترنت','بياناتك محفوظة على الجهاز. اتصل بالإنترنت ثم اضغط مزامنة الآن.');return;}
@@ -4394,8 +4410,6 @@ function recycleRestore(i){
 
     let box=document.getElementById('recycleBinModal');
     if(box) box.remove();
-
-    if(typeof renderAll==='function') renderAll();
 }
 
 function recycleDelete(i){
