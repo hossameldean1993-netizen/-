@@ -4081,6 +4081,12 @@ async function loginWithGoogle(){
    if(window.setLoginCookie)window.setLoginCookie(user.uid);
    switchAppUser(user.uid); hide();
    if(authLoading)authLoading.hidden=true;
+   // طلب صلاحية Google Drive مباشرة بعد نجاح تسجيل الدخول، مرة واحدة فقط لكل مستخدم.
+   try {
+     if(localStorage.getItem(getDriveStateKey('permission'))!=='1') {
+       setTimeout(()=>{ try { requestDriveToken(true); } catch(e) { console.warn('Drive consent unavailable',e); } },150);
+     }
+   } catch(e) { console.warn('Drive consent check unavailable',e); }
    return {user};
  }catch(e){throw e}
  finally{googleLoginBusy=false;}
