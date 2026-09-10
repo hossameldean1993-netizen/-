@@ -3867,9 +3867,10 @@ let localEditRevision = 0;
         async function syncWithDrive() {
             if(driveSyncBusy || !navigator.onLine || !driveAccessToken) return false;
             driveSyncBusy=true; setDriveStatus('جارٍ المزامنة...');
+            let syncRevision = localEditRevision;
             try{
                 loadDriveState();
-                const syncRevision = localEditRevision;
+                syncRevision = localEditRevision;
                 const local=getDriveLocalData();
                 const file=await findDriveFile();
 
@@ -4401,6 +4402,7 @@ function recycleDelete(i){
     let a=recycleGet();
     a.splice(i,1);
     recycleSave(a);
+    saveData();
 
     let box=document.getElementById('recycleBinModal');
     if(box) box.remove();
