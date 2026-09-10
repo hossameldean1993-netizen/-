@@ -4058,11 +4058,11 @@ const LOGIN_MARK='nazzem_has_logged_in';
 function hasRememberedLogin(){try{return localStorage.getItem(LOGIN_MARK)==='1' && !!localStorage.getItem('app_user_key') && localStorage.getItem('app_user_key')!=='guest';}catch(_){return false;}}
 function msg(x){if(loginMessage)loginMessage.textContent=x||''}
 function show(){
-  /* شاشة الدخول لا تظهر تلقائيًا بعد Refresh/Pull-to-refresh.
-     لا تُفتح إلا بعد طلب خروج صريح من البرنامج. */
+  /* شاشة الدخول تظهر للمستخدم غير المسجل، وتظل مخفية بعد تسجيل الدخول
+     عند Refresh/Pull-to-refresh، ولا تظهر مرة أخرى إلا بعد تسجيل الخروج. */
   let required=false;
   try{required=localStorage.getItem('nazzem_login_required')==='1';}catch(_){required=false;}
-  if(!required)return;
+  if(!required && hasRememberedLogin())return;
   if(loginScreen){loginScreen.hidden=false;document.body.classList.add('login-locked')}
 }
 function hide(){if(loginScreen){loginScreen.hidden=true;document.body.classList.remove('login-locked')}}
