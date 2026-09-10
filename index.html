@@ -2566,7 +2566,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const miniCard = document.createElement('div');
                 miniCard.className = `financial-mini-card ${isFullyPaid ? 'paid' : ''}`;
                 miniCard.onclick = () => openGroupDetailsPage(index);
-                miniCard.innerHTML = `<div class="financial-mini-name">${escapeHtml(group.name)}</div><div class="financial-mini-amount">${totalRequired} جنيه</div>`;
+                const displayedAmount = filterValue === 'has_debt' ? previousDebt : totalRequired;
+                miniCard.innerHTML = `<div class="financial-mini-name">${escapeHtml(group.name)}</div><div class="financial-mini-amount">${displayedAmount} جنيه</div>`;
                 groupsContainer.appendChild(miniCard);
             });
 
@@ -2584,7 +2585,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 const miniCard = document.createElement('div');
                 miniCard.className = `financial-mini-card ${isFullyPaid ? 'paid' : ''}`;
                 miniCard.onclick = () => openStudentDetailsPage(index);
-                miniCard.innerHTML = `<div class="financial-mini-name">${escapeHtml(student.name)}</div><div class="financial-mini-amount">${totalRequired} جنيه</div>`;
+                const displayedAmount = filterValue === 'has_debt' ? financial.previousDebt : totalRequired;
+                miniCard.innerHTML = `<div class="financial-mini-name">${escapeHtml(student.name)}</div><div class="financial-mini-amount">${displayedAmount} جنيه</div>`;
                 studentsContainer.appendChild(miniCard);
             });
 
