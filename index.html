@@ -4053,6 +4053,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebas
 import { getAuth, setPersistence, indexedDBLocalPersistence, browserLocalPersistence, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1"};
 const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider();
+provider.addScope('https://www.googleapis.com/auth/drive.file');
 const authPersistenceReady=setPersistence(auth,indexedDBLocalPersistence).catch(()=>setPersistence(auth,browserLocalPersistence)).catch(()=>{});
 const loginScreen=document.getElementById('loginScreen'),googleLoginButton=document.getElementById('googleLoginButton'),loginMessage=document.getElementById('loginMessage'),authLoading=document.getElementById('authLoading');
 const LOGIN_MARK='nazzem_has_logged_in';
@@ -4081,12 +4082,16 @@ async function loginWithGoogle(){
    if(window.setLoginCookie)window.setLoginCookie(user.uid);
    switchAppUser(user.uid); hide();
    if(authLoading)authLoading.hidden=true;
-   // طلب صلاحية Google Drive مباشرة بعد نجاح تسجيل الدخول، مرة واحدة فقط لكل مستخدم.
+   // صلاحية Google Drive تُطلب داخل نفس نافذة تسجيل الدخول إلى Google.
+   // نستخدم access token الذي أعاده Firebase مباشرةً، فلا نفتح نافذة OAuth ثانية بعد تسجيل الدخول.
    try {
-     if(localStorage.getItem(getDriveStateKey('permission'))!=='1') {
-       setTimeout(()=>{ try { requestDriveToken(true); } catch(e) { console.warn('Drive consent unavailable',e); } },150);
+     const googleCredential=GoogleAuthProvider.credentialFromResult(result);
+     if(googleCredential && googleCredential.accessToken) {
+       driveAccessToken=googleCredential.accessToken;
+       localStorage.setItem(getDriveStateKey('permission'),'1');
+       if(typeof scheduleDriveSync==='function') scheduleDriveSync(150);
      }
-   } catch(e) { console.warn('Drive consent check unavailable',e); }
+   } catch(e) { console.warn('Drive login scope unavailable',e); }
    return {user};
  }catch(e){throw e}
  finally{googleLoginBusy=false;}
