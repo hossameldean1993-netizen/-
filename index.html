@@ -3958,11 +3958,19 @@ let localEditRevision = 0;
                 console.error('Drive sync error',e); driveSyncPending=true; saveDriveState();
                 if(e.message==='DRIVE_UNAUTHORIZED') setDriveStatus('انتهت صلاحية Google Drive'); else if(e.message==='DRIVE_EMPTY_MERGE_BLOCKED') setDriveStatus('تم إيقاف المزامنة لحماية البيانات'); else { const detail=(e&&e.message)?String(e.message):'خطأ غير معروف'; setDriveStatus('خطأ المزامنة: '+detail); try{showAppAlert('خطأ Google Drive','تعذر إتمام المزامنة. السبب: '+detail);}catch(_){} console.error('Drive sync diagnostic:',detail,e); }
                 scheduleDriveRetry(); return false;
-            }finally{driveSyncBusy=false;}
+            }finally{
+                driveSyncBusy=false;
+                if(syncRevision !== localEditRevision && driveSyncPending && driveAccessToken && navigator.onLine) scheduleDriveSync(0);
+            }
         }
         function scheduleDriveSync(delay=DRIVE_SYNC_DEBOUNCE_MS){
             if(driveSyncTimer) clearTimeout(driveSyncTimer);
-            driveSyncTimer=setTimeout(()=>{driveSyncTimer=null;if(driveAccessToken) syncWithDrive();},Math.max(0,delay));
+            driveSyncTimer=setTimeout(()=>{
+                driveSyncTimer=null;
+                if(!driveAccessToken) return;
+                if(driveSyncBusy) return;
+                syncWithDrive();
+            },Math.max(0,delay));
             driveSyncPending=true; saveDriveState();
         }
         function scheduleDriveRetry(){
