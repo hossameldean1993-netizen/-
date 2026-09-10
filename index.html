@@ -4011,6 +4011,8 @@ body.firebase-auth-pending #authLoading { visibility: hidden !important; }
 (function(){
   function recoverUserKey(){
     try{
+      /* بعد تسجيل الخروج لا نستعيد أي UID من بيانات قديمة محفوظة محليًا. */
+      if(localStorage.getItem('nazzem_login_required')==='1') return '';
       const direct=localStorage.getItem('app_user_key');
       if(direct&&direct!=='guest')return direct;
       const m=document.cookie.match(/(?:^|;\s*)nazzem_login_uid=([^;]+)/);
