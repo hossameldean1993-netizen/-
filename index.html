@@ -3714,7 +3714,7 @@ let localEditRevision = 0;
         async function driveFetch(url, options={}) {
             if(!driveAccessToken) throw new Error('DRIVE_NO_TOKEN');
             const response=await fetch(url,{...options,headers:{...(options.headers||{}),Authorization:'Bearer '+driveAccessToken}});
-            if(response.status===401){ driveAccessToken=null; localStorage.removeItem(getDriveStateKey('permission')); throw new Error('DRIVE_UNAUTHORIZED'); }
+            if(response.status===401){ driveAccessToken=null; driveSyncPending=true; saveDriveState(); throw new Error('DRIVE_UNAUTHORIZED'); }
             return response;
         }
         async function driveError(response){
@@ -3957,7 +3957,7 @@ let localEditRevision = 0;
                 driveLastRemoteModified=file.modifiedTime||new Date().toISOString(); saveDriveState(); markDriveSynced(new Date().toISOString()); return true;
             }catch(e){
                 console.error('Drive sync error',e); driveSyncPending=true; saveDriveState();
-                if(e.message==='DRIVE_UNAUTHORIZED') setDriveStatus('انتهت صلاحية Google Drive'); else if(e.message==='DRIVE_EMPTY_MERGE_BLOCKED') setDriveStatus('تم إيقاف المزامنة لحماية البيانات'); else { const detail=(e&&e.message)?String(e.message):'خطأ غير معروف'; setDriveStatus('خطأ المزامنة: '+detail); try{showAppAlert('خطأ Google Drive','تعذر إتمام المزامنة. السبب: '+detail);}catch(_){} console.error('Drive sync diagnostic:',detail,e); }
+                if(e.message==='DRIVE_UNAUTHORIZED'){ setDriveStatus('انتهت صلاحية Google Drive'); if(localStorage.getItem(getDriveStateKey('permission'))==='1') requestDriveToken(false); } else if(e.message==='DRIVE_EMPTY_MERGE_BLOCKED') setDriveStatus('تم إيقاف المزامنة لحماية البيانات'); else { const detail=(e&&e.message)?String(e.message):'خطأ غير معروف'; setDriveStatus('خطأ المزامنة: '+detail); try{showAppAlert('خطأ Google Drive','تعذر إتمام المزامنة. السبب: '+detail);}catch(_){} console.error('Drive sync diagnostic:',detail,e); }
                 scheduleDriveRetry(); return false;
             }finally{
                 driveSyncBusy=false;
@@ -3970,14 +3970,16 @@ let localEditRevision = 0;
                 driveSyncTimer=null;
                 if(!navigator.onLine) return;
                 if(!driveAccessToken){
-                    // بعد Refresh قد يكون access token المؤقت اختفى رغم بقاء الموافقة.
-                    // نعيد طلب token بدون consent؛ لا نطلب إذنًا جديدًا إذا كانت الموافقة محفوظة.
+                    // بعد Refresh أو انتهاء access token المؤقت، نعيد طلب token تلقائيًا.
                     if(localStorage.getItem(getDriveStateKey('permission'))==='1'){
                         requestDriveToken(false);
                     }
                     return;
                 }
-                if(driveSyncBusy) return;
+                if(driveSyncBusy){
+                    scheduleDriveRetry();
+                    return;
+                }
                 syncWithDrive();
             },Math.max(0,delay));
             driveSyncPending=true; saveDriveState();
