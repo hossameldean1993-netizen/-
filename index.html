@@ -3950,7 +3950,7 @@ let localEditRevision = 0;
                 driveLastRemoteModified=file.modifiedTime||new Date().toISOString(); saveDriveState(); markDriveSynced(new Date().toISOString()); return true;
             }catch(e){
                 console.error('Drive sync error',e); driveSyncPending=true; saveDriveState();
-                if(e.message==='DRIVE_UNAUTHORIZED') setDriveStatus('انتهت صلاحية Google Drive'); else if(e.message==='DRIVE_EMPTY_MERGE_BLOCKED') setDriveStatus('تم إيقاف المزامنة لحماية البيانات'); else setDriveStatus('تعذر المزامنة: '+(e&&e.message?e.message:'خطأ غير معروف')+' — ستتم إعادة المحاولة');
+                if(e.message==='DRIVE_UNAUTHORIZED') setDriveStatus('انتهت صلاحية Google Drive'); else if(e.message==='DRIVE_EMPTY_MERGE_BLOCKED') setDriveStatus('تم إيقاف المزامنة لحماية البيانات'); else { const detail=(e&&e.message)?String(e.message):'خطأ غير معروف'; setDriveStatus('خطأ المزامنة: '+detail); try{showAppAlert('خطأ Google Drive','تعذر إتمام المزامنة. السبب: '+detail);}catch(_){} console.error('Drive sync diagnostic:',detail,e); }
                 scheduleDriveRetry(); return false;
             }finally{driveSyncBusy=false;}
         }
