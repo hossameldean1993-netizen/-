@@ -1035,6 +1035,13 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 <style>#authLoading{position:fixed;inset:0;z-index:100000;background:var(--bg,#f5f7fa);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;direction:rtl}#authLoading[hidden]{display:none!important}.auth-loading-card{width:min(100%,390px);background:var(--card-bg-light,#fff);border:2px solid var(--card-blue,#0284c7);border-radius:18px;padding:22px 18px;box-sizing:border-box;box-shadow:0 8px 24px rgba(0,0,0,.10);text-align:center;color:var(--text-muted,#667085);font-weight:800}.auth-loading-card .auth-loading-title{color:var(--card-blue,#0284c7);font-size:1.15rem;margin-bottom:8px}.auth-loading-card .auth-loading-text{font-size:.95rem}.auth-loading-spinner{width:24px;height:24px;margin:14px auto 0;border:3px solid #d0d5dd;border-top-color:#0284c7;border-radius:50%;animation:authSpin .8s linear infinite}@keyframes authSpin{to{transform:rotate(360deg)}}
 </style>
     
+
+<style id="salat-reminder-style">
+#salatReminder{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.38);z-index:2147483647;padding:20px;box-sizing:border-box;direction:rtl}
+#salatReminder .salat-reminder-box{width:min(92vw,430px);background:#fff;border-radius:18px;padding:26px 20px 20px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.3);font-family:inherit}
+#salatReminder .salat-reminder-text{font-family:'Kufi','Noto Kufi Arabic','Arial',sans-serif;font-size:22px;font-weight:700;line-height:1.8;color:#1565c0;margin-bottom:18px}
+#salatReminder .salat-reminder-close{border:0;border-radius:10px;padding:10px 28px;font-size:17px;font-weight:700;background:#1565c0;color:#fff;cursor:pointer}
+</style>
 </head>
 <body>
 <div id="authLoading"><div class="auth-loading-card"><div class="auth-loading-title">نظم دروسك</div><div class="auth-loading-text">جارٍ التحقق من تسجيل الدخول...</div><div class="auth-loading-spinner" aria-hidden="true"></div></div></div>
@@ -4427,6 +4434,44 @@ function recycleDelete(i){
 }
 
 // تسجيل الخروج يتم فقط من زر الخروج داخل البرنامج.
+</script>
+
+<div id="salatReminder" aria-hidden="true">
+  <div class="salat-reminder-box" role="dialog" aria-modal="true" aria-label="تذكير">
+    <div class="salat-reminder-text">صَلِّ عَلَى النَّبِيِّ مُحَمَّدٍ صَلَّى اللهُ عَلَيْهِ وَسَلَّمَ</div>
+    <button type="button" class="salat-reminder-close" onclick="closeSalatReminder()">حسنًا</button>
+  </div>
+</div>
+
+<script id="salat-reminder-script">
+(function(){
+  const FIRST_REMINDER_MS = 5 * 60 * 1000;
+  const REMINDER_INTERVAL_MS = 15 * 60 * 1000;
+  let reminderTimer = null;
+
+  window.closeSalatReminder = function(){
+    const box = document.getElementById('salatReminder');
+    if(box){ box.style.display='none'; box.setAttribute('aria-hidden','true'); }
+  };
+
+  function showSalatReminder(){
+    const box = document.getElementById('salatReminder');
+    if(!box) return;
+    box.style.display='flex';
+    box.setAttribute('aria-hidden','false');
+  }
+
+  function scheduleReminder(delay){
+    if(reminderTimer) clearTimeout(reminderTimer);
+    reminderTimer = setTimeout(function(){
+      showSalatReminder();
+      scheduleReminder(REMINDER_INTERVAL_MS);
+    }, delay);
+  }
+
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded',function(){scheduleReminder(FIRST_REMINDER_MS);});
+  else scheduleReminder(FIRST_REMINDER_MS);
+})();
 </script>
 </body>
 </html>
