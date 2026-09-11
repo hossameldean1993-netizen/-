@@ -3622,13 +3622,24 @@ let localEditRevision = 0;
             const out=[];
             for(const key of keys){
                 const b=bm.get(key), l=lm.get(key), r=rm.get(key);
-                if(!b){ if(l!==undefined) out.push(l); else if(r!==undefined) out.push(r); continue; }
+                if(!b){
+                    if(l!==undefined) out.push(l);
+                    else if(r!==undefined) out.push(r);
+                    continue;
+                }
                 if(l===undefined && r===undefined) continue;
-                if(l===undefined){ out.push(sameJson(r,b)?undefined:r); continue; }
-                if(r===undefined){ out.push(sameJson(l,b)?undefined:l); continue; }
+                // إذا كان السجل موجودًا في النسخة الأساسية ثم اختفى محليًا، فهذا حذف
+                // مقصود أثناء وجود مزامنة معلقة. لا نسمح لنسخة Drive القديمة بإعادته.
+                if(l===undefined){
+                    continue;
+                }
+                if(r===undefined){
+                    out.push(sameJson(l,b)?undefined:l);
+                    continue;
+                }
                 if(sameJson(l,b)) out.push(r);
                 else if(sameJson(r,b)) out.push(l);
-                else out.push(l); // تعارض حقيقي: تعديل الجهاز الحالي له الأولوية ولا نحذف بياناته.
+                else out.push(l); // تعارض حقيقي: تعديل الجهاز الحالي له الأولوية.
             }
             return out.filter(x=>x!==undefined);
         }
@@ -3699,7 +3710,7 @@ let localEditRevision = 0;
                     }
                     driveAccessToken=response.access_token;
                     localStorage.setItem(getDriveStateKey('permission'),'1');
-                    scheduleDriveSync(150);
+                    scheduleDriveSync(150, false);
                 }
             });
         }
@@ -3971,7 +3982,7 @@ let localEditRevision = 0;
                 if(syncRevision !== localEditRevision && driveSyncPending && driveAccessToken && navigator.onLine) scheduleDriveSync(0);
             }
         }
-        function scheduleDriveSync(delay=DRIVE_SYNC_DEBOUNCE_MS){
+        function scheduleDriveSync(delay=DRIVE_SYNC_DEBOUNCE_MS, markPending=true){
             if(driveSyncTimer) clearTimeout(driveSyncTimer);
             driveSyncTimer=setTimeout(()=>{
                 driveSyncTimer=null;
@@ -3989,7 +4000,7 @@ let localEditRevision = 0;
                 }
                 syncWithDrive();
             },Math.max(0,delay));
-            driveSyncPending=true; saveDriveState();
+            if(markPending){ driveSyncPending=true; saveDriveState(); }
         }
         function scheduleDriveRetry(){
             if(driveRetryTimer||!driveSyncPending) return;
@@ -4019,8 +4030,10 @@ let localEditRevision = 0;
              * محليًا، لكن نطلب token فقط عندما توجد مزامنة فعلية تحتاجه.
              */
             if(localStorage.getItem(getDriveStateKey('permission'))==='1'){
-                driveSyncPending=true;
-                saveDriveState();
+                // عند تسجيل الدخول/إعادة فتح التطبيق نتحقق من Drive دون اعتبار
+                // البيانات المحلية تعديلًا جديدًا. إذا كانت المحلية بها تعديلات معلقة
+                // تبقى driveSyncPending كما هي، فتظل التعديلات المحلية محمية.
+                scheduleDriveSync(0, false);
             }
         }
         window.startDriveSyncNow=startDriveSyncNow;
@@ -4131,7 +4144,7 @@ async function loginWithGoogle(){
      if(googleCredential && googleCredential.accessToken) {
        driveAccessToken=googleCredential.accessToken;
        localStorage.setItem(getDriveStateKey('permission'),'1');
-       if(typeof scheduleDriveSync==='function') scheduleDriveSync(150);
+       if(typeof scheduleDriveSync==='function') scheduleDriveSync(150, false);
      }
    } catch(e) { console.warn('Drive login scope unavailable',e); }
    return {user};
