@@ -1081,7 +1081,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 <button class="btn-3d settings-btn" onclick="restoreLocalSafetyBackup()">استعادة نسخة الأمان</button>
                 
                 <button class="btn-3d settings-btn" onclick="exportPDFReport()">تصدير PDF</button>
-                                <button class="btn-3d btn-full" onclick="toggleTheme()" id="themeToggleText">
+                <button class="btn-3d settings-btn" onclick="openRecycleBin()">سلة المحذوفات</button>
+                <button class="btn-3d btn-full" onclick="toggleTheme()" id="themeToggleText">
                     <span class="theme-icon" aria-hidden="true"></span>
                     <span class="theme-label">الوضع الليلي</span>
                 </button>
@@ -1879,39 +1880,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             students.forEach(migrate);
         }
 
-        function stampLocalSyncChanges() {
-            const now = new Date().toISOString();
-            let oldGroups = [], oldStudents = [];
-            try { oldGroups = loadStoredArray('teacher_groups_local'); } catch (_) {}
-            try { oldStudents = loadStoredArray('teacher_students_local'); } catch (_) {}
-            const stamp = (current, previous, type) => {
-                const pm = new Map((Array.isArray(previous)?previous:[]).map((x,i)=>[driveKey(x,i),x]));
-                const cm = new Map((Array.isArray(current)?current:[]).map((x,i)=>[driveKey(x,i),x]));
-                cm.forEach((item,key)=>{
-                    const old = pm.get(key);
-                    if(!old || !sameDriveRecord(item,old)) item._syncUpdatedAt = now;
-                    else if(old._syncUpdatedAt && !item._syncUpdatedAt) item._syncUpdatedAt = old._syncUpdatedAt;
-                });
-                return [...pm.keys()].filter(k=>!cm.has(k)).map(key=>({type,key,updatedAt:now}));
-            };
-            const deletedGroups = stamp(groups, oldGroups, 'group');
-            const deletedStudents = stamp(students, oldStudents, 'student');
-            const existing = getDriveDeletions();
-            const merged = [...existing, ...deletedGroups, ...deletedStudents];
-            // إذا أُنشئ سجل جديد بنفس المفتاح بعد حذف قديم، تزال علامة الحذف الأقدم.
-            const currentKeys = new Set([
-                ...groups.map((x,i)=>'group|'+driveKey(x,i)),
-                ...students.map((x,i)=>'student|'+driveKey(x,i))
-            ]);
-            const latest = new Map();
-            merged.forEach(d=>{
-                if(currentKeys.has(d.type+'|'+d.key)) return;
-                const k=d.type+'|'+d.key, old=latest.get(k);
-                if(!old || Date.parse(d.updatedAt||'') > Date.parse(old.updatedAt||'')) latest.set(k,d);
-            });
-            saveDriveDeletions([...latest.values()]);
-        }
-
         function saveData() {
             // التطبيع/ترقية البيانات يتم مرة واحدة فقط بدل إعادة المرور على كل السجلات عند كل نقرة.
             if (!dataNormalizationDone) {
@@ -1943,7 +1911,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             }
 
             try {
-                stampLocalSyncChanges();
                 const groupsJson = JSON.stringify(groups);
                 const studentsJson = JSON.stringify(students);
                 localStorage.setItem(userStorageKey('teacher_groups_local'), groupsJson);
@@ -2420,7 +2387,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function deleteGroup(index) {
-            showAppConfirm('حذف', `سيتم حذف مجموعة ${groups[index].name} نهائيًا من بيانات البرنامج. لا يمكن استرجاعها من داخل البرنامج. هل تريد المتابعة؟`, function() {
+            showAppConfirm('حذف', `نقل مجموعة ${groups[index].name} إلى سلة المحذوفات؟`, function() {
+                recycleAdd('group', groups[index]);
                 groups.splice(index, 1);
                 if (selectedGroupIndex === index) selectedGroupIndex = null;
                 saveData();
@@ -3423,7 +3391,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         function deleteStudent(idx) {
-            showAppConfirm('حذف تلميذ', `سيتم حذف الطالب ${students[idx].name} نهائيًا من بيانات البرنامج. لا يمكن استرجاعه من داخل البرنامج. هل تريد المتابعة؟`, function() {
+            showAppConfirm('حذف تلميذ', `نقل الطالب ${students[idx].name} إلى سلة المحذوفات؟`, function() {
+                recycleAdd('student', students[idx]);
                 students.splice(idx, 1);
                 if (selectedStudentIndex === idx) selectedStudentIndex = null;
                 saveData();
@@ -3594,7 +3563,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         // Firebase يُستخدم لتسجيل الدخول فقط، ولا تدخل Firestore في تشغيل التطبيق أو المزامنة.
         const DRIVE_CLIENT_ID = '310650752416-dskh559v6u5vjbc2jih585o35ola5a2p.apps.googleusercontent.com';
         const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-        const DRIVE_SYNC_VERSION = 4;
+        const DRIVE_SYNC_VERSION = 3;
         const DRIVE_SYNC_PREFIX = 'drosak_sync_';
         const DRIVE_SYNC_DEBOUNCE_MS = 0;
         const DRIVE_SYNC_RETRY_MS = 12000;
@@ -3605,7 +3574,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         let driveSyncBusy = false;
         let driveTokenBusy = false;
         let driveSyncPending = false;
-        let driveBaseData = {groups:[], students:[], deletions:[]};
+        let driveBaseData = {groups:[], students:[], recycle_bin:[]};
         let driveLastRemoteModified = '';
 // علامة صريحة تفصل الحذف المتعمد عن الحالة الفارغة الناتجة عن خطأ محلي.
 let driveClearRequested = false;
@@ -3614,30 +3583,13 @@ let localEditRevision = 0;
 
         function driveClone(data) {
             try { return JSON.parse(JSON.stringify(data)); }
-            catch (_) { return {groups:[],students:[],deletions:[]}; }
-        }
-        function getDriveDeletionKey() { return getDriveStateKey('deletions'); }
-        // ترقية: السلة القديمة لم تعد جزءًا من بيانات التطبيق أو المزامنة.
-        try { localStorage.removeItem(userStorageKey('recycle_bin')); } catch (_) {}
-        function getDriveDeletions() {
-            try {
-                const raw = localStorage.getItem(getDriveDeletionKey()) || '[]';
-                const list = JSON.parse(raw);
-                return Array.isArray(list) ? list.filter(x => x && x.type && x.key && x.updatedAt) : [];
-            } catch (_) { return []; }
-        }
-        function saveDriveDeletions(list) {
-            try {
-                const clean = Array.isArray(list) ? list : [];
-                // نحتفظ بعدد محدود من علامات الحذف حتى لا تكبر البيانات المحلية بلا نهاية.
-                localStorage.setItem(getDriveDeletionKey(), JSON.stringify(clean.slice(-200)));
-            } catch (_) {}
+            catch (_) { return {groups:[],students:[],recycle_bin:[]}; }
         }
         function getDriveLocalData() {
             return {
                 groups: driveClone(Array.isArray(groups) ? groups : []),
                 students: driveClone(Array.isArray(students) ? students : []),
-                deletions: driveClone(getDriveDeletions())
+                recycle_bin: typeof recycleGet === 'function' ? driveClone(recycleGet()) : []
             };
         }
         function normalizeDriveData(data) {
@@ -3649,7 +3601,7 @@ let localEditRevision = 0;
             return {
                 groups: normalized.groups || [],
                 students: normalized.students || [],
-                deletions: Array.isArray(data?.deletions) ? data.deletions.filter(x => x && x.type && x.key && x.updatedAt) : []
+                recycle_bin: Array.isArray(data?.recycle_bin) ? data.recycle_bin : []
             };
         }
         function driveKey(item, index) {
@@ -3661,79 +3613,41 @@ let localEditRevision = 0;
             if (name) return 'name:' + name;
             return 'legacy:' + index;
         }
-        function stripDriveSyncMeta(value) {
-            if (Array.isArray(value)) return value.map(stripDriveSyncMeta);
-            if (value && typeof value === 'object') {
-                const out = {};
-                Object.keys(value).sort().forEach(k => {
-                    if (k === '_syncUpdatedAt') return;
-                    out[k] = stripDriveSyncMeta(value[k]);
-                });
-                return out;
-            }
-            return value;
-        }
         function sameJson(a,b) { return JSON.stringify(a) === JSON.stringify(b); }
-        function sameDriveRecord(a,b) { return sameJson(stripDriveSyncMeta(a), stripDriveSyncMeta(b)); }
-        function driveTimestamp(item) {
-            const t = Date.parse(item && item._syncUpdatedAt || '');
-            return Number.isFinite(t) ? t : 0;
-        }
-        function mergeDriveArray(baseArr, localArr, remoteArr, type, deletions) {
+        function mergeDriveArray(baseArr, localArr, remoteArr) {
             const bm=new Map((Array.isArray(baseArr)?baseArr:[]).map((x,i)=>[driveKey(x,i),x]));
             const lm=new Map((Array.isArray(localArr)?localArr:[]).map((x,i)=>[driveKey(x,i),x]));
             const rm=new Map((Array.isArray(remoteArr)?remoteArr:[]).map((x,i)=>[driveKey(x,i),x]));
-            const deletionMap = new Map();
-            (Array.isArray(deletions)?deletions:[]).filter(d=>d && d.type===type).forEach(d=>{
-                const old=deletionMap.get(d.key);
-                if(!old || Date.parse(d.updatedAt||'') > Date.parse(old.updatedAt||'')) deletionMap.set(d.key,d);
-            });
-            const keys=new Set([...bm.keys(),...lm.keys(),...rm.keys(),...deletionMap.keys()]);
+            const keys=new Set([...bm.keys(),...lm.keys(),...rm.keys()]);
             const out=[];
             for(const key of keys){
-                const b=bm.get(key), l=lm.get(key), r=rm.get(key), del=deletionMap.get(key);
-                const delTime = del ? Date.parse(del.updatedAt||'') || 0 : 0;
-                const lt = driveTimestamp(l), rt = driveTimestamp(r);
-                if(delTime && delTime >= Math.max(lt,rt) && (l===undefined || !sameDriveRecord(l,b))) {
-                    continue;
-                }
+                const b=bm.get(key), l=lm.get(key), r=rm.get(key);
                 if(!b){
-                    if(l!==undefined && r!==undefined){
-                        if(sameDriveRecord(l,r)) out.push(l);
-                        else out.push(lt >= rt ? l : r);
-                    } else if(l!==undefined) out.push(l);
+                    if(l!==undefined) out.push(l);
                     else if(r!==undefined) out.push(r);
                     continue;
                 }
-                const lChanged = l===undefined ? true : !sameDriveRecord(l,b);
-                const rChanged = r===undefined ? true : !sameDriveRecord(r,b);
                 if(l===undefined && r===undefined) continue;
+                // إذا كان السجل موجودًا في النسخة الأساسية ثم اختفى محليًا، فهذا حذف
+                // مقصود أثناء وجود مزامنة معلقة. لا نسمح لنسخة Drive القديمة بإعادته.
                 if(l===undefined){
-                    if(delTime && delTime >= rt) continue;
-                    if(!rChanged) continue;
-                    out.push(r);
                     continue;
                 }
                 if(r===undefined){
-                    if(delTime && delTime >= lt) continue;
-                    if(!lChanged) continue;
-                    out.push(l);
+                    out.push(sameJson(l,b)?undefined:l);
                     continue;
                 }
-                if(!lChanged && !rChanged) out.push(r);
-                else if(lChanged && !rChanged) out.push(l);
-                else if(!lChanged && rChanged) out.push(r);
-                else if(sameDriveRecord(l,r)) out.push(l);
-                else out.push(lt >= rt ? l : r);
+                if(sameJson(l,b)) out.push(r);
+                else if(sameJson(r,b)) out.push(l);
+                else out.push(l); // تعارض حقيقي: تعديل الجهاز الحالي له الأولوية.
             }
-            return out;
+            return out.filter(x=>x!==undefined);
         }
         function mergeDriveData(base, local, remote) {
-            const deletions = [...(base.deletions||[]), ...(local.deletions||[]), ...(remote.deletions||[])];
             return {
-                groups: mergeDriveArray(base.groups, local.groups, remote.groups, 'group', deletions),
-                students: mergeDriveArray(base.students, local.students, remote.students, 'student', deletions),
-                deletions
+                groups: mergeDriveArray(base.groups, local.groups, remote.groups),
+                students: mergeDriveArray(base.students, local.students, remote.students),
+                recycle_bin: mergeDriveArray(base.recycle_bin, local.recycle_bin, remote.recycle_bin)
             };
         }
         function getDriveFileName() {
@@ -3744,12 +3658,12 @@ let localEditRevision = 0;
             try {
                 driveSyncPending = localStorage.getItem(getDriveStateKey('pending')) === '1';
                 const raw = localStorage.getItem(getDriveStateKey('base'));
-                driveBaseData = raw ? normalizeDriveData(JSON.parse(raw)) : {groups:[],students:[],deletions:[]};
+                driveBaseData = raw ? normalizeDriveData(JSON.parse(raw)) : {groups:[],students:[],recycle_bin:[]};
                 driveLastRemoteModified = localStorage.getItem(getDriveStateKey('remote_modified')) || '';
                 driveClearRequested = localStorage.getItem(getDriveStateKey('clear_requested')) === '1';
             } catch (_) {
                 driveSyncPending = false;
-                driveBaseData = {groups:[],students:[],deletions:[]};
+                driveBaseData = {groups:[],students:[],recycle_bin:[]};
                 driveLastRemoteModified = '';
                 driveClearRequested = false;
             }
@@ -3851,7 +3765,7 @@ let localEditRevision = 0;
                 revision:(typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():Date.now()+'-'+Math.random(),
                 groups:data.groups,
                 students:data.students,
-                deletions:data.deletions || []
+                recycle_bin:data.recycle_bin
             };
         }
         async function createDriveFile(payload) {
@@ -3866,7 +3780,7 @@ let localEditRevision = 0;
         function applyDriveLocalData(data) {
             groups=driveClone(data.groups); students=driveClone(data.students);
             clearFutureSessionStatuses();
-            if(Array.isArray(data.deletions)) saveDriveDeletions(data.deletions);
+            if(typeof recycleSave==='function') recycleSave(driveClone(data.recycle_bin||[]));
             dataNormalizationDone=false; selectedGroupIndex=null; selectedStudentIndex=null; ensureStudentIds();
             try{
                 localStorage.setItem(userStorageKey('teacher_groups_local'),JSON.stringify(groups));
@@ -3899,6 +3813,7 @@ let localEditRevision = 0;
                 const targetData = target.data;
                 const restoredGroups = Array.isArray(targetData.groups) ? driveClone(targetData.groups) : [];
                 const restoredStudents = Array.isArray(targetData.students) ? driveClone(targetData.students) : [];
+                const restoredRecycle = Array.isArray(targetData.recycle_bin) ? driveClone(targetData.recycle_bin) : [];
 
                 const stamp = target.createdAt ? new Date(target.createdAt) : null;
                 const stampText = stamp && !Number.isNaN(stamp.getTime())
@@ -3918,6 +3833,7 @@ let localEditRevision = 0;
 
                             groups = restoredGroups;
                             students = restoredStudents;
+                            if (typeof recycleSave === 'function') recycleSave(restoredRecycle);
 
                             dataNormalizationDone = false;
                             selectedGroupIndex = null;
@@ -3988,7 +3904,7 @@ let localEditRevision = 0;
                     }
                     const clearData = getDriveLocalData();
                     if (file?.id) {
-                        const payload = buildDrivePayload({groups:[], students:[], deletions:clearData.deletions});
+                        const payload = buildDrivePayload({groups:[], students:[], recycle_bin:clearData.recycle_bin});
                         const r = await updateDriveFile(file.id, payload);
                         if (!r.ok) throw new Error('DRIVE_CLEAR_FAILED: '+await driveError(r));
                         if (syncRevision !== localEditRevision) {
@@ -4455,28 +4371,101 @@ function exportPDFReport(){
     }
 }
 
+function recycleGet(){
+    return JSON.parse(localStorage.getItem(userStorageKey('recycle_bin')) || '[]');
+}
+function recycleSave(data){
+    localStorage.setItem(userStorageKey('recycle_bin'), JSON.stringify(data));
+}
+function recycleAdd(type,item){
+    let a=recycleGet();
+    a.push({type:type,item:item,date:new Date().toLocaleString('ar-EG')});
+    recycleSave(a);
+}
+
+function openRecycleBin(){
+    const old=document.getElementById('recycleBinModal');
+    if(old) old.remove();
+
+    let box=document.createElement('div');
+    box.id='recycleBinModal';
+    box.className='modal';
+    box.style.display='flex';
+
+    let list=recycleGet();
+    box.innerHTML =
+    '<div class="modal-content">'+
+    '<h3 style="text-align:center">سلة المحذوفات</h3>'+
+    (list.length ? list.map((x,i)=>
+        '<div style="padding:8px;border:1px solid #ccc;border-radius:8px;margin:6px 0">'+
+        (x.type==='student'?'تلميذ':'مجموعة')+'<br>'+
+        (x.item.name||'')+'<br>'+
+        '<button class="btn-3d" data-restore="'+i+'">استرجاع</button>'+
+        '<button class="btn-3d btn-red-3d" data-delete="'+i+'">حذف نهائي</button>'+
+        '</div>'
+    ).join('') : '<p style="text-align:center">السلة فارغة</p>')+
+    '<button class="btn-3d" data-close>إغلاق</button>'+
+    '</div>';
+
+    document.body.appendChild(box);
+
+    box.querySelectorAll('[data-restore]').forEach(btn=>{
+        btn.onclick=function(){ recycleRestore(Number(this.dataset.restore)); };
+    });
+    box.querySelectorAll('[data-delete]').forEach(btn=>{
+        btn.onclick=function(){ recycleDelete(Number(this.dataset.delete)); };
+    });
+    box.querySelector('[data-close]').onclick=function(){ box.remove(); };
+}
+
+function recycleRestore(i){
+    let a=recycleGet();
+    let x=a[i];
+    if(!x) return;
+
+    if(x.type==='student') students.push(x.item);
+    else groups.push(x.item);
+
+    a.splice(i,1);
+    recycleSave(a);
+    saveData();
+
+    let box=document.getElementById('recycleBinModal');
+    if(box) box.remove();
+}
+
+function recycleDelete(i){
+    let a=recycleGet();
+    a.splice(i,1);
+    recycleSave(a);
+    saveData();
+
+    let box=document.getElementById('recycleBinModal');
+    if(box) box.remove();
+
+    openRecycleBin();
+}
+
 // تسجيل الخروج يتم فقط من زر الخروج داخل البرنامج.
 </script>
 
 <div id="salatReminder" aria-hidden="true">
   <div class="salat-reminder-box" role="dialog" aria-modal="true" aria-label="تذكير">
     <div class="salat-reminder-text">صَلِّ عَلَى النَّبِيِّ مُحَمَّدٍ صَلَّى اللهُ عَلَيْهِ وَسَلَّمَ</div>
+    <button type="button" class="salat-reminder-close" onclick="closeSalatReminder()">حسنًا</button>
   </div>
 </div>
 
 <script id="salat-reminder-script">
 (function(){
-  const FIRST_REMINDER_MS = 60 * 1000;
-  const REMINDER_INTERVAL_MS = 60 * 1000;
+  const FIRST_REMINDER_MS = 5 * 60 * 1000;
+  const REMINDER_INTERVAL_MS = 15 * 60 * 1000;
   let reminderTimer = null;
 
   window.closeSalatReminder = function(){
     const box = document.getElementById('salatReminder');
     if(box){ box.style.display='none'; box.setAttribute('aria-hidden','true'); }
   };
-
-  document.addEventListener('click', function(){ closeSalatReminder(); }, true);
-  document.addEventListener('touchstart', function(){ closeSalatReminder(); }, true);
 
   function showSalatReminder(){
     const box = document.getElementById('salatReminder');
