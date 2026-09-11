@@ -4452,20 +4452,22 @@ function recycleDelete(i){
 <div id="salatReminder" aria-hidden="true">
   <div class="salat-reminder-box" role="dialog" aria-modal="true" aria-label="تذكير">
     <div class="salat-reminder-text">صَلِّ عَلَى النَّبِيِّ مُحَمَّدٍ صَلَّى اللهُ عَلَيْهِ وَسَلَّمَ</div>
-    <button type="button" class="salat-reminder-close" onclick="closeSalatReminder()">حسنًا</button>
   </div>
 </div>
 
 <script id="salat-reminder-script">
 (function(){
-  const FIRST_REMINDER_MS = 5 * 60 * 1000;
-  const REMINDER_INTERVAL_MS = 15 * 60 * 1000;
+  const FIRST_REMINDER_MS = 60 * 1000;
+  const REMINDER_INTERVAL_MS = 60 * 1000;
   let reminderTimer = null;
 
   window.closeSalatReminder = function(){
     const box = document.getElementById('salatReminder');
     if(box){ box.style.display='none'; box.setAttribute('aria-hidden','true'); }
   };
+
+  document.addEventListener('click', function(){ closeSalatReminder(); }, true);
+  document.addEventListener('touchstart', function(){ closeSalatReminder(); }, true);
 
   function showSalatReminder(){
     const box = document.getElementById('salatReminder');
