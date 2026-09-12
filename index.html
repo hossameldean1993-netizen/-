@@ -3558,7 +3558,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
         const DRIVE_SYNC_VERSION = 3;
         const DRIVE_SYNC_PREFIX = 'drosak_sync_';
-        const DRIVE_SYNC_DEBOUNCE_MS = 0;
+        const DRIVE_SYNC_DEBOUNCE_MS = 300;
         const DRIVE_SYNC_RETRY_MS = 12000;
         let driveTokenClient = null;
         let driveAccessToken = null;
@@ -3569,6 +3569,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         let driveSyncPending = false;
         let driveBaseData = {groups:[], students:[], recycle_bin:[]};
         let driveLastRemoteModified = '';
+let driveLastRemoteETag = '';
+let driveSyncConflictCount = 0;
 // علامة صريحة تفصل الحذف المتعمد عن الحالة الفارغة الناتجة عن خطأ محلي.
 let driveClearRequested = false;
 // رقم إصدار محلي لحماية تسجيل الحصة من أن تستبدله مزامنة بدأت قبل النقرة.
@@ -3642,6 +3644,7 @@ let localEditRevision = 0;
                 const raw = localStorage.getItem(getDriveStateKey('base'));
                 driveBaseData = raw ? normalizeDriveData(JSON.parse(raw)) : {groups:[],students:[],recycle_bin:[]};
                 driveLastRemoteModified = localStorage.getItem(getDriveStateKey('remote_modified')) || '';
+    driveLastRemoteETag = localStorage.getItem(getDriveStateKey('remote_etag')) || '';
                 driveClearRequested = localStorage.getItem(getDriveStateKey('clear_requested')) === '1';
             } catch (_) {
                 driveSyncPending = false;
@@ -3655,6 +3658,7 @@ let localEditRevision = 0;
                 localStorage.setItem(getDriveStateKey('pending'), driveSyncPending ? '1' : '0');
                 localStorage.setItem(getDriveStateKey('base'), JSON.stringify(driveBaseData));
                 if(driveLastRemoteModified) localStorage.setItem(getDriveStateKey('remote_modified'), driveLastRemoteModified);
+    if(driveLastRemoteETag) localStorage.setItem(getDriveStateKey('remote_etag'), driveLastRemoteETag);
                 if(driveClearRequested) localStorage.setItem(getDriveStateKey('clear_requested'), '1');
                 else localStorage.removeItem(getDriveStateKey('clear_requested'));
             } catch (_) {}
@@ -3736,7 +3740,7 @@ let localEditRevision = 0;
             if(!r.ok) throw new Error('DRIVE_READ_FAILED: '+await driveError(r));
             let data; try{data=JSON.parse(await r.text());}catch(_){throw new Error('DRIVE_INVALID_JSON');}
             if(data.ownerKey && String(data.ownerKey)!==String(appUserKey||'guest')) throw new Error('DRIVE_WRONG_USER');
-            return {payload:normalizeDriveData(data),meta:data};
+            return {payload:normalizeDriveData(data),meta:data,etag:r.headers.get('ETag')||r.headers.get('etag')||''};
         }
         function buildDrivePayload(data) {
             const now=new Date().toISOString();
@@ -3756,8 +3760,11 @@ let localEditRevision = 0;
             form.append('file',new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
             return driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime',{method:'POST',body:form});
         }
-        async function updateDriveFile(id,payload) {
-            return driveFetch('https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(id)+'?uploadType=media&fields=id,name,modifiedTime',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload,null,2)});
+        async function updateDriveFile(id,payload,expectedETag='') {
+            const headers={'Content-Type':'application/json'};
+            // حماية من سباق جهازين: لا نسمح بالكتابة فوق نسخة Drive تغيّرت بعد آخر قراءة.
+            if(expectedETag) headers['If-Match']=expectedETag;
+            return driveFetch('https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(id)+'?uploadType=media&fields=id,name,modifiedTime,version',{method:'PATCH',headers,body:JSON.stringify(payload,null,2)});
         }
         function applyDriveLocalData(data) {
             groups=driveClone(data.groups); students=driveClone(data.students);
@@ -3852,6 +3859,7 @@ let localEditRevision = 0;
                 const file=await findDriveFile();
                 if(!file?.id){showAppAlert('لا توجد بيانات سحابية','لم يتم العثور على بيانات محفوظة في Google Drive.');return;}
                 const remote=await readDriveFile(file.id);
+                driveLastRemoteETag = remote.etag || driveLastRemoteETag;
                 const current=getDriveLocalData();
                 const safetyKey=getDriveStateKey('local_safety');
                 const safetyList=JSON.parse(localStorage.getItem(safetyKey)||'[]');
@@ -3887,7 +3895,7 @@ let localEditRevision = 0;
                     const clearData = getDriveLocalData();
                     if (file?.id) {
                         const payload = buildDrivePayload({groups:[], students:[], recycle_bin:clearData.recycle_bin});
-                        const r = await updateDriveFile(file.id, payload);
+                        const r = await updateDriveFile(file.id, payload, driveLastRemoteETag);
                         if (!r.ok) throw new Error('DRIVE_CLEAR_FAILED: '+await driveError(r));
                         if (syncRevision !== localEditRevision) {
                             driveSyncPending = true;
@@ -3896,6 +3904,7 @@ let localEditRevision = 0;
                             return false;
                         }
                         driveBaseData = driveClone(payload);
+                        driveLastRemoteETag = r.headers.get('ETag') || r.headers.get('etag') || driveLastRemoteETag;
                         driveClearRequested = false;
                         driveSyncPending = false;
                         driveLastRemoteModified = new Date().toISOString();
@@ -3922,7 +3931,7 @@ let localEditRevision = 0;
                     }
                     const payload=buildDrivePayload(local);
                     const r=await createDriveFile(payload); if(!r.ok) throw new Error('DRIVE_CREATE_FAILED: '+await driveError(r));
-                    driveBaseData=driveClone(local); driveSyncPending=false; driveLastRemoteModified=r.headers.get('Last-Modified')||new Date().toISOString(); saveDriveState(); markDriveSynced(new Date().toISOString()); return true;
+                    driveBaseData=driveClone(local); driveSyncPending=false; driveLastRemoteETag=r.headers.get('ETag')||r.headers.get('etag')||''; driveLastRemoteModified=r.headers.get('Last-Modified')||new Date().toISOString(); saveDriveState(); markDriveSynced(new Date().toISOString()); return true;
                 }
                 const remote=await readDriveFile(file.id);
                 // إذا تغيّرت البيانات أثناء انتظار الشبكة، لا نستخدم لقطة قديمة في الكتابة أو العرض.
@@ -3943,7 +3952,9 @@ let localEditRevision = 0;
                 if(remoteHas && !finalHas && localHas) throw new Error('DRIVE_EMPTY_MERGE_BLOCKED');
                 if(!sameJson(finalData,remote.payload) || localChanged){
                     const payload=buildDrivePayload(finalData);
-                    const r=await updateDriveFile(file.id,payload); if(!r.ok) throw new Error('DRIVE_UPDATE_FAILED: '+await driveError(r));
+                    const r=await updateDriveFile(file.id,payload,remote.etag);
+                    if(r.status===412){ driveSyncConflictCount++; driveSyncPending=true; saveDriveState(); scheduleDriveRetry(); return false; }
+                    if(!r.ok) throw new Error('DRIVE_UPDATE_FAILED: '+await driveError(r));
                     if (syncRevision !== localEditRevision) {
                         driveSyncPending = true;
                         saveDriveState();
@@ -3951,13 +3962,15 @@ let localEditRevision = 0;
                         return false;
                     }
                     applyDriveLocalData(finalData); driveBaseData=driveClone(finalData); driveSyncPending=false;
+                    driveLastRemoteETag = r.headers.get('ETag') || r.headers.get('etag') || driveLastRemoteETag;
                 }else if(!sameJson(local,remote.payload)){
                     applyDriveLocalData(remote.payload); driveBaseData=driveClone(remote.payload); driveSyncPending=false;
                 }else{driveBaseData=driveClone(remote.payload);driveSyncPending=false;}
                 driveLastRemoteModified=file.modifiedTime||new Date().toISOString(); saveDriveState(); markDriveSynced(new Date().toISOString()); return true;
             }catch(e){
                 console.error('Drive sync error',e); driveSyncPending=true; saveDriveState();
-                if(e.message==='DRIVE_UNAUTHORIZED'){ setDriveStatus('انتهت صلاحية Google Drive'); if(localStorage.getItem(getDriveStateKey('permission'))==='1') requestDriveToken(false); } else if(e.message==='DRIVE_EMPTY_MERGE_BLOCKED') setDriveStatus('تم إيقاف المزامنة لحماية البيانات'); else { const detail=(e&&e.message)?String(e.message):'خطأ غير معروف'; setDriveStatus('خطأ المزامنة: '+detail); try{showAppAlert('خطأ Google Drive','تعذر إتمام المزامنة. السبب: '+detail);}catch(_){} console.error('Drive sync diagnostic:',detail,e); }
+                if(e.message==='DRIVE_UNAUTHORIZED'){ setDriveStatus('انتهت صلاحية Google Drive'); if(localStorage.getItem(getDriveStateKey('permission'))==='1') requestDriveToken(false); } else if(e.message==='DRIVE_EMPTY_MERGE_BLOCKED') setDriveStatus('تم إيقاف المزامنة لحماية البيانات');
+    else if(e.message==='DRIVE_CONFLICT') setDriveStatus('حدث تعارض سحابي؛ ستتم إعادة المزامنة تلقائيًا'); else { const detail=(e&&e.message)?String(e.message):'خطأ غير معروف'; setDriveStatus('خطأ المزامنة: '+detail); try{showAppAlert('خطأ Google Drive','تعذر إتمام المزامنة. السبب: '+detail);}catch(_){} console.error('Drive sync diagnostic:',detail,e); }
                 scheduleDriveRetry(); return false;
             }finally{
                 driveSyncBusy=false;
