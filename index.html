@@ -4036,35 +4036,6 @@ let localEditRevision = 0;
         window.addEventListener('online',()=>{if(driveSyncPending&&driveAccessToken) scheduleDriveRetry();});
         document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&driveSyncPending&&driveAccessToken) scheduleDriveRetry();});
 
-        // عند السحب للتحديث أو إعادة إظهار الصفحة: شغّل مزامنة حقيقية بعد استعادة جلسة Firebase.
-        // إذا كان Drive مُصرحًا به سابقًا نطلب Access Token بصمت (prompt فارغ) ثم تبدأ المزامنة؛
-        // لا نفتح شاشة اختيار حساب Google ولا نغيّر بيانات التطبيق أثناء ذلك.
-        let refreshSyncTimer=null;
-        function runRefreshDriveSync(){
-            if(refreshSyncTimer) clearTimeout(refreshSyncTimer);
-            let tries=0;
-            const attempt=()=>{
-                tries++;
-                try{
-                    if(document.visibilityState!=='visible' || !navigator.onLine) return;
-                    const user=window.firebaseAuth && window.firebaseAuth.currentUser;
-                    if(!user){
-                        if(tries<40) refreshSyncTimer=setTimeout(attempt,250);
-                        return;
-                    }
-                    if(driveAccessToken){
-                        scheduleDriveSync(0);
-                        return;
-                    }
-                    if(localStorage.getItem(getDriveStateKey('permission'))==='1'){
-                        requestDriveToken(false);
-                    }
-                }catch(e){ console.warn('Refresh sync start failed:',e); }
-            };
-            refreshSyncTimer=setTimeout(attempt,150);
-        }
-        window.addEventListener('pageshow',runRefreshDriveSync);
-
 </script>
 <script>
 /* منع الـService Worker القديم من إعادة تقديم نسخة HTML قديمة عند السحب للتحديث.
