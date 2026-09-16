@@ -4023,24 +4023,21 @@ let localEditRevision = 0;
         window.addEventListener('online',()=>{if(driveSyncPending&&driveAccessToken) scheduleDriveRetry();});
         document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&driveSyncPending&&driveAccessToken) scheduleDriveRetry();});
 
-        // تنشيط المزامنة تلقائيًا عند فتح/إعادة فتح الصفحة أو عودة الاتصال.
-        // لا يغيّر تسجيل الدخول ولا بيانات التطبيق؛ يستفيد فقط من منطق المزامنة الحالي.
+        // تنشيط المزامنة تلقائيًا عند فتح/إعادة فتح الصفحة أو عودة الاتصال،
+        // بشرط وجود Access Token صالح بالفعل؛ حتى لا يظهر طلب إذن Google عند Refresh.
         window.addEventListener('pageshow',()=>{
-            try{
-                if(window.firebaseAuth && window.firebaseAuth.currentUser && typeof window.initDriveForUser==='function'){
-                    window.initDriveForUser(window.firebaseAuth.currentUser.uid);
-                }
-            }catch(_){ }
             setTimeout(()=>{
                 try{
-                    if(document.visibilityState==='visible' && navigator.onLine) scheduleDriveSync(0);
+                    if(document.visibilityState==='visible' && navigator.onLine && driveAccessToken){
+                        scheduleDriveSync(0);
+                    }
                 }catch(_){ }
             },150);
         });
 
         window.addEventListener('online',()=>{
             try{
-                if(window.firebaseAuth && window.firebaseAuth.currentUser && navigator.onLine) scheduleDriveSync(0);
+                if(navigator.onLine && driveAccessToken) scheduleDriveSync(0);
             }catch(_){ }
         });
 
