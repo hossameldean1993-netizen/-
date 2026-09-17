@@ -4025,16 +4025,37 @@ let localEditRevision = 0;
              * محليًا، لكن نطلب token فقط عندما توجد مزامنة فعلية تحتاجه.
              */
             if(localStorage.getItem(getDriveStateKey('permission'))==='1'){
+                /*
+                 * بعد إعادة فتح الصفحة لا يكون access token موجودًا؛ لذلك مجرد
+                 * وضع pending=1 لا يكفي. نطلق دورة المزامنة، وهي تطلب token
+                 * صامتًا (prompt:'') ثم تبدأ المزامنة فور حصولها عليه.
+                 * لا نفتح Google Account Chooser ولا نطلب إذنًا جديدًا.
+                 */
                 driveSyncPending=true;
                 saveDriveState();
+                scheduleDriveSync(300);
             }
         }
         window.startDriveSyncNow=startDriveSyncNow;
         window.createLocalSafetyBackup=createLocalSafetyBackup;
         window.restoreFromDrive=restoreFromDrive;
         window.initDriveForUser=initDriveForUser;
-        window.addEventListener('online',()=>{if(driveSyncPending&&driveAccessToken) scheduleDriveRetry();});
-        document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&driveSyncPending&&driveAccessToken) scheduleDriveRetry();});
+
+        function wakeDriveSync(){
+            if(!navigator.onLine) return;
+            loadDriveState();
+            if(localStorage.getItem(getDriveStateKey('permission'))!=='1') return;
+            if(!driveSyncPending) return;
+            if(driveAccessToken) scheduleDriveRetry();
+            else scheduleDriveSync(300);
+        }
+
+        window.addEventListener('online',wakeDriveSync);
+        window.addEventListener('pageshow',wakeDriveSync);
+        window.addEventListener('focus',wakeDriveSync);
+        document.addEventListener('visibilitychange',()=>{
+            if(document.visibilityState==='visible') wakeDriveSync();
+        });
 
 </script>
 <script>
