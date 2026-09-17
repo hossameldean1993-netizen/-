@@ -3706,7 +3706,19 @@ let localEditRevision = 0;
                 if(driveTokenBusy) return false;
                 driveTokenBusy=true;
                 const granted=localStorage.getItem(getDriveStateKey('permission'))==='1';
-                driveTokenClient.requestAccessToken({prompt: forceConsent || !granted ? 'consent' : ''});
+
+                /*
+                 * مهم جدًا: المزامنة التلقائية لا يجوز أن تفتح شاشة إذن Google.
+                 * إذا لم تكن الصلاحية محفوظة، نوقف الطلب الصامت وننتظر دخولًا
+                 * صريحًا من المستخدم. أما بعد وجود الصلاحية فنستخدم prompt:''
+                 * فقط، بدون Account Chooser أو Consent.
+                 */
+                if(!granted && !forceConsent){
+                    driveTokenBusy=false;
+                    return false;
+                }
+
+                driveTokenClient.requestAccessToken({prompt: forceConsent ? 'consent' : ''});
                 return true;
             } catch(e) {
                 driveTokenBusy=false;
