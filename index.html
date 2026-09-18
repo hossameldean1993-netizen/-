@@ -1906,8 +1906,14 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             try {
                 const groupsJson = JSON.stringify(groups);
                 const studentsJson = JSON.stringify(students);
-                localStorage.setItem(userStorageKey('teacher_groups_local'), groupsJson);
-                localStorage.setItem(userStorageKey('teacher_students_local'), studentsJson);
+                const groupsKey = userStorageKey('teacher_groups_local');
+                const studentsKey = userStorageKey('teacher_students_local');
+                const previousGroupsJson = localStorage.getItem(groupsKey);
+                const previousStudentsJson = localStorage.getItem(studentsKey);
+                const localDataChanged = previousGroupsJson !== groupsJson || previousStudentsJson !== studentsJson;
+                localStorage.setItem(groupsKey, groupsJson);
+                localStorage.setItem(studentsKey, studentsJson);
+                if (localDataChanged) setDriveLocalModifiedAt(new Date().toISOString());
                 localEditRevision++;
             } catch (err) {
                 console.error('Save data error:', err);
@@ -3638,6 +3644,15 @@ let localEditRevision = 0;
             return DRIVE_SYNC_PREFIX + String(appUserKey || 'guest').replace(/[^a-zA-Z0-9_-]/g,'_') + '.json';
         }
         function getDriveStateKey(name) { return userStorageKey('drive_sync_' + name); }
+        function getDriveLocalModifiedAt() {
+            try { return localStorage.getItem(getDriveStateKey('local_modified')) || ''; } catch (_) { return ''; }
+        }
+        function setDriveLocalModifiedAt(value) {
+            try {
+                if (value) localStorage.setItem(getDriveStateKey('local_modified'), value);
+                else localStorage.removeItem(getDriveStateKey('local_modified'));
+            } catch (_) {}
+        }
         function loadDriveState() {
             try {
                 driveSyncPending = localStorage.getItem(getDriveStateKey('pending')) === '1';
@@ -3744,10 +3759,12 @@ let localEditRevision = 0;
         }
         function buildDrivePayload(data) {
             const now=new Date().toISOString();
+            const dataModifiedAt = data && data.__dataModifiedAt ? String(data.__dataModifiedAt) : now;
             return {
                 syncVersion:DRIVE_SYNC_VERSION,
                 ownerKey:String(appUserKey||'guest'),
                 updatedAt:now,
+                dataModifiedAt:dataModifiedAt,
                 revision:(typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():Date.now()+'-'+Math.random(),
                 groups:data.groups,
                 students:data.students,
@@ -3774,6 +3791,7 @@ let localEditRevision = 0;
             try{
                 localStorage.setItem(userStorageKey('teacher_groups_local'),JSON.stringify(groups));
                 localStorage.setItem(userStorageKey('teacher_students_local'),JSON.stringify(students));
+                if (data && data.__dataModifiedAt) setDriveLocalModifiedAt(String(data.__dataModifiedAt));
             }catch(e){throw new Error('LOCAL_SAVE_FAILED');}
             calculateSummaryTotals(); renderTodaySessions(); renderMiniCards(); renderStudentMiniCards();
             if(document.getElementById('page6')?.classList.contains('active')) renderFinancialLists();
@@ -3830,6 +3848,7 @@ let localEditRevision = 0;
 
                             localStorage.setItem(userStorageKey('teacher_groups_local'), JSON.stringify(groups));
                             localStorage.setItem(userStorageKey('teacher_students_local'), JSON.stringify(students));
+                            setDriveLocalModifiedAt(new Date().toISOString());
 
                             calculateSummaryTotals();
                             renderTodaySessions();
@@ -3929,7 +3948,8 @@ let localEditRevision = 0;
                         scheduleDriveRetry();
                         return false;
                     }
-                    const payload=buildDrivePayload(local);
+                    const localStamp = getDriveLocalModifiedAt() || new Date().toISOString();
+                    const payload=buildDrivePayload({...local,__dataModifiedAt:localStamp});
                     const r=await createDriveFile(payload); if(!r.ok) throw new Error('DRIVE_CREATE_FAILED: '+await driveError(r));
                     driveBaseData=driveClone(local); driveSyncPending=false; driveLastRemoteETag=r.headers.get('ETag')||r.headers.get('etag')||''; driveLastRemoteModified=r.headers.get('Last-Modified')||new Date().toISOString(); saveDriveState(); markDriveSynced(new Date().toISOString()); return true;
                 }
@@ -3941,10 +3961,22 @@ let localEditRevision = 0;
                     scheduleDriveRetry();
                     return false;
                 }
+                const localModifiedAt = getDriveLocalModifiedAt();
+                const remoteModifiedAt = remote.meta?.dataModifiedAt || file.modifiedTime || '';
+                const localTime = localModifiedAt ? Date.parse(localModifiedAt) : 0;
+                const remoteTime = remoteModifiedAt ? Date.parse(remoteModifiedAt) : 0;
                 const localChanged=!sameJson(local,driveBaseData) || driveSyncPending;
                 let finalData;
-                if(!localChanged) finalData=remote.payload;
-                else finalData=mergeDriveData(driveBaseData,local,remote.payload);
+                if(!localChanged) {
+                    finalData=remote.payload;
+                    finalData.__dataModifiedAt = remoteModifiedAt;
+                } else if(remoteTime > localTime) {
+                    finalData=remote.payload;
+                    finalData.__dataModifiedAt = remoteModifiedAt;
+                } else {
+                    finalData=local;
+                    finalData.__dataModifiedAt = localModifiedAt || new Date().toISOString();
+                }
                 // لا نكتب نسخة فارغة فوق نسخة غير فارغة نتيجة خطأ محلي.
                 const localHas=local.groups.length||local.students.length;
                 const finalHas=finalData.groups.length||finalData.students.length;
@@ -3961,11 +3993,14 @@ let localEditRevision = 0;
                         scheduleDriveRetry();
                         return false;
                     }
-                    applyDriveLocalData(finalData); driveBaseData=driveClone(finalData); driveSyncPending=false;
+                    applyDriveLocalData(finalData);
+                    const cleanFinalData = normalizeDriveData(finalData);
+                    driveBaseData=driveClone(cleanFinalData); driveSyncPending=false;
                     driveLastRemoteETag = r.headers.get('ETag') || r.headers.get('etag') || driveLastRemoteETag;
                 }else if(!sameJson(local,remote.payload)){
+                    remote.payload.__dataModifiedAt = remoteModifiedAt;
                     applyDriveLocalData(remote.payload); driveBaseData=driveClone(remote.payload); driveSyncPending=false;
-                }else{driveBaseData=driveClone(remote.payload);driveSyncPending=false;}
+                }else{driveBaseData=driveClone(remote.payload);driveSyncPending=false; if(remoteModifiedAt) setDriveLocalModifiedAt(remoteModifiedAt);}
                 driveLastRemoteModified=file.modifiedTime||new Date().toISOString(); saveDriveState(); markDriveSynced(new Date().toISOString()); return true;
             }catch(e){
                 console.error('Drive sync error',e); driveSyncPending=true; saveDriveState();
@@ -4025,8 +4060,11 @@ let localEditRevision = 0;
              * محليًا، لكن نطلب token فقط عندما توجد مزامنة فعلية تحتاجه.
              */
             if(localStorage.getItem(getDriveStateKey('permission'))==='1'){
+                /* بعد إعادة فتح البرنامج نعيد جلب النسخة السحابية تلقائيًا،
+                   باستخدام الصلاحية المحفوظة فقط؛ لا نطلب تسجيل دخول أو موافقة جديدة. */
                 driveSyncPending=true;
                 saveDriveState();
+                requestDriveToken(false);
             }
         }
         window.startDriveSyncNow=startDriveSyncNow;
