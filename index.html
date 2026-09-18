@@ -3706,19 +3706,7 @@ let localEditRevision = 0;
                 if(driveTokenBusy) return false;
                 driveTokenBusy=true;
                 const granted=localStorage.getItem(getDriveStateKey('permission'))==='1';
-
-                /*
-                 * مهم جدًا: المزامنة التلقائية لا يجوز أن تفتح شاشة إذن Google.
-                 * إذا لم تكن الصلاحية محفوظة، نوقف الطلب الصامت وننتظر دخولًا
-                 * صريحًا من المستخدم. أما بعد وجود الصلاحية فنستخدم prompt:''
-                 * فقط، بدون Account Chooser أو Consent.
-                 */
-                if(!granted && !forceConsent){
-                    driveTokenBusy=false;
-                    return false;
-                }
-
-                driveTokenClient.requestAccessToken({prompt: forceConsent ? 'consent' : ''});
+                driveTokenClient.requestAccessToken({prompt: forceConsent || !granted ? 'consent' : ''});
                 return true;
             } catch(e) {
                 driveTokenBusy=false;
@@ -4037,37 +4025,16 @@ let localEditRevision = 0;
              * محليًا، لكن نطلب token فقط عندما توجد مزامنة فعلية تحتاجه.
              */
             if(localStorage.getItem(getDriveStateKey('permission'))==='1'){
-                /*
-                 * بعد إعادة فتح الصفحة لا يكون access token موجودًا؛ لذلك مجرد
-                 * وضع pending=1 لا يكفي. نطلق دورة المزامنة، وهي تطلب token
-                 * صامتًا (prompt:'') ثم تبدأ المزامنة فور حصولها عليه.
-                 * لا نفتح Google Account Chooser ولا نطلب إذنًا جديدًا.
-                 */
                 driveSyncPending=true;
                 saveDriveState();
-                scheduleDriveSync(300);
             }
         }
         window.startDriveSyncNow=startDriveSyncNow;
         window.createLocalSafetyBackup=createLocalSafetyBackup;
         window.restoreFromDrive=restoreFromDrive;
         window.initDriveForUser=initDriveForUser;
-
-        function wakeDriveSync(){
-            if(!navigator.onLine) return;
-            loadDriveState();
-            if(localStorage.getItem(getDriveStateKey('permission'))!=='1') return;
-            if(!driveSyncPending) return;
-            if(driveAccessToken) scheduleDriveRetry();
-            else scheduleDriveSync(300);
-        }
-
-        window.addEventListener('online',wakeDriveSync);
-        window.addEventListener('pageshow',wakeDriveSync);
-        window.addEventListener('focus',wakeDriveSync);
-        document.addEventListener('visibilitychange',()=>{
-            if(document.visibilityState==='visible') wakeDriveSync();
-        });
+        window.addEventListener('online',()=>{if(driveSyncPending&&driveAccessToken) scheduleDriveRetry();});
+        document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&driveSyncPending&&driveAccessToken) scheduleDriveRetry();});
 
 </script>
 <script>
