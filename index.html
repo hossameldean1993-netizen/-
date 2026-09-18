@@ -4060,11 +4060,8 @@ let localEditRevision = 0;
              * محليًا، لكن نطلب token فقط عندما توجد مزامنة فعلية تحتاجه.
              */
             if(localStorage.getItem(getDriveStateKey('permission'))==='1'){
-                /* بعد إعادة فتح البرنامج نعيد جلب النسخة السحابية تلقائيًا،
-                   باستخدام الصلاحية المحفوظة فقط؛ لا نطلب تسجيل دخول أو موافقة جديدة. */
                 driveSyncPending=true;
                 saveDriveState();
-                requestDriveToken(false);
             }
         }
         window.startDriveSyncNow=startDriveSyncNow;
