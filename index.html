@@ -4122,22 +4122,17 @@ body.firebase-auth-pending #authLoading { visibility: hidden !important; }
   }
   window.getLoginCookie=getLoginCookie;
   window.setLoginCookie=setLoginCookie;
-  const rememberedUser=recoverUserKey();
-  if(rememberedUser && rememberedUser!=='guest'){
-    try{localStorage.setItem('app_user_key',rememberedUser);}catch(_){}
-    try{sessionStorage.setItem('app_user_key',rememberedUser);}catch(_){}
-    document.body.classList.remove('firebase-auth-pending');
-    const l=document.getElementById('authLoading'); if(l) l.hidden=true;
-  }else document.body.classList.add('firebase-auth-pending');
+  /* لا نستعيد جلسة تسجيل دخول قديمة عند فتح الصفحة من جديد. */
+  document.body.classList.add('firebase-auth-pending');
 })();
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-import { getAuth, setPersistence, indexedDBLocalPersistence, browserLocalPersistence, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { getAuth, setPersistence, browserSessionPersistence, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 const firebaseConfig={apiKey:"AIzaSyD_LoE8QhVMEI2gArmC-yXCiMYMLi0-Q30",authDomain:"your-works-1aea7.firebaseapp.com",projectId:"your-works-1aea7",appId:"1:1084540974820:web:56d173a05716c3f87b1ef1"};
 const app=initializeApp(firebaseConfig),auth=getAuth(app),provider=new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/drive.file');
-const authPersistenceReady=setPersistence(auth,indexedDBLocalPersistence).catch(()=>setPersistence(auth,browserLocalPersistence)).catch(()=>{});
+const authPersistenceReady=setPersistence(auth,sessionStoragePersistence).catch(()=>{});
 const loginScreen=document.getElementById('loginScreen'),googleLoginButton=document.getElementById('googleLoginButton'),loginMessage=document.getElementById('loginMessage'),authLoading=document.getElementById('authLoading');
 const LOGIN_MARK='nazzem_has_logged_in';
 function hasRememberedLogin(){try{return localStorage.getItem(LOGIN_MARK)==='1' && !!localStorage.getItem('app_user_key') && localStorage.getItem('app_user_key')!=='guest';}catch(_){return false;}}
@@ -4186,14 +4181,41 @@ googleLoginButton.addEventListener('click',async()=>{if(googleLoginBusy)return;m
  * إعادة تحميل الصفحة أو Pull-to-refresh لا يمكنها فتح شاشة اختيار حساب Google.
  * تسجيل الدخول يتم فقط بعد ضغط المستخدم على زر تسجيل الدخول.
  */
+/*
+ * كل فتح جديد للصفحة/البرنامج يبدأ من شاشة تسجيل الدخول.
+ * لا نلمس بيانات البرنامج؛ نمسح فقط حالة تسجيل الدخول السابقة.
+ */
+try{
+  localStorage.setItem('nazzem_login_required','1');
+  localStorage.removeItem(LOGIN_MARK);
+  localStorage.removeItem('app_user_key');
+  sessionStorage.removeItem('app_user_key');
+  document.cookie='nazzem_login_uid=; max-age=0; path=/; SameSite=Lax';
+}catch(_){}
+
 authPersistenceReady.then(()=>{
  onAuthStateChanged(auth,user=>{
    /*
-    * تسجيل الدخول للتطبيق يُحفظ محليًا بعد أول دخول ناجح.
-    * هذا العلم لا يُمسح عند Refresh أو Pull-to-refresh؛ لا يُمسح إلا من
-    * مسار تسجيل الخروج الصريح بالأسفل. لذلك لا تعتمد شاشة الدخول على
-    * لحظة null المؤقتة التي قد ترسلها Firebase أثناء استعادة الجلسة.
+    * الدخول إلى التطبيق لا يُستعاد تلقائيًا بعد مغادرة الصفحة أو إعادة فتحها.
+    * لا نعتمد على Firebase أو localStorage أو Cookie لاسترجاع جلسة سابقة.
+    * الاستثناء الوحيد هو نفس عملية الدخول الحالية بعد الضغط على زر Google.
     */
+   let loginRequired=false;
+   try{loginRequired=localStorage.getItem('nazzem_login_required')==='1';}catch(_){}
+
+   if(loginRequired){
+     if(user){
+       signOut(auth).catch(()=>{});
+       return;
+     }
+     switchAppUser('guest');
+     show();
+     if(authLoading)authLoading.hidden=true;
+     document.body.classList.remove('firebase-auth-pending');
+     document.documentElement.classList.remove('firebase-startup-pending');
+     return;
+   }
+
    if(user){
      localStorage.setItem(LOGIN_MARK,'1');
      localStorage.setItem('app_user_key',user.uid);
@@ -4207,23 +4229,9 @@ authPersistenceReady.then(()=>{
      return;
    }
 
-   /*
-    * Firebase قد تكون في مرحلة استعادة الجلسة أو قد لا تستطيع استعادتها
-    * داخل بعض WebView/AppGyser. إذا كانت هويتنا المحلية محفوظة، نُبقي
-    * التطبيق مفتوحًا ونستعيد المستخدم محليًا بدل إجباره على Google مرة أخرى.
-    */
-   const rememberedUser = (localStorage.getItem('app_user_key') ||
-     (window.getLoginCookie?window.getLoginCookie(''):'') ||
-     (()=>{try{return sessionStorage.getItem('app_user_key')||''}catch(_){return ''}}) || '').toString();
-   if(rememberedUser && rememberedUser!=='guest'){
-     try{localStorage.setItem(LOGIN_MARK,'1');localStorage.setItem('app_user_key',rememberedUser);}catch(_){}
-     try{sessionStorage.setItem('app_user_key',rememberedUser);}catch(_){}
-     switchAppUser(rememberedUser);
-     hide();
-   }else{
-     switchAppUser('guest');
-     if(hasRememberedLogin()) hide(); else show();
-   }
+   /* لا توجد جلسة حالية: يجب تسجيل الدخول من زر Google. */
+   switchAppUser('guest');
+   show();
    if(authLoading)authLoading.hidden=true;
    document.body.classList.remove('firebase-auth-pending');
    document.documentElement.classList.remove('firebase-startup-pending');
