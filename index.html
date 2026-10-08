@@ -2487,74 +2487,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         // مصدر موحد للحسابات المالية: كل الواجهات تعتمد على نفس القيم بدل إعادة حسابها كل مرة.
-        // ===== أرشيف الحسابات الشهري =====
-        // يحتفظ بآخر شهر تم أرشفته فقط. عند أرشفة شهر جديد يُستبدل أرشيف الشهر الأقدم.
-        // لا يؤثر الأرشيف على حساب الشهر الحالي أو على سجل المتأخرات.
-        function archiveCurrentMonthAccount(obj, type) {
-            if (!obj || !obj.monthKey) return;
-            const isGroup = type === 'group';
-            const days = Array.isArray(obj.daysData) ? obj.daysData : [];
-            const getDaySessions = day => isGroup
-                ? Math.max(1, parseInt(day && day.sessionsCount, 10) || 1)
-                : 1;
-
-            // إحصائيات الشهر القديم: إجمالي الحصص المسجلة في الجدول،
-            // ثم الحضور الفعلي والغياب والإلغاء، والحساب على الحضور الفعلي فقط.
-            const totalSessions = days.reduce((sum, day) => {
-                if (!day || !day.status) return sum;
-                return sum + getDaySessions(day);
-            }, 0);
-            const actualAttendanceDays = days.filter(day => day && day.status === 'present').length;
-            const absentDays = days.filter(day => day && day.status === 'absent').length;
-            const canceledDays = days.filter(day => day && day.status === 'canceled').length;
-            const actualAttendanceSessions = days.reduce((sum, day) => {
-                return sum + (day && day.status === 'present' ? getDaySessions(day) : 0);
-            }, 0);
-            const price = Math.max(0, parseFloat(obj.price) || 0);
-            const actualAttendanceValue = actualAttendanceSessions * price;
-            const monthCollected = getPaymentHistory(obj).reduce((sum, item) => {
-                if (item && item.monthKey === obj.monthKey && item.type === 'month') {
-                    return sum + Math.max(0, parseFloat(item.amount) || 0);
-                }
-                return sum;
-            }, 0);
-            const monthUnpaid = Math.max(0, actualAttendanceValue - monthCollected);
-            const previousDebt = Math.max(0, parseFloat(obj.previousDebt) || 0);
-
-            obj.monthlyAccountArchive = {
-                monthKey: obj.monthKey,
-                archivedAt: new Date().toISOString(),
-                totalSessions,
-                actualAttendanceDays,
-                absentDays,
-                canceledDays,
-                actualAttendanceSessions,
-                price,
-                actualAttendanceValue,
-                sessions: actualAttendanceSessions,
-                monthTotal: actualAttendanceValue,
-                monthCollected,
-                monthUnpaid,
-                previousDebt,
-                totalRequired: monthUnpaid + previousDebt,
-                dailyRecords: days.filter(day => day && day.status).map(day => ({
-                    label: day.label || '',
-                    dateStr: day.dateStr || '',
-                    dateKey: day.dateKey || '',
-                    status: day.status,
-                    sessionsCount: getDaySessions(day)
-                })),
-                paymentHistory: getPaymentHistory(obj).filter(item =>
-                    item && item.monthKey === obj.monthKey
-                ).map(item => ({
-                    type: item.type || 'other',
-                    amount: Math.max(0, parseFloat(item.amount) || 0),
-                    monthKey: item.monthKey,
-                    date: item.date || ''
-                }))
-            };
-        }
-
         function getFinancialMetrics(obj, type) {
             const empty = {
                 sessions: 0, monthMoney: 0, previousDebt: 0, totalRequired: 0,
@@ -3507,8 +3439,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     const scheduleTimeEnd = formatScheduleTime(group.timeEndHour || '', group.timeEndMinute || '', group.timeEndPeriod || '');
 
                     ensureDebtHistory(group);
-                    // أرشفة سجل حساب الشهر القديم أولاً؛ يظل محفوظاً حتى أرشفة الشهر التالي.
-                    archiveCurrentMonthAccount(group, 'group');
                     const groupFinancial = getFinancialMetrics(group, 'group');
                     if (!groupFinancial.monthPaid) {
                         const totalSessions = groupFinancial.sessions;
@@ -3532,8 +3462,6 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     const scheduleTimeEnd = formatScheduleTime(student.timeEndHour || '', student.timeEndMinute || '', student.timeEndPeriod || '');
 
                     ensureDebtHistory(student);
-                    // أرشفة سجل حساب الشهر القديم أولاً؛ يظل محفوظاً حتى أرشفة الشهر التالي.
-                    archiveCurrentMonthAccount(student, 'student');
                     const studentFinancial = getFinancialMetrics(student, 'student');
                     if (!studentFinancial.monthPaid) {
                         const totalSessions = studentFinancial.sessions;
