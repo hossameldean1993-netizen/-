@@ -1112,6 +1112,10 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         <div id="financialGroupsList" class="financial-list-full" style="margin-top: 0;"></div>
         <div id="financialSeparator" class="section-separator" style="display: none;">&#x1F468;‍&#x1F393; التلاميذ</div>
         <div id="financialStudentsList" class="financial-list-full" style="margin-top: 0;"></div>
+        <div class="financial-section" id="monthlyArchiveSection">
+            <div class="financial-main-title">🗂️ أرشيف الشهر السابق (لمدة شهر)</div>
+            <div id="monthlyArchiveList"><div class="debt-empty">لا يوجد أرشيف محفوظ حتى الآن. يظهر الأرشيف بعد بدء شهر جديد.</div></div>
+        </div>
     </div>
     <div id="page2" class="page">
         <div class="list-page-controls" id="groupsPageControls">
@@ -2029,10 +2033,11 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         }
 
         // ترحيل المتأخرات كبيانات كاملة: كل متأخر يحتفظ بسجله ومبلغه بشكل مستقل.
-        function addPreviousDebtEntry(obj, sessions, price, sourceLabel) {
+        function addPreviousDebtEntry(obj, sessions, price, sourceLabel, amountOverride) {
             const count = Math.max(0, parseInt(sessions, 10) || 0);
             const rate = Math.max(0, parseFloat(price) || 0);
-            const total = count * rate;
+            const calculatedTotal = count * rate;
+            const total = amountOverride === undefined ? calculatedTotal : Math.max(0, parseFloat(amountOverride) || 0);
             if (total <= 0) return;
             if (!Array.isArray(obj.debtHistory)) obj.debtHistory = [];
             obj.debtHistory.push({
@@ -2600,6 +2605,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             if (matchedGroupsCount === 0 && matchedStudentsCount === 0) {
                 groupsContainer.innerHTML = `<div class="no-sessions" style="grid-column: 1 / -1;">لا توجد بيانات مطابقة للفرز المحدد \u{1F50D}</div>`;
             }
+            renderMonthlyArchive();
         }
 
         function getDaysDisplayString(obj) {
@@ -3407,12 +3413,158 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
             saveData();
         }
 
+        // حفظ تفريدة الشهر قبل إنشاء جدول الشهر الجديد. نحتفظ بآخر شهر مؤرشف فقط لكل سجل.
+        function archivePreviousMonthSnapshot(obj, type) {
+            if (!obj || !Array.isArray(obj.daysData)) return;
+            const metrics = getFinancialMetrics(obj, type);
+            const price = Math.max(0, parseFloat(obj.price) || 0);
+            const monthKey = obj.monthKey || getMonthKey(obj.daysData[0] && obj.daysData[0].dateKey) || 'الشهر السابق';
+            const days = obj.daysData.map(day => ({
+                dateKey: day && day.dateKey ? String(day.dateKey) : '',
+                dateStr: day && day.dateStr ? String(day.dateStr) : '',
+                label: day && day.label ? String(day.label) : '',
+                status: day && day.status ? String(day.status) : '',
+                sessionsCount: day && day.status === 'present'
+                    ? (type === 'group' ? Math.max(1, parseInt(day.sessionsCount, 10) || 1) : 1)
+                    : 0
+            }));
+            const snapshot = {
+                monthKey,
+                archivedAt: new Date().toISOString(),
+                name: String(obj.name || (type === 'group' ? 'مجموعة بدون اسم' : 'تلميذ بدون اسم')),
+                entityType: type,
+                price,
+                scheduledDays: days.length,
+                presentDays: days.filter(day => day.status === 'present').length,
+                absentDays: days.filter(day => day.status === 'absent').length,
+                canceledDays: days.filter(day => day.status === 'canceled').length,
+                actualSessions: metrics.sessions,
+                monthAmount: metrics.sessions * price,
+                collectedAmount: Math.max(0, metrics.monthCollected || 0),
+                unpaidAmount: metrics.monthPaid ? 0 : Math.max(0, metrics.unpaidMonth || 0),
+                days
+            };
+            if (!Array.isArray(obj.monthlyArchive)) obj.monthlyArchive = [];
+            obj.monthlyArchive = [...obj.monthlyArchive.filter(item => item && item.monthKey !== monthKey), snapshot].slice(-1);
+        }
+
+        function renderMonthlyArchive() {
+            const container = document.getElementById('monthlyArchiveList');
+            if (!container) return;
+            const entries = [
+                ...groups.flatMap(item => (Array.isArray(item.monthlyArchive) ? item.monthlyArchive : [])),
+                ...students.flatMap(item => (Array.isArray(item.monthlyArchive) ? item.monthlyArchive : []))
+            ].filter(item => item && Array.isArray(item.days))
+             .sort((a, b) => String(b.monthKey || '').localeCompare(String(a.monthKey || '')) || String(a.name || '').localeCompare(String(b.name || ''), 'ar'));
+            if (!entries.length) {
+                container.innerHTML = '<div class="debt-empty">لا يوجد أرشيف محفوظ حتى الآن. يظهر الأرشيف بعد بدء شهر جديد.</div>';
+                return;
+            }
+            const money = value => `${(Math.round((Number(value) || 0) * 100) / 100).toLocaleString('ar-EG')} جنيه`;
+            const statusLabels = {present:'حضور فعلي', absent:'غياب', canceled:'إلغاء'};
+            container.innerHTML = entries.map(item => {
+                const dayRows = item.days.map(day => `
+                    <tr>
+                        <td style="padding:5px;border-bottom:1px solid var(--border-color);text-align:right;white-space:nowrap">${escapeHtml(day.dateStr || day.dateKey || '—')}</td>
+                        <td style="padding:5px;border-bottom:1px solid var(--border-color);text-align:center">${escapeHtml(day.label || '—')}</td>
+                        <td style="padding:5px;border-bottom:1px solid var(--border-color);text-align:center">${escapeHtml(statusLabels[day.status] || 'لم يُسجل')}</td>
+                        <td style="padding:5px;border-bottom:1px solid var(--border-color);text-align:center">${day.sessionsCount || 0}</td>
+                    </tr>`).join('');
+                return `<details class="debt-item">
+                    <summary class="debt-item-title" style="cursor:pointer">${escapeHtml(item.name)} — ${item.entityType === 'group' ? 'مجموعة' : 'تلميذ'} — شهر ${escapeHtml(item.monthKey || '')}</summary>
+                    <div class="debt-item-math" style="line-height:1.8">
+                        عدد أيام الجدول: <b>${item.scheduledDays}</b> · الحضور الفعلي: <b>${item.presentDays}</b> · الغياب: <b>${item.absentDays}</b> · الإلغاء: <b>${item.canceledDays}</b><br>
+                        الحصص المحتسبة: <b>${item.actualSessions}</b> × سعر الحصة <b>${money(item.price)}</b> = <b>${money(item.monthAmount)}</b><br>
+                        المحصّل: <b>${money(item.collectedAmount)}</b> · المتبقي الذي رُحّل: <b>${money(item.unpaidAmount)}</b>
+                    </div>
+                    <div style="overflow-x:auto;margin-top:8px">
+                        <table style="width:100%;border-collapse:collapse;font-size:.78rem">
+                            <thead><tr><th style="padding:5px;text-align:right">التاريخ</th><th style="padding:5px">اليوم</th><th style="padding:5px">الحالة</th><th style="padding:5px">الحصص</th></tr></thead>
+                            <tbody>${dayRows}</tbody>
+                        </table>
+                    </div>
+                </details>`;
+            }).join('');
+        }
+
         function openStartMonthModal() {
             const now = new Date();
             document.getElementById('monthStartDate').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
             document.getElementById('startMonthModal').style.display = 'flex';
         }
         function closeStartMonthModal() { document.getElementById('startMonthModal').style.display = 'none'; }
+
+        function getMonthStartBreakdownItem(obj, type, entityType) {
+            const days = Array.isArray(obj && obj.daysData) ? obj.daysData : [];
+            const metrics = getFinancialMetrics(obj, type);
+            const actualSessions = metrics.sessions;
+            const price = Math.max(0, parseFloat(obj && obj.price) || 0);
+            const monthAmount = actualSessions * price;
+            const unpaidToTransfer = metrics.monthPaid ? 0 : Math.min(monthAmount, Math.max(0, metrics.unpaidMonth));
+            return {
+                name: obj && obj.name ? obj.name : (entityType === 'group' ? 'مجموعة بدون اسم' : 'تلميذ بدون اسم'),
+                entityType,
+                scheduledDays: days.length,
+                presentDays: days.filter(day => day && day.status === 'present').length,
+                absentDays: days.filter(day => day && day.status === 'absent').length,
+                canceledDays: days.filter(day => day && day.status === 'canceled').length,
+                actualSessions,
+                price,
+                monthAmount,
+                unpaidToTransfer,
+                monthPaid: metrics.monthPaid
+            };
+        }
+
+        function showMonthStartBreakdown(startDateVal, targetMonthKey, onConfirm) {
+            const items = [
+                ...groups.map(item => getMonthStartBreakdownItem(item, 'group', 'group')),
+                ...students.map(item => getMonthStartBreakdownItem(item, 'student', 'student'))
+            ];
+            const totals = items.reduce((sum, item) => {
+                sum.scheduledDays += item.scheduledDays;
+                sum.presentDays += item.presentDays;
+                sum.absentDays += item.absentDays;
+                sum.canceledDays += item.canceledDays;
+                sum.actualSessions += item.actualSessions;
+                sum.monthAmount += item.monthAmount;
+                sum.unpaidToTransfer += item.unpaidToTransfer;
+                return sum;
+            }, {scheduledDays:0, presentDays:0, absentDays:0, canceledDays:0, actualSessions:0, monthAmount:0, unpaidToTransfer:0});
+            const money = value => `${(Math.round((Number(value) || 0) * 100) / 100).toLocaleString('ar-EG')} جنيه`;
+            const rows = items.length ? items.map(item => `
+                <tr>
+                    <td style="padding:6px;border-bottom:1px solid var(--border-color);text-align:right;white-space:nowrap">${escapeHtml(item.name)}<div style="font-size:.72rem;color:var(--text-muted)">${item.entityType === 'group' ? 'مجموعة' : 'تلميذ'}</div></td>
+                    <td style="padding:6px;border-bottom:1px solid var(--border-color);text-align:center">${item.scheduledDays}</td>
+                    <td style="padding:6px;border-bottom:1px solid var(--border-color);text-align:center">${item.presentDays}</td>
+                    <td style="padding:6px;border-bottom:1px solid var(--border-color);text-align:center">${item.absentDays}</td>
+                    <td style="padding:6px;border-bottom:1px solid var(--border-color);text-align:center">${item.canceledDays}</td>
+                    <td style="padding:6px;border-bottom:1px solid var(--border-color);text-align:center">${item.actualSessions}</td>
+                    <td style="padding:6px;border-bottom:1px solid var(--border-color);text-align:center;white-space:nowrap">${money(item.monthAmount)}</td>
+                    <td style="padding:6px;border-bottom:1px solid var(--border-color);text-align:center;white-space:nowrap;font-weight:700">${money(item.unpaidToTransfer)}</td>
+                </tr>`).join('') : '<tr><td colspan="8" style="padding:12px;text-align:center">لا توجد مجموعات أو تلاميذ لعرض حساباتهم.</td></tr>';
+
+            document.getElementById('appDialogTitle').innerText = `تفريدة حسابات الشهر السابق قبل بدء ${targetMonthKey}`;
+            document.getElementById('appDialogMsg').innerHTML = `
+                <div style="text-align:right;font-size:.82rem;margin-bottom:10px">راجع حسابات الشهر الحالي قبل الترحيل. الغياب والإلغاء لا يدخلان في المبلغ؛ الحساب يعتمد على الحصص الفعلية فقط.</div>
+                <div style="max-height:52vh;overflow:auto;border:1px solid var(--border-color);border-radius:8px;text-align:right">
+                    <table style="width:100%;border-collapse:collapse;font-size:.74rem;min-width:680px">
+                        <thead><tr style="background:var(--card-bg-light)">
+                            <th style="padding:7px;text-align:right">الاسم</th><th style="padding:7px">حصص/أيام الشهر</th><th style="padding:7px">حضور فعلي</th><th style="padding:7px">غياب</th><th style="padding:7px">إلغاء</th><th style="padding:7px">الحصص المحتسبة</th><th style="padding:7px">قيمة الحضور</th><th style="padding:7px">المرحّل للمتأخرات</th>
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                        <tfoot><tr style="font-weight:800;background:var(--card-bg-light)">
+                            <td style="padding:7px">الإجمالي</td><td style="padding:7px;text-align:center">${totals.scheduledDays}</td><td style="padding:7px;text-align:center">${totals.presentDays}</td><td style="padding:7px;text-align:center">${totals.absentDays}</td><td style="padding:7px;text-align:center">${totals.canceledDays}</td><td style="padding:7px;text-align:center">${totals.actualSessions}</td><td style="padding:7px;text-align:center;white-space:nowrap">${money(totals.monthAmount)}</td><td style="padding:7px;text-align:center;white-space:nowrap">${money(totals.unpaidToTransfer)}</td>
+                        </tr></tfoot>
+                    </table>
+                </div>
+                <div style="font-size:.78rem;text-align:right;margin-top:9px;line-height:1.6">سيتم ترحيل <strong>${money(totals.unpaidToTransfer)}</strong> فقط من المبالغ غير المسددة، ثم إنشاء جدول ${escapeHtml(targetMonthKey)}. الحصص التي تم سدادها بالكامل لن تُرحّل مرة أخرى.</div>`;
+            document.getElementById('appDialogActions').innerHTML = `
+                <button class="btn-3d btn-red-3d" onclick="executeConfirmAction()">تأكيد الترحيل وبدء الشهر الجديد</button>
+                <button class="btn-3d" onclick="closeAppDialog()">إلغاء</button>`;
+            window.activeConfirmAction = onConfirm;
+            document.getElementById('appDialogModal').style.display = 'flex';
+        }
 
         function confirmResetNewMonth() {
             const startDateVal = document.getElementById('monthStartDate').value;
@@ -3431,9 +3583,10 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 return;
             }
 
-            showAppConfirm('بدء شهر جديد', 'سيتم نقل غير المدفوع للمتأخرات وتوليد جدول الشهر الجديد. لن يتم حذف بيانات الشهر القديم من النسخة الاحتياطية، ولن تتأثر بيانات التلميذ بحسابات المجموعة.', function() {
+            showMonthStartBreakdown(startDateVal, targetMonthKey, function() {
                 // ===== المجموعات فقط =====
                 groups.forEach(group => {
+                    archivePreviousMonthSnapshot(group, 'group');
                     const scheduleDays = getStableScheduleDays(group);
                     const scheduleTime = formatScheduleTime(group.timeHour || '', group.timeMinute || '', group.timePeriod || '');
                     const scheduleTimeEnd = formatScheduleTime(group.timeEndHour || '', group.timeEndMinute || '', group.timeEndPeriod || '');
@@ -3442,7 +3595,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     const groupFinancial = getFinancialMetrics(group, 'group');
                     if (!groupFinancial.monthPaid) {
                         const totalSessions = groupFinancial.sessions;
-                        addPreviousDebtEntry(group, totalSessions, group.price, `متأخرات ${group.monthKey || 'الشهر السابق'}`);
+                        addPreviousDebtEntry(group, totalSessions, group.price, `متأخرات ${group.monthKey || 'الشهر السابق'}`, groupFinancial.unpaidMonth);
                     }
 
                     // تثبيت الأيام والوقت، ثم توليد تواريخ الشهر الجديد على نفس أيام الأسبوع.
@@ -3457,6 +3610,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
 
                 // ===== التلاميذ فقط =====
                 students.forEach(student => {
+                    archivePreviousMonthSnapshot(student, 'student');
                     const scheduleDays = getStableScheduleDays(student);
                     const scheduleTime = formatScheduleTime(student.timeHour || '', student.timeMinute || '', student.timePeriod || '');
                     const scheduleTimeEnd = formatScheduleTime(student.timeEndHour || '', student.timeEndMinute || '', student.timeEndPeriod || '');
@@ -3465,7 +3619,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                     const studentFinancial = getFinancialMetrics(student, 'student');
                     if (!studentFinancial.monthPaid) {
                         const totalSessions = studentFinancial.sessions;
-                        addPreviousDebtEntry(student, totalSessions, student.price, `متأخرات ${student.monthKey || 'الشهر السابق'}`);
+                        addPreviousDebtEntry(student, totalSessions, student.price, `متأخرات ${student.monthKey || 'الشهر السابق'}`, studentFinancial.unpaidMonth);
                     }
 
                     student.scheduleDays = [...scheduleDays];
@@ -3478,7 +3632,7 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
                 });
 
                 saveData();
-                showAppAlert('تم التحديث', 'تم بدء الشهر الجديد مع تثبيت المواعيد وترحيل المتأخرات كاملة (عدد الحصص × سعر الحصة = الإجمالي).');
+                showAppAlert('تم التحديث', 'تم عرض تفريدة الشهر السابق، وترحيل المبلغ غير المسدد من الحصص الفعلية فقط، ثم إنشاء جدول الشهر الجديد.');
             });
         }
 
@@ -3564,7 +3718,8 @@ html, body { background-color: #e2e5e8 !important; background-image: none !impor
         const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
         const DRIVE_SYNC_VERSION = 3;
         const DRIVE_SYNC_PREFIX = 'drosak_sync_';
-        const DRIVE_SYNC_DEBOUNCE_MS = 300;
+        // تأخير بسيط لتجميع التعديلات وتقليل الضغط على واجهة الهاتف.
+        const DRIVE_SYNC_DEBOUNCE_MS = 900;
         const DRIVE_SYNC_RETRY_MS = 12000;
         let driveTokenClient = null;
         let driveAccessToken = null;
@@ -3891,8 +4046,28 @@ let localEditRevision = 0;
             }catch(e){console.error('Drive restore error',e);showAppAlert('تعذر الاستعادة','تعذر قراءة بيانات Google Drive. لم يتم حذف أو استبدال بيانات الجهاز.');}
             finally{driveSyncBusy=false;}
         }
+        function isUserEnteringData() {
+            // لا تبدأ عملية مزامنة ثقيلة بينما المستخدم يكتب في خانة أو يعدّل بيانات مجموعة/تلميذ.
+            const active = document.activeElement;
+            const isEditable = !!active && (
+                active.matches('input, textarea, select, [contenteditable="true"]')
+            );
+            const studentModal = document.getElementById('studentModal');
+            const groupModal = document.getElementById('groupModal');
+            const dataModalOpen = [studentModal, groupModal].some(el =>
+                el && getComputedStyle(el).display !== 'none'
+            );
+            return isEditable || dataModalOpen;
+        }
+
         async function syncWithDrive() {
             if(driveSyncBusy || !navigator.onLine || !driveAccessToken) return false;
+            // أرجئ المزامنة أثناء إدخال البيانات حتى لا تنافس الكتابة على وقت واجهة الهاتف.
+            if (isUserEnteringData()) {
+                driveSyncPending = true;
+                saveDriveState();
+                return false;
+            }
             driveSyncBusy=true; setDriveStatus('جارٍ المزامنة...');
             let syncRevision = localEditRevision;
             try{
@@ -4026,6 +4201,15 @@ let localEditRevision = 0;
                 }
                 if(driveSyncBusy){
                     scheduleDriveRetry();
+                    return;
+                }
+                if (isUserEnteringData()) {
+                    // لا نكرر محاولات المزامنة أثناء بقاء المستخدم داخل خانات الإدخال.
+                    driveSyncTimer = setTimeout(() => {
+                        driveSyncTimer = null;
+                        if (!isUserEnteringData()) syncWithDrive();
+                        else scheduleDriveSync(1800);
+                    }, 1800);
                     return;
                 }
                 syncWithDrive();
